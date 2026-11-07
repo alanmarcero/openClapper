@@ -12,7 +12,7 @@ Knob::Knob(Apvts& state, const juce::String& parameterId, const juce::String& ti
     title_.setText(title, juce::dontSendNotification);
     title_.setFont(juce::FontOptions(11.0f, juce::Font::bold));
     title_.setJustificationType(juce::Justification::centred);
-    title_.setColour(juce::Label::textColourId, theme::kTextDim);
+    title_.setColour(juce::Label::textColourId, theme::kTextDim.brighter(0.2f));
     addAndMakeVisible(title_);
 
     bind(state, parameterId);
@@ -35,12 +35,14 @@ void Knob::setTooltip(const juce::String& text) {
 
 Choice::Choice(Apvts& state, const juce::String& parameterId, const juce::String& title, juce::Colour accent) {
     box_.setColour(juce::ComboBox::arrowColourId, accent);
+    box_.setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xff0c141e));
+    box_.setColour(juce::ComboBox::outlineColourId, juce::Colour(0xff223246));
     addAndMakeVisible(box_);
 
     title_.setText(title, juce::dontSendNotification);
     title_.setFont(juce::FontOptions(11.0f, juce::Font::bold));
     title_.setJustificationType(juce::Justification::centred);
-    title_.setColour(juce::Label::textColourId, theme::kTextDim);
+    title_.setColour(juce::Label::textColourId, theme::kTextDim.brighter(0.2f));
     addAndMakeVisible(title_);
 
     bind(state, parameterId);
@@ -96,21 +98,37 @@ void layoutRow(juce::Rectangle<int> area, std::initializer_list<juce::Component*
 }
 
 void drawPanel(juce::Graphics& g, juce::Rectangle<int> area, const juce::String& title, juce::Colour accent) {
-    auto bounds = area.toFloat().reduced(1.0f);
+    auto bounds = area.toFloat().reduced(0.5f);
+
+    // 100% solid opaque dark panel fill
     g.setColour(theme::kPanel);
     g.fillRoundedRectangle(bounds, 6.0f);
+
+    // Subtle dark gradient for depth
+    g.setGradientFill(juce::ColourGradient(
+        juce::Colour(0xff121a24), bounds.getTopLeft(),
+        juce::Colour(0xff080d13), bounds.getBottomLeft(), false));
+    g.fillRoundedRectangle(bounds.reduced(0.5f), 6.0f);
+
+    // Panel border
     g.setColour(theme::kPanelEdge);
     g.drawRoundedRectangle(bounds, 6.0f, 1.0f);
 
+    // Dedicated solid title header strip
+    auto titleBar = bounds.removeFromTop(22.0f);
+    g.setColour(juce::Colour(0xff090f16));
+    g.fillRoundedRectangle(titleBar, 6.0f);
+    g.fillRect(titleBar.removeFromBottom(6.0f));
+
     // Accent line at the top
-    const auto topBar = bounds.removeFromTop(4.0f).reduced(8.0f, 0.0f);
+    const auto topBar = bounds.removeFromTop(3.0f).reduced(6.0f, 0.0f);
     g.setColour(accent);
     g.fillRoundedRectangle(topBar, 1.5f);
 
     if (title.isNotEmpty()) {
         g.setColour(theme::kText);
         g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
-        g.drawText(title, area.getX() + 10, area.getY() + 6, area.getWidth() - 20, 16, juce::Justification::left, true);
+        g.drawText(title, area.getX() + 12, area.getY() + 3, area.getWidth() - 24, 18, juce::Justification::left, true);
     }
 }
 
