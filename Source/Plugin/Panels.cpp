@@ -207,8 +207,10 @@ ClapSynthPanel::ClapSynthPanel(OpenClapperProcessor& processor)
       preSpread_(processor.parameters, openclapper::params::kPreSpread, "Spread", theme::kAccentCyan),
       preDecay_(processor.parameters, openclapper::params::kPreDecay, "Decay", theme::kAccentCyan),
       preJitter_(processor.parameters, openclapper::params::kPreJitter, "Humanize", theme::kAccentCyan),
+      flamSpread_(processor.parameters, openclapper::params::kFlamSpread, "Flam Pan", theme::kAccentCyan),
       preLevel_(processor.parameters, openclapper::params::kPreLevel, "Level", theme::kAccentCyan),
 
+      toneMode_(processor.parameters, openclapper::params::kToneMode, "Mode", theme::kAccentAmber),
       toneNote_(processor.parameters, openclapper::params::kToneNote, "Note", theme::kAccentAmber),
       toneOctave_(processor.parameters, openclapper::params::kToneOctave, "Octave", theme::kAccentAmber),
       toneFine_(processor.parameters, openclapper::params::kToneFine, "Fine", theme::kAccentAmber),
@@ -229,14 +231,17 @@ ClapSynthPanel::ClapSynthPanel(OpenClapperProcessor& processor)
       noiseWidth_(processor.parameters, openclapper::params::kNoiseStereoWidth, "Width", theme::kAccentViolet),
       noiseLevel_(processor.parameters, openclapper::params::kNoiseLevel, "Level", theme::kAccentViolet),
 
+      clickType_(processor.parameters, openclapper::params::kClickType, "Click Type", theme::kAccentNeonGreen),
       clickLevel_(processor.parameters, openclapper::params::kClickLevel, "Click Lvl", theme::kAccentNeonGreen),
       clickFreq_(processor.parameters, openclapper::params::kClickFreq, "Click Freq", theme::kAccentNeonGreen) {
     addAndMakeVisible(preBursts_);
     addAndMakeVisible(preSpread_);
     addAndMakeVisible(preDecay_);
     addAndMakeVisible(preJitter_);
+    addAndMakeVisible(flamSpread_);
     addAndMakeVisible(preLevel_);
 
+    addAndMakeVisible(toneMode_);
     addAndMakeVisible(toneNote_);
     addAndMakeVisible(toneOctave_);
     addAndMakeVisible(toneFine_);
@@ -257,6 +262,7 @@ ClapSynthPanel::ClapSynthPanel(OpenClapperProcessor& processor)
     addAndMakeVisible(noiseWidth_);
     addAndMakeVisible(noiseLevel_);
 
+    addAndMakeVisible(clickType_);
     addAndMakeVisible(clickLevel_);
     addAndMakeVisible(clickFreq_);
 }
@@ -269,15 +275,15 @@ void ClapSynthPanel::resized() {
     auto area = getLocalBounds().reduced(8, 26);
     const int rowHeight = area.getHeight() / 3;
 
-    // Row 1: Pre-Clap Flam (left) & Click (right)
+    // Row 1: Pre-Clap Flam (left 2/3) & Click (right 1/3)
     auto row1 = area.removeFromTop(rowHeight);
-    auto clickArea = row1.removeFromRight(row1.getWidth() / 4);
-    layoutRow(row1, { &preBursts_, &preSpread_, &preDecay_, &preJitter_, &preLevel_ });
-    layoutRow(clickArea, { &clickLevel_, &clickFreq_ });
+    auto clickArea = row1.removeFromRight(row1.getWidth() / 3);
+    layoutRow(row1, { &preBursts_, &preSpread_, &preDecay_, &preJitter_, &flamSpread_, &preLevel_ });
+    layoutRow(clickArea, { &clickType_, &clickLevel_, &clickFreq_ });
 
     // Row 2: Resonant Body / Tone
     auto row2 = area.removeFromTop(rowHeight);
-    layoutRow(row2, { &toneNote_, &toneOctave_, &toneFine_, &toneFreq_, &toneQ_, &toneDecay_, &tonePitchEnv_, &tonePitchDecay_, &toneLevel_ });
+    layoutRow(row2, { &toneMode_, &toneNote_, &toneOctave_, &toneFine_, &toneFreq_, &toneQ_, &toneDecay_, &tonePitchEnv_, &tonePitchDecay_, &toneLevel_ });
 
     // Row 3: Noise & Sizzle
     layoutRow(area, { &noiseType_, &noiseAttack_, &noiseHold_, &noiseDecay_, &noiseCurve_, &noiseHPF_, &noiseLPF_, &noiseWidth_, &noiseLevel_ });

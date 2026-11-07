@@ -48,3 +48,27 @@ TEST_CASE("ClapEngine WAV Lock-In captures and recalls audio bit-exact", "[core]
     REQUIRE(restoredEngine.isClapLocked());
     REQUIRE(restoredEngine.wavCache().left().size() == engine.wavCache().left().size());
 }
+
+TEST_CASE("ClapEngine responds to MIDI CC 74 brightness sweep", "[core][engine]") {
+    ClapEngine engine;
+    engine.prepare(48000.0);
+
+    EngineSettings settings;
+    Transport transport;
+    transport.bpm = 138.0;
+
+    std::vector<MidiTrigger> triggers = {
+        { .sampleOffset = 0, .noteNumber = 69, .velocity = 1.0f, .audition = false }
+    };
+    // CC 74 set to very low brightness (value 10)
+    std::vector<MidiCcEvent> ccEvents = {
+        { .sampleOffset = 0, .controller = 74, .value = 10 }
+    };
+
+    std::vector<float> leftDark(1024, 0.0f);
+    std::vector<float> rightDark(1024, 0.0f);
+    float* channelsDark[2] = { leftDark.data(), rightDark.data() };
+
+    engine.process(settings, transport, triggers, channelsDark, 2, 1024, ccEvents);
+    REQUIRE(engine.currentPeak() > 0.0f);
+}

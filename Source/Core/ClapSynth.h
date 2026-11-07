@@ -23,6 +23,19 @@ enum class NoiseType {
     LoFi = 3
 };
 
+enum class ToneMode {
+    Bandpass = 0,
+    SubThump = 1,
+    SaturatedTri = 2,
+    CyberSquare = 3
+};
+
+enum class ClickType {
+    Needle = 0,
+    Crack = 1,
+    Thump = 2
+};
+
 struct ClapSynthSettings {
     // Pitch & Tuning
     int note = 9;                 // 0..11 (A), default A
@@ -34,9 +47,11 @@ struct ClapSynthSettings {
     float preClapSpreadMs = 12.0f;// 2..45 ms spacing between bursts
     float preClapDecayMs = 8.0f;  // 2..35 ms decay of each burst
     float preClapJitter = 0.15f;  // 0..1 timing and pitch humanization
+    float preClapFlamSpread = 0.45f; // 0..1 stereo micro-panning spread
     float preClapLevel = 0.85f;   // 0..1 volume of pre-claps
 
     // Resonant Body / Tone
+    ToneMode toneMode = ToneMode::Bandpass;
     float toneFreqHz = 1100.0f;   // 200..4000 Hz center frequency
     float toneQ = 3.2f;           // 0.5..12.0 resonance
     float toneDecayMs = 120.0f;   // 15..600 ms tone decay
@@ -56,6 +71,7 @@ struct ClapSynthSettings {
     float noiseLevel = 0.85f;     // 0..1
 
     // Click / Transient
+    ClickType clickType = ClickType::Needle;
     float clickLevel = 0.4f;      // 0..1
     float clickFreqHz = 4500.0f;  // 1000..12000 Hz
 
@@ -97,6 +113,35 @@ struct StereoFrame {
     float right = 0.0f;
 };
 
+// Stereo allpass diffuser for smooth transient dispersion without metallic comb flutter
+struct AllpassDiffuser {
+    std::vector<float> buffer;
+    size_t writeIndex = 0;
+    float feedback = 0.6f;
+
+    void prepare(size_t delaySamples, float g = 0.6f) {
+        buffer.assign(std::max<size_t>(1, delaySamples), 0.0f);
+        writeIndex = 0;
+        feedback = g;
+    }
+
+    void reset() noexcept {
+        std::fill(buffer.begin(), buffer.end(), 0.0f);
+        writeIndex = 0;
+    }
+
+    [[nodiscard]] float process(float in) noexcept {
+        if (buffer.empty()) {
+            return in;
+        }
+        const float delayed = buffer[writeIndex];
+        const float out = -feedback * in + delayed;
+        buffer[writeIndex] = in + feedback * delayed;
+        writeIndex = (writeIndex + 1) % buffer.size();
+        return out;
+    }
+};
+
 // Algorithmic stereo diffuser / reverb with gate
 class GatedStereoReverb {
 public:
@@ -105,6 +150,10 @@ public:
     [[nodiscard]] StereoFrame process(float inLeft, float inRight, float size, float decayMs, float damp, float gateMs, double sampleRate) noexcept;
 
 private:
+    AllpassDiffuser diffL1_;
+    AllpassDiffuser diffL2_;
+    AllpassDiffuser diffR1_;
+    AllpassDiffuser diffR2_;
     std::vector<float> delayL1_;
     std::vector<float> delayL2_;
     std::vector<float> delayR1_;
@@ -150,7 +199,11 @@ private:
     int preClapCount_ = 3;
     std::array<int, 5> burstStartSamples_{};
     std::array<float, 5> burstAmplitudes_{};
+    std::array<float, 5> burstPans_{};
     int mainSlapSample_ = 0;
+
+    // Tone synthesis state
+    float tonePhase_ = 0.0f;
 
     // Filter states
     BiquadState toneFilterL_{};
@@ -160,6 +213,12 @@ private:
     BiquadState noiseLPF_L_{};
     BiquadState noiseLPF_R_{};
     BiquadState clickBPF_{};
+
+    // Filter cache to avoid recalculating biquad trig every sample
+    float lastHPF_ = -1.0f;
+    float lastLPF_ = -1.0f;
+    float b0_h_ = 0.0f, b1_h_ = 0.0f, b2_h_ = 0.0f, a1_h_ = 0.0f, a2_h_ = 0.0f;
+    float b0_l_ = 0.0f, b1_l_ = 0.0f, b2_l_ = 0.0f, a1_l_ = 0.0f, a2_l_ = 0.0f;
 
     // PRNG seed for deterministic and jittered noise
     uint32_t prngState_ = 0x12345678;

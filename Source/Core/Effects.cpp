@@ -61,19 +61,24 @@ float DistortionShaper::processSample(
             break;
         }
         case DistortionType::HardClip: {
-            // Aggressive hard clipper with level compensation for festival EDM bite
-            shaped = std::clamp(x * 1.8f, -1.0f, 1.0f) * 0.75f;
+            shaped = std::clamp(x * 1.5f, -1.0f, 1.0f);
             break;
         }
         case DistortionType::Wavefold: {
-            // Sine wavefolder for metallic cyber EDM bite
-            shaped = std::sin(x * pi() * 0.65f);
+            shaped = std::sin(x * pi() * 0.7f);
             break;
         }
     }
 
-    // Level-normalize according to drive
-    const float compGain = 1.0f / (1.0f + drive * 1.4f);
+    // Level-normalize according to drive without collapsing punch
+    float compGain = 1.0f;
+    if (type == DistortionType::HardClip) {
+        compGain = 1.0f / (1.0f + drive * 0.35f);
+    } else if (type == DistortionType::Wavefold) {
+        compGain = 1.0f / (1.0f + drive * 0.45f);
+    } else {
+        compGain = 1.0f / (1.0f + drive * 0.8f);
+    }
     float output = shaped * compGain;
 
     // Post-distortion tone tilt filter

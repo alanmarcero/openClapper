@@ -40,9 +40,11 @@ private:
     Knob preSpread_;
     Knob preDecay_;
     Knob preJitter_;
+    Knob flamSpread_;
     Knob preLevel_;
 
     // Resonant Body / Tone
+    Choice toneMode_;
     Choice toneNote_;
     Knob toneOctave_;
     Knob toneFine_;
@@ -65,6 +67,7 @@ private:
     Knob noiseLevel_;
 
     // Click
+    Choice clickType_;
     Knob clickLevel_;
     Knob clickFreq_;
 };

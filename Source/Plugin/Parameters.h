@@ -10,9 +10,11 @@ inline constexpr const char* kPreBursts = "pre_bursts";
 inline constexpr const char* kPreSpread = "pre_spread";
 inline constexpr const char* kPreDecay = "pre_decay";
 inline constexpr const char* kPreJitter = "pre_jitter";
+inline constexpr const char* kFlamSpread = "flam_spread";
 inline constexpr const char* kPreLevel = "pre_level";
 
 // Resonant Body / Tone
+inline constexpr const char* kToneMode = "tone_mode";
 inline constexpr const char* kToneNote = "tone_note";
 inline constexpr const char* kToneOctave = "tone_octave";
 inline constexpr const char* kToneFine = "tone_fine";
@@ -35,6 +37,7 @@ inline constexpr const char* kNoiseStereoWidth = "noise_stereo_width";
 inline constexpr const char* kNoiseLevel = "noise_level";
 
 // Click / Transient
+inline constexpr const char* kClickType = "click_type";
 inline constexpr const char* kClickLevel = "click_level";
 inline constexpr const char* kClickFreq = "click_freq";
 
