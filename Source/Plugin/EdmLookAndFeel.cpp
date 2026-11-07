@@ -50,31 +50,64 @@ void EdmLookAndFeel::drawRotarySlider(
     const float originAngle = isBipolar ? (startAngle + endAngle) / 2.0f : startAngle;
     const auto stroke = juce::PathStrokeType(kArcThickness, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
 
+    // Subtle dial tick marks around the perimeter
+    constexpr int kNumTicks = 11;
+    for (int i = 0; i < kNumTicks; ++i) {
+        const float tFrac = static_cast<float>(i) / static_cast<float>(kNumTicks - 1);
+        const float tickAngle = startAngle + tFrac * (endAngle - startAngle);
+        const auto tickOuter = centre.getPointOnCircumference(radius, tickAngle);
+        const auto tickInner = centre.getPointOnCircumference(radius - 1.8f, tickAngle);
+        g.setColour(theme::kPanelEdge.brighter(0.2f));
+        g.drawLine({ tickInner, tickOuter }, 1.0f);
+    }
+
+    // Outer track
     juce::Path track;
     track.addCentredArc(centre.x, centre.y, arcRadius, arcRadius, 0.0f, startAngle, endAngle, true);
     g.setColour(theme::kTrack);
     g.strokePath(track, stroke);
 
+    // Active value arc with neon bloom
     juce::Path value;
     value.addCentredArc(centre.x, centre.y, arcRadius, arcRadius, 0.0f, originAngle, valueAngle, true);
+    const auto glowStroke = juce::PathStrokeType(kArcThickness + 3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
+    g.setColour(accent.withAlpha(0.28f));
+    g.strokePath(value, glowStroke);
     g.setColour(accent);
     g.strokePath(value, stroke);
 
+    // Knob body with drop shadow and metallic bevel
     const float bodyRadius = arcRadius - kArcThickness - 1.5f;
     const auto body = juce::Rectangle<float>(bodyRadius * 2.0f, bodyRadius * 2.0f).withCentre(centre);
-    g.setColour(juce::Colours::black.withAlpha(0.5f));
-    g.fillEllipse(body.translated(0.0f, 2.0f));
+    g.setColour(juce::Colours::black.withAlpha(0.55f));
+    g.fillEllipse(body.translated(0.0f, 2.5f));
+
     g.setGradientFill(juce::ColourGradient(
-        theme::kKnobBody.brighter(0.6f), centre.x, body.getY(),
-        theme::kKnobBody.darker(0.35f), centre.x, body.getBottom(), false));
+        juce::Colour(0xff223244), centre.x, body.getY(),
+        juce::Colour(0xff0c131c), centre.x, body.getBottom(), false));
     g.fillEllipse(body);
-    g.setColour(theme::kPanelEdge);
+    g.setColour(theme::kPanelEdge.brighter(0.3f));
     g.drawEllipse(body, 1.0f);
 
-    const auto tip = centre.getPointOnCircumference(bodyRadius - 2.5f, valueAngle);
-    const auto tail = centre.getPointOnCircumference(bodyRadius * 0.35f, valueAngle);
-    g.setColour(theme::kText);
+    // Inner metallic cap
+    const float capRadius = bodyRadius * 0.45f;
+    const auto cap = juce::Rectangle<float>(capRadius * 2.0f, capRadius * 2.0f).withCentre(centre);
+    g.setGradientFill(juce::ColourGradient(
+        juce::Colour(0xff16202c), centre.x, cap.getY(),
+        juce::Colour(0xff080d13), centre.x, cap.getBottom(), false));
+    g.fillEllipse(cap);
+    g.setColour(juce::Colour(0xff2b3d54));
+    g.drawEllipse(cap, 0.8f);
+
+    // Illuminated pointer needle
+    const auto tip = centre.getPointOnCircumference(bodyRadius - 2.0f, valueAngle);
+    const auto tail = centre.getPointOnCircumference(bodyRadius * 0.48f, valueAngle);
+    g.setColour(accent.withAlpha(0.45f));
+    g.drawLine({ tail, tip }, 3.5f);
+    g.setColour(accent.brighter(0.7f));
     g.drawLine({ tail, tip }, 2.0f);
+    g.setColour(juce::Colours::white);
+    g.fillEllipse(juce::Rectangle<float>(3.0f, 3.0f).withCentre(tip));
 }
 
 void EdmLookAndFeel::drawComboBox(
@@ -114,15 +147,21 @@ void EdmLookAndFeel::drawButtonBackground(
     bool isHighlighted,
     bool isDown) {
     auto bounds = button.getLocalBounds().toFloat().reduced(0.5f);
-    const auto baseColour = button.getToggleState()
-        ? button.findColour(juce::TextButton::buttonOnColourId)
-        : backgroundColour;
-    const auto fill = isDown ? baseColour.darker(0.2f) : (isHighlighted ? baseColour.brighter(0.15f) : baseColour);
+    const auto onColour = button.findColour(juce::TextButton::buttonOnColourId);
+    const bool isOn = button.getToggleState();
+
+    if (isOn) {
+        g.setColour(onColour.withAlpha(0.25f));
+        g.fillRoundedRectangle(bounds.expanded(2.0f), kCornerRadius + 1.0f);
+    }
+
+    const auto baseColour = isOn ? onColour : backgroundColour;
+    const auto fill = isDown ? baseColour.darker(0.2f) : (isHighlighted ? baseColour.brighter(0.18f) : baseColour);
 
     g.setColour(fill);
     g.fillRoundedRectangle(bounds, kCornerRadius);
-    g.setColour(button.getToggleState() ? theme::kAccentCyan : theme::kPanelEdge);
-    g.drawRoundedRectangle(bounds, kCornerRadius, 1.0f);
+    g.setColour(isOn ? onColour.brighter(0.6f) : theme::kPanelEdge.brighter(0.1f));
+    g.drawRoundedRectangle(bounds, kCornerRadius, 1.2f);
 }
 
 void EdmLookAndFeel::drawButtonText(

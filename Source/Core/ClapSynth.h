@@ -39,7 +39,7 @@ enum class ClickType {
 struct ClapSynthSettings {
     // Pitch & Tuning
     int note = 9;                 // 0..11 (A), default A
-    int octave = 3;               // 1..5, default 3
+    int octave = 3;               // 1..8, default 3 (expanded with high octaves)
     float fineCents = 0.0f;       // -50..+50 cents
 
     // Pre-Clap Flam (Micro-bursts)
@@ -88,7 +88,7 @@ struct ClapSynthSettings {
 // Computes base tuned frequency from note index, octave, and fine cents.
 [[nodiscard]] inline float noteToHz(int noteIndex, int octave, float fineCents = 0.0f) noexcept {
     const int note = (noteIndex % kNumNotes + kNumNotes) % kNumNotes;
-    const int oct = std::clamp(octave, 1, 5);
+    const int oct = std::clamp(octave, 1, 8);
     // MIDI note: Octave 4 C is 60, Octave 4 A is 69 (440 Hz)
     const int midiNote = 12 * (oct + 1) + note;
     const float totalNotes = static_cast<float>(midiNote - 69) + (fineCents / 100.0f);

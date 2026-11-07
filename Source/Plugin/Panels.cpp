@@ -12,7 +12,6 @@ namespace openclapper::ui {
 namespace {
 
 constexpr int kRefreshHz = 60;
-constexpr int kCaptionHeight = 18;
 
 } // namespace
 
@@ -309,27 +308,20 @@ void ClappyStagePanel::paint(juce::Graphics& g) {
 ClapSynthPanel::ClapSynthPanel(OpenClapperProcessor& processor)
     : preBursts_(processor.parameters, openclapper::params::kPreBursts, "Bursts", theme::kAccentCyan),
       preSpread_(processor.parameters, openclapper::params::kPreSpread, "Spread", theme::kAccentCyan),
-      preDecay_(processor.parameters, openclapper::params::kPreDecay, "Decay", theme::kAccentCyan),
-      preJitter_(processor.parameters, openclapper::params::kPreJitter, "Humanize", theme::kAccentCyan),
       flamSpread_(processor.parameters, openclapper::params::kFlamSpread, "Flam Pan", theme::kAccentCyan),
       preLevel_(processor.parameters, openclapper::params::kPreLevel, "Level", theme::kAccentCyan),
 
       toneMode_(processor.parameters, openclapper::params::kToneMode, "Mode", theme::kAccentAmber),
-      toneNote_(processor.parameters, openclapper::params::kToneNote, "Note", theme::kAccentAmber),
       toneOctave_(processor.parameters, openclapper::params::kToneOctave, "Octave", theme::kAccentAmber),
-      toneFine_(processor.parameters, openclapper::params::kToneFine, "Fine", theme::kAccentAmber),
-      toneFreq_(processor.parameters, openclapper::params::kToneFreq, "Freq", theme::kAccentAmber),
+      lockPitchBtn_(processor.parameters, openclapper::params::kLockPitch, "LOCK PITCH", theme::kAccentAmber),
+      toneFreq_(processor.parameters, openclapper::params::kToneFreq, "Tone Freq", theme::kAccentAmber),
       toneQ_(processor.parameters, openclapper::params::kToneQ, "Res / Q", theme::kAccentAmber),
       toneDecay_(processor.parameters, openclapper::params::kToneDecay, "Decay", theme::kAccentAmber),
       tonePitchEnv_(processor.parameters, openclapper::params::kTonePitchEnv, "Pitch Drop", theme::kAccentAmber),
-      tonePitchDecay_(processor.parameters, openclapper::params::kTonePitchDecay, "Drop Time", theme::kAccentAmber),
       toneLevel_(processor.parameters, openclapper::params::kToneLevel, "Level", theme::kAccentAmber),
 
       noiseType_(processor.parameters, openclapper::params::kNoiseType, "Type", theme::kAccentViolet),
-      noiseAttack_(processor.parameters, openclapper::params::kNoiseAttack, "Attack", theme::kAccentViolet),
-      noiseHold_(processor.parameters, openclapper::params::kNoiseHold, "Hold", theme::kAccentViolet),
       noiseDecay_(processor.parameters, openclapper::params::kNoiseDecay, "Decay", theme::kAccentViolet),
-      noiseCurve_(processor.parameters, openclapper::params::kNoiseCurve, "Curve", theme::kAccentViolet),
       noiseHPF_(processor.parameters, openclapper::params::kNoiseHPF, "HPF", theme::kAccentViolet),
       noiseLPF_(processor.parameters, openclapper::params::kNoiseLPF, "LPF", theme::kAccentViolet),
       noiseWidth_(processor.parameters, openclapper::params::kNoiseStereoWidth, "Width", theme::kAccentViolet),
@@ -340,35 +332,28 @@ ClapSynthPanel::ClapSynthPanel(OpenClapperProcessor& processor)
       clickFreq_(processor.parameters, openclapper::params::kClickFreq, "Click Freq", theme::kAccentNeonGreen) {
     addAndMakeVisible(preBursts_);
     addAndMakeVisible(preSpread_);
-    addAndMakeVisible(preDecay_);
-    addAndMakeVisible(preJitter_);
     addAndMakeVisible(flamSpread_);
     addAndMakeVisible(preLevel_);
-
-    addAndMakeVisible(toneMode_);
-    addAndMakeVisible(toneNote_);
-    addAndMakeVisible(toneOctave_);
-    addAndMakeVisible(toneFine_);
-    addAndMakeVisible(toneFreq_);
-    addAndMakeVisible(toneQ_);
-    addAndMakeVisible(toneDecay_);
-    addAndMakeVisible(tonePitchEnv_);
-    addAndMakeVisible(tonePitchDecay_);
-    addAndMakeVisible(toneLevel_);
-
-    addAndMakeVisible(noiseType_);
-    addAndMakeVisible(noiseAttack_);
-    addAndMakeVisible(noiseHold_);
-    addAndMakeVisible(noiseDecay_);
-    addAndMakeVisible(noiseCurve_);
-    addAndMakeVisible(noiseHPF_);
-    addAndMakeVisible(noiseLPF_);
-    addAndMakeVisible(noiseWidth_);
-    addAndMakeVisible(noiseLevel_);
 
     addAndMakeVisible(clickType_);
     addAndMakeVisible(clickLevel_);
     addAndMakeVisible(clickFreq_);
+
+    addAndMakeVisible(toneMode_);
+    addAndMakeVisible(toneOctave_);
+    addAndMakeVisible(lockPitchBtn_);
+    addAndMakeVisible(toneFreq_);
+    addAndMakeVisible(toneQ_);
+    addAndMakeVisible(toneDecay_);
+    addAndMakeVisible(tonePitchEnv_);
+    addAndMakeVisible(toneLevel_);
+
+    addAndMakeVisible(noiseType_);
+    addAndMakeVisible(noiseDecay_);
+    addAndMakeVisible(noiseHPF_);
+    addAndMakeVisible(noiseLPF_);
+    addAndMakeVisible(noiseWidth_);
+    addAndMakeVisible(noiseLevel_);
 }
 
 void ClapSynthPanel::paint(juce::Graphics& g) {
@@ -379,18 +364,18 @@ void ClapSynthPanel::resized() {
     auto area = getLocalBounds().reduced(8, 26);
     const int rowHeight = area.getHeight() / 3;
 
-    // Row 1: Pre-Clap Flam (left 2/3) & Click (right 1/3)
+    // Row 1: Pre-Clap Flam (left ~58%) & Click (right ~42%)
     auto row1 = area.removeFromTop(rowHeight);
-    auto clickArea = row1.removeFromRight(row1.getWidth() / 3);
-    layoutRow(row1, { &preBursts_, &preSpread_, &preDecay_, &preJitter_, &flamSpread_, &preLevel_ });
-    layoutRow(clickArea, { &clickType_, &clickLevel_, &clickFreq_ });
+    auto flamArea = row1.removeFromLeft(static_cast<int>(static_cast<float>(row1.getWidth()) * 0.58f));
+    layoutRow(flamArea, { &preBursts_, &preSpread_, &flamSpread_, &preLevel_ });
+    layoutRow(row1, { &clickType_, &clickLevel_, &clickFreq_ });
 
-    // Row 2: Resonant Body / Tone
+    // Row 2: Resonant Body / Tone (Mode, Octave, Lock Oct/Freq, Tone Freq, Q, Decay, Pitch Drop, Level)
     auto row2 = area.removeFromTop(rowHeight);
-    layoutRow(row2, { &toneMode_, &toneNote_, &toneOctave_, &toneFine_, &toneFreq_, &toneQ_, &toneDecay_, &tonePitchEnv_, &tonePitchDecay_, &toneLevel_ });
+    layoutRow(row2, { &toneMode_, &toneOctave_, &lockPitchBtn_, &toneFreq_, &toneQ_, &toneDecay_, &tonePitchEnv_, &toneLevel_ });
 
-    // Row 3: Noise & Sizzle
-    layoutRow(area, { &noiseType_, &noiseAttack_, &noiseHold_, &noiseDecay_, &noiseCurve_, &noiseHPF_, &noiseLPF_, &noiseWidth_, &noiseLevel_ });
+    // Row 3: Noise & Sizzle (Type, Decay, HPF, LPF, Width, Level)
+    layoutRow(area, { &noiseType_, &noiseDecay_, &noiseHPF_, &noiseLPF_, &noiseWidth_, &noiseLevel_ });
 }
 
 // ============================================================================
@@ -405,25 +390,21 @@ EffectsPanel::EffectsPanel(OpenClapperProcessor& processor)
 
       compThresh_(processor.parameters, openclapper::params::kCompThresh, "Threshold", theme::kAccentAmber),
       compRatio_(processor.parameters, openclapper::params::kCompRatio, "Ratio", theme::kAccentAmber),
-      compAttack_(processor.parameters, openclapper::params::kCompAttack, "Attack", theme::kAccentAmber),
-      compRelease_(processor.parameters, openclapper::params::kCompRelease, "Release", theme::kAccentAmber),
       compMakeup_(processor.parameters, openclapper::params::kCompMakeup, "Makeup", theme::kAccentAmber),
       compMix_(processor.parameters, openclapper::params::kCompMix, "Comp Mix", theme::kAccentAmber),
 
       limiterCeiling_(processor.parameters, openclapper::params::kLimiterCeiling, "Ceiling", theme::kAccentNeonGreen),
-      limiterRelease_(processor.parameters, openclapper::params::kLimiterRelease, "Release", theme::kAccentNeonGreen),
       limiterEnabled_(processor.parameters, openclapper::params::kLimiterEnabled, "Limiter", theme::kAccentNeonGreen),
 
       reverbSize_(processor.parameters, openclapper::params::kReverbSize, "Size", theme::kAccentViolet),
       reverbDecay_(processor.parameters, openclapper::params::kReverbDecay, "Decay", theme::kAccentViolet),
-      reverbDamp_(processor.parameters, openclapper::params::kReverbDamp, "Damping", theme::kAccentViolet),
       reverbGate_(processor.parameters, openclapper::params::kReverbGate, "Gate Time", theme::kAccentViolet),
       reverbMix_(processor.parameters, openclapper::params::kReverbMix, "Rev Mix", theme::kAccentViolet),
 
       reverseMode_(processor.parameters, openclapper::params::kReverseMode, "Rev Sync", theme::kAccentCyan),
       reverseMix_(processor.parameters, openclapper::params::kReverseMix, "Rev Mix", theme::kAccentCyan),
       midiMode_(processor.parameters, openclapper::params::kMidiMode, "MIDI Mode", theme::kTextDim),
-      lockInBtn_(processor.parameters, openclapper::params::kLockIn, "LOCK IN", theme::kAccentAmber),
+      lockInBtn_(processor.parameters, openclapper::params::kLockIn, "LOCK WAV", theme::kAccentAmber),
       masterWidth_(processor.parameters, openclapper::params::kStereoWidth, "Width", theme::kAccentCyan),
       outputGain_(processor.parameters, openclapper::params::kOutputGain, "Output", theme::kAccentAmber) {
     addAndMakeVisible(distType_);
@@ -433,18 +414,14 @@ EffectsPanel::EffectsPanel(OpenClapperProcessor& processor)
 
     addAndMakeVisible(compThresh_);
     addAndMakeVisible(compRatio_);
-    addAndMakeVisible(compAttack_);
-    addAndMakeVisible(compRelease_);
     addAndMakeVisible(compMakeup_);
     addAndMakeVisible(compMix_);
 
     addAndMakeVisible(limiterCeiling_);
-    addAndMakeVisible(limiterRelease_);
     addAndMakeVisible(limiterEnabled_);
 
     addAndMakeVisible(reverbSize_);
     addAndMakeVisible(reverbDecay_);
-    addAndMakeVisible(reverbDamp_);
     addAndMakeVisible(reverbGate_);
     addAndMakeVisible(reverbMix_);
 
@@ -464,15 +441,15 @@ void EffectsPanel::resized() {
     auto area = getLocalBounds().reduced(8, 26);
     const int rowHeight = area.getHeight() / 2;
 
-    // Row 1: Distortion (left) & Dynamics: Compressor + Limiter (right)
+    // Row 1: Distortion (left ~40%) & Dynamics: Compressor + Limiter (right ~60%)
     auto row1 = area.removeFromTop(rowHeight);
-    auto distArea = row1.removeFromLeft(row1.getWidth() * 4 / 11);
+    auto distArea = row1.removeFromLeft(static_cast<int>(static_cast<float>(row1.getWidth()) * 0.40f));
     layoutRow(distArea, { &distType_, &distDrive_, &distTone_, &distMix_ });
-    layoutRow(row1, { &compThresh_, &compRatio_, &compAttack_, &compRelease_, &compMakeup_, &compMix_, &limiterCeiling_ });
+    layoutRow(row1, { &compThresh_, &compRatio_, &compMakeup_, &compMix_, &limiterCeiling_, &limiterEnabled_ });
 
-    // Row 2: Reverb (left) & Master/Sync/Lock (right)
-    auto revArea = area.removeFromLeft(area.getWidth() * 5 / 11);
-    layoutRow(revArea, { &reverbSize_, &reverbDecay_, &reverbDamp_, &reverbGate_, &reverbMix_ });
+    // Row 2: Reverb (left ~40%) & Master/Sync/Lock (right ~60%)
+    auto revArea = area.removeFromLeft(static_cast<int>(static_cast<float>(area.getWidth()) * 0.40f));
+    layoutRow(revArea, { &reverbSize_, &reverbDecay_, &reverbGate_, &reverbMix_ });
     layoutRow(area, { &reverseMode_, &reverseMix_, &midiMode_, &masterWidth_, &outputGain_, &lockInBtn_ });
 }
 

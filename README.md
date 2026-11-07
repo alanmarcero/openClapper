@@ -4,9 +4,11 @@
 
 Clap on. Clap off.
 
-openClapper is an EDM and trance clap drum synthesizer plugin. It includes multi-burst micro-slap flam with stereo micro-panning, chromatic body tuning with four body modes, four-texture noise shaping, transient click selection, impact distortion, compressor and brickwall limiter dynamics, non-linear gated reverb with allpass diffusion, host-synced reverse swells, session WAV lock-in, and the animated DJ Clappy stage.
+openClapper is an EDM and trance clap drum synthesizer plugin. It includes multi-burst micro-slap flam with stereo micro-panning, continuous resonant body tuning across 8 octaves with dedicated pitch lock-in across preset browsing, four-texture noise shaping, transient click selection, warm impact saturation, compressor and brickwall limiter dynamics, non-linear gated reverb with allpass diffusion, host-synced reverse swells, session WAV lock-in, and the animated DJ Clappy stage.
 
 Available as VST3, AU, LV2, and Standalone on macOS, Windows, and Linux.
+
+![openClapper hero banner](assets/openClapper-hero.png)
 
 ![openClapper user interface](assets/openClapper-screenshot.png)
 
@@ -14,45 +16,38 @@ Available as VST3, AU, LV2, and Standalone on macOS, Windows, and Linux.
 
 ### Pre-clap flam
 
-Controls the micro-bursts that precede the main collective slap impact.
+Controls the micro-bursts that precede the main collective slap impact. Pre-burst decay and organic jitter are baked into the spread spacing for tight, mud-free transient definition.
 
 | Parameter | ID | Range | Description |
 |---|---|---|---|
 | Bursts | `pre_bursts` | 1 to 5 | Number of micro-bursts before the main slap |
 | Spread | `pre_spread` | 2.0 to 45.0 ms | Time spacing between bursts |
-| Decay | `pre_decay` | 2.0 to 35.0 ms | Decay time of each burst envelope |
-| Humanize | `pre_jitter` | 0.0 to 1.0 | Timing and amplitude variation between bursts |
 | Flam Pan | `flam_spread` | 0.0 to 1.0 | Alternating stereo micro-panning width across pre-bursts |
 | Level | `pre_level` | 0.0 to 1.0 | Pre-clap output volume |
 
 ### Resonant body
 
-Provides the tuned harmonic weight and pitch drop of the clap core.
+Provides the tuned harmonic weight, continuous frequency tuning, and pitch drop of the clap core.
 
 | Parameter | ID | Range | Description |
 |---|---|---|---|
 | Mode | `tone_mode` | Bandpass, Sub Thump, Saturated Tri, Cyber Square | Tonal generator algorithm |
-| Note | `tone_note` | C through B | Musical root pitch |
-| Octave | `tone_octave` | 1 to 5 | Octave register (default 3) |
-| Fine | `tone_fine` | -50 to +50 cents | Fine frequency tuning |
-| Freq | `tone_freq` | 200 to 4000 Hz | Center filter frequency |
+| Octave | `tone_octave` | 1 to 8 | Octave register (extended with high octaves 6-8) |
+| Lock Pitch | `lock_pitch` | On / Off | Locks octave and frequency across presets so tuned pitch stays intact |
+| Tone Freq | `tone_freq` | 100 to 6000 Hz | Resonant body center frequency with real-time response |
 | Res / Q | `tone_q` | 0.5 to 12.0 | Filter resonance |
 | Decay | `tone_decay` | 15 to 600 ms | Body decay envelope |
 | Pitch Drop | `tone_pitch_env` | -24 to +24 semitones | Initial pitch dive depth |
-| Drop Time | `tone_pitch_decay` | 3 to 80 ms | Pitch dive envelope duration |
 | Level | `tone_level` | 0.0 to 1.0 | Tonal body volume |
 
 ### Noise and sizzle
 
-Shapes the primary high-frequency noise body and stereo spread.
+Shapes the primary high-frequency noise body and stereo spread. Attack is baked to instantaneous punch and hold is optimized for maximum transient clarity.
 
 | Parameter | ID | Range | Description |
 |---|---|---|---|
 | Type | `noise_type` | White, Pink, Velvet, Lo-Fi | Noise spectrum source |
-| Attack | `noise_attack` | 0.0 to 20.0 ms | Noise attack envelope time |
-| Hold | `noise_hold` | 0.0 to 30.0 ms | Transient sustain hold time |
 | Decay | `noise_decay` | 20 to 1000 ms | Noise decay time |
-| Curve | `noise_curve` | -1.0 to +1.0 | Envelope shape (-1.0 exp, 0.0 linear, +1.0 log) |
 | HPF | `noise_hpf` | 20 to 2500 Hz | 12 dB/oct high-pass filter cutoff |
 | LPF | `noise_lpf` | 800 to 20000 Hz | 12 dB/oct low-pass filter cutoff |
 | Width | `noise_stereo_width` | 0.0 to 2.0 | Mid/Side stereo width (0 mono, 1 stereo, 2 wide) |

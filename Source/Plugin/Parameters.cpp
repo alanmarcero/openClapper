@@ -30,12 +30,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID{ kToneNote, 1 }, "Tone Note", noteNames, 9)); // A
     params.push_back(std::make_unique<juce::AudioParameterInt>(
-        juce::ParameterID{ kToneOctave, 1 }, "Tone Octave", 1, 5, 3));
+        juce::ParameterID{ kToneOctave, 1 }, "Tone Octave", 1, 8, 3));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kToneFine, 1 }, "Tone Fine", juce::NormalisableRange<float>(-50.0f, 50.0f, 0.5f), 0.0f,
         juce::AudioParameterFloatAttributes().withLabel("ct")));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kToneFreq, 1 }, "Tone Freq", juce::NormalisableRange<float>(200.0f, 4000.0f, 1.0f, 0.35f), 1100.0f,
+        juce::ParameterID{ kToneFreq, 1 }, "Tone Freq", juce::NormalisableRange<float>(100.0f, 6000.0f, 1.0f, 0.35f), 1100.0f,
         juce::AudioParameterFloatAttributes().withLabel("Hz")));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kToneQ, 1 }, "Tone Q", juce::NormalisableRange<float>(0.5f, 12.0f, 0.1f), 3.2f));
@@ -151,6 +151,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
     juce::StringArray midiModes{ "Fixed (Root)", "Note Tracking" };
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID{ kMidiMode, 1 }, "MIDI Mode", midiModes, 0));
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{ kLockPitch, 1 }, "Lock Oct/Freq", false));
     params.push_back(std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID{ kLockIn, 1 }, "Lock In (WAV)", false));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
