@@ -24,8 +24,12 @@ private:
     juce::TextButton auditionBtn_{ "CLAP ON!" };
     uint32_t seenTriggers_ = 0;
     double clapTriggerTimeMs_ = 0.0;
-    float clapPose_ = 0.0f; // -1 (open) .. 0 (slap) .. +1 (recoil)
+    float clapPose_ = 0.0f; // -1 (open flam) .. 0 (slap) .. +1 (recoil)
     float shockwave_ = 0.0f;
+    float impactIntensity_ = 1.0f;
+    float impactFlash_ = 0.0f;
+    float headTilt_ = 0.0f;
+    float idleBob_ = 0.0f;
 };
 
 class ClapSynthPanel : public juce::Component {

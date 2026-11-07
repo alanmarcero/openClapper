@@ -43,6 +43,7 @@ void ClappyStagePanel::timerCallback() {
     if (serial != seenTriggers_) {
         seenTriggers_ = serial;
         clapTriggerTimeMs_ = juce::Time::getMillisecondCounterHiRes();
+        impactIntensity_ = std::clamp(processor_.displayVelocity.load(std::memory_order_relaxed), 0.35f, 1.0f);
     }
     repaint();
 }
@@ -72,47 +73,73 @@ void ClappyStagePanel::paint(juce::Graphics& g) {
     const float pulse = std::max(peak, 0.35f * std::pow(1.0f - beatPhase, 3.0f));
     const bool locked = processor_.isClapLockedIn();
 
-    // Trigger animation timing
+    // Trigger animation timing across multi-stage choreography
     const double clapAgeMs = juce::Time::getMillisecondCounterHiRes() - clapTriggerTimeMs_;
-    const float clapPhase = (clapAgeMs < 0.0 || clapAgeMs > 320.0)
+    constexpr double kAnimDurationMs = 520.0;
+    const float clapPhase = (clapAgeMs < 0.0 || clapAgeMs > kAnimDurationMs)
         ? 1.0f
-        : static_cast<float>(clapAgeMs / 320.0);
+        : static_cast<float>(clapAgeMs / kAnimDurationMs);
+    const bool isTriggerActive = (clapPhase < 1.0f);
 
-    // Compute hand clap posture: -1 (approach flam), 0 (impact slap), +1 (recoil spring)
-    if (clapPhase < 0.22f) {
-        // Multi-flam rapid micro-twitch approaching impact
-        const float microFlam = std::sin(clapPhase * 40.0f * std::numbers::pi_v<float>);
-        clapPose_ = -(1.0f - clapPhase / 0.22f) * 0.8f + microFlam * 0.2f;
+    // Multi-stage motion curves
+    if (clapPhase < 0.16f) {
+        // Stage 1: Pre-burst flam windup & hand flutter
+        const float flutter = std::sin(clapPhase * 48.0f * std::numbers::pi_v<float>);
+        clapPose_ = -(1.0f - clapPhase / 0.16f) * 0.9f + flutter * 0.25f;
+        headTilt_ = (clapPhase / 0.16f) * 0.02f;
         shockwave_ = 0.0f;
-    } else if (clapPhase < 0.38f) {
-        // Clap impact smack!
-        const float strike = (clapPhase - 0.22f) / 0.16f;
-        clapPose_ = 0.0f;
-        shockwave_ = 1.0f - strike;
+        impactFlash_ = 0.0f;
+    } else if (clapPhase < 0.28f) {
+        // Stage 2: Clap impact smack! Instant peak compression and flash
+        const float strike = (clapPhase - 0.16f) / 0.12f;
+        clapPose_ = -std::sin(strike * std::numbers::pi_v<float>) * 1.0f;
+        headTilt_ = 0.0f;
+        shockwave_ = (1.0f - strike) * impactIntensity_;
+        impactFlash_ = std::pow(1.0f - strike, 1.4f) * impactIntensity_;
     } else if (clapPhase < 1.0f) {
-        // Smooth damped recoil
-        const float recoil = (clapPhase - 0.38f) / 0.62f;
-        clapPose_ = std::sin(recoil * std::numbers::pi_v<float> * 2.0f) * std::exp(-recoil * 3.5f) * 0.6f;
-        shockwave_ = std::max(0.0f, 1.0f - recoil * 2.0f);
+        // Stage 3: Dynamic harmonic recoil bounce & settling
+        const float recoil = (clapPhase - 0.28f) / 0.72f;
+        const float decay = std::exp(-recoil * 3.8f);
+        clapPose_ = std::sin(recoil * std::numbers::pi_v<float> * 3.0f) * decay * 0.85f;
+        headTilt_ = std::sin(recoil * std::numbers::pi_v<float> * 2.0f) * decay * 0.035f;
+        shockwave_ = std::max(0.0f, (1.0f - recoil * 2.2f) * impactIntensity_);
+        impactFlash_ = std::max(0.0f, impactFlash_ * 0.92f);
     } else {
+        // Idle tempo groove
         clapPose_ = 0.0f;
+        headTilt_ = 0.0f;
         shockwave_ = 0.0f;
+        impactFlash_ = 0.0f;
+        idleBob_ = std::sin(beatPhase * 2.0f * std::numbers::pi_v<float>) * 2.0f;
     }
 
-    const bool isClapOn = (clapPhase < 0.85f);
+    const bool isClapOn = (clapPhase < 0.75f && isTriggerActive);
 
-    // Subwoofer cone behind DJ Clappy
+    // Subwoofer cone behind DJ Clappy with acoustic bass ripples
     const juce::Point<float> coneCentre{ stage.getCentreX(), stage.getCentreY() + 10.0f };
     const float baseRadius = std::min(stage.getWidth(), stage.getHeight()) * 0.38f;
-    const float pumpRadius = (baseRadius + pulse * 10.0f);
+    const float pumpExtra = (pulse * 14.0f) + (impactFlash_ * 12.0f);
+    const float pumpRadius = baseRadius + pumpExtra;
+
     const juce::Rectangle<float> rimRect(
         coneCentre.x - baseRadius - 6.0f, coneCentre.y - baseRadius - 6.0f,
         (baseRadius + 6.0f) * 2.0f, (baseRadius + 6.0f) * 2.0f);
 
-    drawGlow(g, rimRect.expanded(16.0f), (isClapOn ? theme::kAccentNeonGreen : theme::kAccentCyan).withAlpha(0.15f + pulse * 0.35f));
+    const auto subGlowColor = isClapOn ? theme::kAccentNeonGreen : theme::kAccentCyan;
+    drawGlow(g, rimRect.expanded(18.0f), subGlowColor.withAlpha(0.18f + pulse * 0.40f + impactFlash_ * 0.35f));
     g.setColour(juce::Colour(0xff18222d));
     g.fillEllipse(rimRect);
-    g.setColour((isClapOn ? theme::kAccentNeonGreen : theme::kAccentCyan).withAlpha(0.35f + pulse * 0.5f));
+
+    // Concentric acoustic bass pressure ripples
+    if (pulse > 0.15f || impactFlash_ > 0.05f) {
+        for (int r = 1; r <= 3; ++r) {
+            const float rippleR = baseRadius * (0.35f + 0.22f * static_cast<float>(r)) + pumpExtra * 0.4f;
+            g.setColour(subGlowColor.withAlpha((0.35f - static_cast<float>(r) * 0.08f) * (pulse + impactFlash_)));
+            g.drawEllipse(coneCentre.x - rippleR, coneCentre.y - rippleR, rippleR * 2.0f, rippleR * 2.0f, 1.2f);
+        }
+    }
+
+    g.setColour(subGlowColor.withAlpha(0.35f + pulse * 0.5f + impactFlash_ * 0.4f));
     g.drawEllipse(rimRect.reduced(2.0f), 1.5f);
 
     const juce::Rectangle<float> coneRect(coneCentre.x - pumpRadius, coneCentre.y - pumpRadius, pumpRadius * 2.0f, pumpRadius * 2.0f);
@@ -121,50 +148,123 @@ void ClappyStagePanel::paint(juce::Graphics& g) {
         juce::Colour(0xff2b3a4a), coneCentre.translated(pumpRadius, 0.0f), true));
     g.fillEllipse(coneRect);
 
-    // Stage spotlight beams
+    // Dynamic sweeping festival spotlight beams
     for (int side = 0; side < 2; ++side) {
-        const float srcX = side == 0 ? stage.getX() + 20.0f : stage.getRight() - 20.0f;
+        const float srcX = side == 0 ? stage.getX() + 16.0f : stage.getRight() - 16.0f;
         const float floorY = stage.getBottom() - 4.0f;
         const auto beamCol = side == 0 ? theme::kAccentCyan : theme::kAccentAmber;
+
+        const float sweepPhase = (side == 0 ? beatPhase : beatPhase + 0.5f);
+        const float sweepOffset = std::sin(sweepPhase * 2.0f * std::numbers::pi_v<float>) * 24.0f;
+        const float targetX = stage.getCentreX() + (isTriggerActive ? (side == 0 ? -12.0f : 12.0f) : sweepOffset);
+        const float targetY = stage.getY() + 10.0f;
+
         juce::Path beam;
-        beam.startNewSubPath(srcX - 6.0f, floorY);
-        beam.lineTo(stage.getCentreX() - 35.0f, stage.getY() + 4.0f);
-        beam.lineTo(stage.getCentreX() + 35.0f, stage.getY() + 4.0f);
-        beam.lineTo(srcX + 6.0f, floorY);
+        beam.startNewSubPath(srcX - 8.0f, floorY);
+        beam.lineTo(targetX - 25.0f, targetY);
+        beam.lineTo(targetX + 25.0f, targetY);
+        beam.lineTo(srcX + 8.0f, floorY);
         beam.closeSubPath();
+
+        const float beamIntensity = 0.16f + pulse * 0.30f + (impactFlash_ * 0.45f);
         g.setGradientFill(juce::ColourGradient(
-            beamCol.withAlpha(0.15f + pulse * 0.25f), srcX, floorY,
-            beamCol.withAlpha(0.0f), stage.getCentreX(), stage.getY(), false));
+            beamCol.withAlpha(beamIntensity), srcX, floorY,
+            beamCol.withAlpha(0.0f), targetX, targetY, false));
         g.fillPath(beam);
     }
 
-    // Shockwave rings emitted from hands on clap impact
+    // Mascot transform parameters
+    float scaleX = 1.0f;
+    float scaleY = 1.0f;
+    float shiftY = 0.0f;
+
+    if (isTriggerActive) {
+        if (clapPhase < 0.28f) {
+            // Compress downward on impact slam
+            const float frac = (1.0f - clapPhase / 0.28f);
+            scaleX = 1.0f + 0.14f * impactIntensity_ * frac;
+            scaleY = 1.0f - 0.10f * impactIntensity_ * frac;
+            shiftY = 6.0f * impactIntensity_ * frac;
+        } else {
+            // Spring recoil rebound
+            scaleX = 1.0f - clapPose_ * 0.08f * impactIntensity_;
+            scaleY = 1.0f + clapPose_ * 0.10f * impactIntensity_;
+            shiftY = -clapPose_ * 10.0f * impactIntensity_;
+        }
+    } else {
+        shiftY = idleBob_;
+        scaleY = 1.0f - std::abs(idleBob_) * 0.005f;
+    }
+
+    // Expanding shockwave rings & spark flares from robotic hands
     if (shockwave_ > 0.01f) {
-        const juce::Point<float> clapImpact{ stage.getCentreX(), stage.getCentreY() + 18.0f };
-        for (int w = 0; w < 3; ++w) {
-            const float r = 16.0f + static_cast<float>(w) * 16.0f + (1.0f - shockwave_) * 40.0f;
-            g.setColour(theme::kAccentNeonGreen.withAlpha(shockwave_ * (0.6f - static_cast<float>(w) * 0.15f)));
-            g.drawEllipse(clapImpact.x - r, clapImpact.y - r * 0.7f, r * 2.0f, r * 1.4f, 2.0f);
+        const juce::Point<float> clapImpact{ stage.getCentreX() + 2.0f, stage.getCentreY() + 18.0f + shiftY };
+
+        // Central neon flare
+        const float flareRadius = 24.0f + (1.0f - shockwave_) * 32.0f;
+        g.setGradientFill(juce::ColourGradient(
+            juce::Colour(0xffffffff).withAlpha(shockwave_ * 0.9f), clapImpact,
+            theme::kAccentNeonGreen.withAlpha(0.0f), clapImpact.translated(flareRadius, 0.0f), true));
+        g.fillEllipse(clapImpact.x - flareRadius, clapImpact.y - flareRadius * 0.7f, flareRadius * 2.0f, flareRadius * 1.4f);
+
+        // Concentric cyber shockwave rings
+        const std::array<juce::Colour, 4> ringCols = {
+            theme::kAccentNeonGreen,
+            theme::kAccentCyan,
+            theme::kAccentAmber,
+            theme::kAccentNeonGreen
+        };
+        for (size_t w = 0; w < ringCols.size(); ++w) {
+            const float r = 14.0f + static_cast<float>(w) * 16.0f + (1.0f - shockwave_) * 60.0f;
+            const float ringAlpha = shockwave_ * std::max(0.0f, 0.75f - static_cast<float>(w) * 0.16f);
+            g.setColour(ringCols[w].withAlpha(ringAlpha));
+            g.drawEllipse(clapImpact.x - r, clapImpact.y - r * 0.65f, r * 2.0f, r * 1.3f, 2.2f);
+        }
+
+        // Electric spark rays shooting outward
+        constexpr int kNumRays = 8;
+        for (int i = 0; i < kNumRays; ++i) {
+            const float angle = static_cast<float>(i) * (2.0f * std::numbers::pi_v<float> / static_cast<float>(kNumRays));
+            const float innerDist = 12.0f + (1.0f - shockwave_) * 15.0f;
+            const float outerDist = innerDist + 18.0f * shockwave_;
+            const float x1 = clapImpact.x + std::cos(angle) * innerDist;
+            const float y1 = clapImpact.y + std::sin(angle) * innerDist * 0.7f;
+            const float x2 = clapImpact.x + std::cos(angle) * outerDist;
+            const float y2 = clapImpact.y + std::sin(angle) * outerDist * 0.7f;
+            g.setColour(juce::Colours::white.withAlpha(shockwave_ * 0.8f));
+            g.drawLine(x1, y1, x2, y2, 1.8f);
         }
     }
 
     // Draw the 3D DJ Clappy mascot with clap animations and transforms
     if (mascot_.isValid()) {
         const juce::Graphics::ScopedSaveState mascotSave(g);
-        // Squash on clap impact and recoil bounce
-        const float scaleX = 1.0f + clapPose_ * 0.08f;
-        const float scaleY = 1.0f - std::abs(clapPose_) * 0.05f;
-        const float shiftY = -std::abs(clapPose_) * 4.0f;
+        const float pivotX = stage.getCentreX();
+        const float pivotY = stage.getCentreY() + 12.0f;
 
-        g.addTransform(juce::AffineTransform::translation(-stage.getCentreX(), -(stage.getCentreY() + 12.0f)));
+        g.addTransform(juce::AffineTransform::translation(-pivotX, -pivotY));
+        g.addTransform(juce::AffineTransform::rotation(headTilt_));
         g.addTransform(juce::AffineTransform::scale(scaleX, scaleY));
-        g.addTransform(juce::AffineTransform::translation(stage.getCentreX(), stage.getCentreY() + 12.0f + shiftY));
+        g.addTransform(juce::AffineTransform::translation(pivotX, pivotY + shiftY));
 
         g.setColour(juce::Colours::white);
         g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
         const auto mascotBounds = stage.reduced(10.0f, 6.0f).toNearestInt();
         g.drawImageWithin(mascot_, mascotBounds.getX(), mascotBounds.getY(), mascotBounds.getWidth(), mascotBounds.getHeight(),
                           juce::RectanglePlacement::centred);
+    }
+
+    // Visor laser highlight flash across cyber eyewear
+    if (impactFlash_ > 0.02f) {
+        const float visorY = stage.getCentreY() - 36.0f + shiftY;
+        const float visorWidth = 84.0f + impactFlash_ * 30.0f;
+        const auto visorRect = juce::Rectangle<float>(stage.getCentreX() - visorWidth * 0.5f, visorY - 7.0f, visorWidth, 14.0f);
+        drawGlow(g, visorRect.expanded(12.0f), theme::kAccentCyan.withAlpha(impactFlash_ * 0.85f));
+
+        g.setGradientFill(juce::ColourGradient(
+            juce::Colour(0xffffffff).withAlpha(impactFlash_ * 0.95f), stage.getCentreX(), visorY,
+            theme::kAccentCyan.withAlpha(0.0f), stage.getCentreX() - visorWidth * 0.5f, visorY, true));
+        g.fillRoundedRectangle(visorRect, 4.0f);
     }
 
     // Slogan banner at top of stage: "Clap on. Clap off."
@@ -179,12 +279,16 @@ void ClappyStagePanel::paint(juce::Graphics& g) {
     g.drawText("CLAP ON. CLAP OFF.", bannerRect, juce::Justification::centred, true);
 
     // Neon State Indicator LED
-    const auto ledRect = juce::Rectangle<float>(stage.getX() + 14.0f, stage.getY() + 4.0f, 65.0f, 16.0f);
-    g.setColour(isClapOn ? theme::kAccentNeonGreen.withAlpha(0.25f) : theme::kKnobBody);
+    const auto ledRect = juce::Rectangle<float>(stage.getX() + 14.0f, stage.getY() + 4.0f, 68.0f, 18.0f);
+    if (isClapOn) {
+        drawGlow(g, ledRect.expanded(6.0f), theme::kAccentNeonGreen.withAlpha(0.35f + impactFlash_ * 0.4f));
+    }
+    g.setColour(isClapOn ? theme::kAccentNeonGreen.withAlpha(0.28f + impactFlash_ * 0.25f) : theme::kKnobBody);
     g.fillRoundedRectangle(ledRect, 3.0f);
-    g.setColour(isClapOn ? theme::kAccentNeonGreen : theme::kTextDim);
+    g.setColour(isClapOn ? theme::kAccentNeonGreen : theme::kPanelEdge);
     g.drawRoundedRectangle(ledRect, 3.0f, 1.0f);
     g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+    g.setColour(isClapOn ? theme::kAccentNeonGreen : theme::kTextDim);
     g.drawText(isClapOn ? "CLAP ON" : "CLAP OFF", ledRect, juce::Justification::centred, true);
 
     // Locked WAV badge if active
