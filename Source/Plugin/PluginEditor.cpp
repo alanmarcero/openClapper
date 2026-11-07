@@ -71,30 +71,42 @@ void OpenClapperEditor::timerCallback() {
 }
 
 void OpenClapperEditor::paint(juce::Graphics& g) {
+    // 1. Solid dark chassis base
+    g.fillAll(openclapper::theme::kBackground);
+
+    // 2. Subtle chassis texture in margins (opacity 0.22 so background graphics never compete with text)
     if (faceplate_.isValid()) {
+        const juce::Graphics::ScopedSaveState state(g);
+        g.setOpacity(0.22f);
         g.drawImageWithin(faceplate_, 0, 0, getWidth(), getHeight(),
                           juce::RectanglePlacement::stretchToFit);
-    } else {
-        g.fillAll(openclapper::theme::kBackground);
     }
 
-    // Top Header Banner
-    const auto headerArea = getLocalBounds().removeFromTop(44).reduced(12, 4);
+    // 3. Solid top header bar with border and cyan accent strip
+    const auto headerArea = getLocalBounds().removeFromTop(44);
+    g.setGradientFill(juce::ColourGradient(
+        juce::Colour(0xff111822), 0.0f, 0.0f,
+        juce::Colour(0xff090e15), 0.0f, static_cast<float>(headerArea.getHeight()), false));
+    g.fillRect(headerArea);
+    g.setColour(openclapper::theme::kPanelEdge);
+    g.drawHorizontalLine(headerArea.getBottom() - 1, 0.0f, static_cast<float>(getWidth()));
+    g.setColour(openclapper::theme::kAccentCyan.withAlpha(0.6f));
+    g.drawHorizontalLine(headerArea.getBottom() - 1, 12.0f, 260.0f);
 
     // Logo & Title
     g.setColour(openclapper::theme::kAccentCyan);
     g.setFont(juce::FontOptions(20.0f, juce::Font::bold));
-    g.drawText("openClapper", headerArea.getX() + 4, headerArea.getY() + 2, 160, 24, juce::Justification::left, true);
+    g.drawText("openClapper", 16, headerArea.getY() + 10, 140, 24, juce::Justification::left, true);
 
     // Slogan in Header
     g.setColour(openclapper::theme::kAccentAmber);
     g.setFont(juce::FontOptions(13.0f, juce::Font::italic));
-    g.drawText("Clap on. Clap off.", headerArea.getX() + 168, headerArea.getY() + 6, 160, 20, juce::Justification::left, true);
+    g.drawText("Clap on. Clap off.", 160, headerArea.getY() + 13, 140, 20, juce::Justification::left, true);
 
     // Tech badges
-    g.setColour(openclapper::theme::kTextDim);
-    g.setFont(juce::FontOptions(11.0f));
-    g.drawText("v1.1.1 | EDM & TRANCE CLAP SYNTH", headerArea.getRight() - 250, headerArea.getY() + 6, 240, 20, juce::Justification::right, true);
+    g.setColour(openclapper::theme::kTextDim.brighter(0.25f));
+    g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+    g.drawText("v1.1.2 | EDM & TRANCE CLAP SYNTH", getWidth() - 250, headerArea.getY() + 13, 234, 20, juce::Justification::right, true);
 }
 
 void OpenClapperEditor::resized() {

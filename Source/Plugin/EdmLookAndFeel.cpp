@@ -14,9 +14,9 @@ constexpr float kControlFontSize = 12.0f;
 EdmLookAndFeel::EdmLookAndFeel() {
     setColour(juce::ResizableWindow::backgroundColourId, theme::kBackground);
     setColour(juce::Label::textColourId, theme::kText);
-    setColour(juce::Slider::textBoxTextColourId, theme::kTextDim);
-    setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
-    setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
+    setColour(juce::Slider::textBoxTextColourId, theme::kText);
+    setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0xff1e2b3c));
+    setColour(juce::Slider::textBoxBackgroundColourId, juce::Colour(0xff090f17));
     setColour(juce::Slider::textBoxHighlightColourId, theme::kTrack);
     setColour(juce::ComboBox::backgroundColourId, theme::kKnobBody);
     setColour(juce::ComboBox::textColourId, theme::kText);
@@ -149,8 +149,10 @@ juce::Font EdmLookAndFeel::getPopupMenuFont() {
 
 juce::Label* EdmLookAndFeel::createSliderTextBox(juce::Slider& slider) {
     auto* l = LookAndFeel_V4::createSliderTextBox(slider);
-    l->setFont(juce::FontOptions(11.0f));
+    l->setFont(juce::FontOptions(11.0f, juce::Font::bold));
     l->setJustificationType(juce::Justification::centred);
+    l->setColour(juce::Label::backgroundColourId, juce::Colour(0xff090f17));
+    l->setColour(juce::Label::outlineColourId, juce::Colour(0xff1e2b3c));
     return l;
 }
 

@@ -4,13 +4,13 @@
 
 namespace openclapper::theme {
 
-inline const juce::Colour kBackground{ 0xff090d12 };
-inline const juce::Colour kPanel{ 0xf2111822 };
-inline const juce::Colour kPanelEdge{ 0xff253549 };
-inline const juce::Colour kKnobBody{ 0xff16202c };
-inline const juce::Colour kTrack{ 0xff283749 };
-inline const juce::Colour kText{ 0xfff0f6fc };
-inline const juce::Colour kTextDim{ 0xff8ca0b8 };
+inline const juce::Colour kBackground{ 0xff080c10 };
+inline const juce::Colour kPanel{ 0xff0c1219 };
+inline const juce::Colour kPanelEdge{ 0xff1e2d3e };
+inline const juce::Colour kKnobBody{ 0xff141d27 };
+inline const juce::Colour kTrack{ 0xff243447 };
+inline const juce::Colour kText{ 0xfff4f7fb };
+inline const juce::Colour kTextDim{ 0xff9cb0c6 };
 
 // Signature Cyber / Trance palette
 inline const juce::Colour kAccentCyan{ 0xff00e5ff };       // Primary neon cyan
