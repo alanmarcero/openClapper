@@ -42,29 +42,22 @@ private:
     // Pre-Clap Flam
     Knob preBursts_;
     Knob preSpread_;
-    Knob preDecay_;
-    Knob preJitter_;
     Knob flamSpread_;
     Knob preLevel_;
 
     // Resonant Body / Tone
     Choice toneMode_;
-    Choice toneNote_;
     Knob toneOctave_;
-    Knob toneFine_;
+    Toggle lockPitchBtn_;
     Knob toneFreq_;
     Knob toneQ_;
     Knob toneDecay_;
     Knob tonePitchEnv_;
-    Knob tonePitchDecay_;
     Knob toneLevel_;
 
     // Noise & Sizzle
     Choice noiseType_;
-    Knob noiseAttack_;
-    Knob noiseHold_;
     Knob noiseDecay_;
-    Knob noiseCurve_;
     Knob noiseHPF_;
     Knob noiseLPF_;
     Knob noiseWidth_;
@@ -92,20 +85,16 @@ private:
     // Compressor
     Knob compThresh_;
     Knob compRatio_;
-    Knob compAttack_;
-    Knob compRelease_;
     Knob compMakeup_;
     Knob compMix_;
 
     // Limiter
     Knob limiterCeiling_;
-    Knob limiterRelease_;
     Toggle limiterEnabled_;
 
     // Gated Reverb
     Knob reverbSize_;
     Knob reverbDecay_;
-    Knob reverbDamp_;
     Knob reverbGate_;
     Knob reverbMix_;
 

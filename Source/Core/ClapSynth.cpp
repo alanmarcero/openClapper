@@ -297,7 +297,8 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings) noexcept
     // 1. Evaluate Pre-Clap Micro-bursts with alternating stereo micro-panning
     float preClapGainL = 0.0f;
     float preClapGainR = 0.0f;
-    const float burstDecaySamples = (settings.preClapDecayMs * 0.001f) * static_cast<float>(sampleRate_);
+    const float effectiveBurstDecayMs = std::max(2.0f, std::min(settings.preClapDecayMs, settings.preClapSpreadMs * 0.75f));
+    const float burstDecaySamples = (effectiveBurstDecayMs * 0.001f) * static_cast<float>(sampleRate_);
 
     for (int i = 0; i < preClapCount_; ++i) {
         const int age = currentSample - burstStartSamples_[i];
@@ -402,7 +403,13 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings) noexcept
         const float pitchDecaySamples = (settings.tonePitchDecayMs * 0.001f) * static_cast<float>(sampleRate_);
         const float pitchEnvFrac = std::exp(-static_cast<float>(mainAge) / std::max(1.0f, pitchDecaySamples));
         const float pitchSemitones = static_cast<float>(semitoneOffset_) + settings.tonePitchEnv * pitchEnvFrac;
-        const float tunedHz = noteToHz(settings.note, settings.octave, settings.fineCents) * std::pow(2.0f, pitchSemitones / 12.0f);
+
+        // When triggered by MIDI note tracking (semitoneOffset_ != 0), track chromatic root;
+        // otherwise in standard clap mode, toneFreqHz directly sets resonant frequency scaled by octave knob.
+        const float baseHz = (semitoneOffset_ != 0)
+            ? noteToHz(settings.note, settings.octave, settings.fineCents)
+            : (settings.toneFreqHz * std::pow(2.0f, static_cast<float>(settings.octave - 3)));
+        const float tunedHz = std::clamp(baseHz * std::pow(2.0f, pitchSemitones / 12.0f), 20.0f, static_cast<float>(sampleRate_) * 0.48f);
 
         float toneSample = 0.0f;
         tonePhase_ += 2.0f * pi() * tunedHz / static_cast<float>(sampleRate_);

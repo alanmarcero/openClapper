@@ -73,6 +73,7 @@ inline constexpr const char* kReverseMix = "reverse_mix";
 
 // Global / Master
 inline constexpr const char* kMidiMode = "midi_mode";
+inline constexpr const char* kLockPitch = "lock_pitch";
 inline constexpr const char* kLockIn = "lock_in";
 inline constexpr const char* kStereoWidth = "stereo_width";
 inline constexpr const char* kOutputGain = "output_gain";

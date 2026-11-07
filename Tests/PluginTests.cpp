@@ -86,6 +86,16 @@ TEST_CASE("OpenClapperEditor instantiates with correct dimensions", "[plugin][gu
     REQUIRE(snapshot.getWidth() == 1100);
     REQUIRE(snapshot.getHeight() == 740);
 
+    juce::File repoScreenshot = juce::File::getCurrentWorkingDirectory().getChildFile("assets/openClapper-screenshot.png");
+    if (repoScreenshot.getParentDirectory().exists()) {
+        repoScreenshot.deleteFile();
+        juce::FileOutputStream stream(repoScreenshot);
+        if (stream.openedOk()) {
+            juce::PNGImageFormat png;
+            png.writeImageToStream(snapshot, stream);
+        }
+    }
+
     juce::File tempFile = juce::File::createTempFile(".png");
     {
         juce::FileOutputStream stream(tempFile);
@@ -96,4 +106,50 @@ TEST_CASE("OpenClapperEditor instantiates with correct dimensions", "[plugin][gu
     REQUIRE(tempFile.existsAsFile());
     REQUIRE(tempFile.getSize() > 0);
     tempFile.deleteFile();
+}
+
+TEST_CASE("Lock Oct/Freq preserves pitch across preset changes", "[plugin][pitch_lock]") {
+    OpenClapperProcessor processor;
+    processor.prepareToPlay(48000.0, 512);
+
+    auto* lockParam = processor.parameters.getParameter(openclapper::params::kLockPitch);
+    REQUIRE(lockParam != nullptr);
+
+    auto* octaveParam = processor.parameters.getParameter(openclapper::params::kToneOctave);
+    auto* freqParam = processor.parameters.getParameter(openclapper::params::kToneFreq);
+    REQUIRE(octaveParam != nullptr);
+    REQUIRE(freqParam != nullptr);
+
+    // Set custom high octave 7 and frequency
+    octaveParam->setValueNotifyingHost(octaveParam->convertTo0to1(7.0f));
+    freqParam->setValueNotifyingHost(freqParam->convertTo0to1(2800.0f));
+
+    // Engage pitch lock
+    lockParam->setValueNotifyingHost(1.0f);
+
+    // Switch presets: octave and frequency must be preserved!
+    processor.setCurrentProgram(1);
+    REQUIRE(std::abs(processor.parameters.getRawParameterValue(openclapper::params::kToneOctave)->load() - 7.0f) < 0.05f);
+    REQUIRE(std::abs(processor.parameters.getRawParameterValue(openclapper::params::kToneFreq)->load() - 2800.0f) < 2.0f);
+
+    processor.setCurrentProgram(3); // Preset 4 has octave 2 default
+    REQUIRE(std::abs(processor.parameters.getRawParameterValue(openclapper::params::kToneOctave)->load() - 7.0f) < 0.05f);
+    REQUIRE(std::abs(processor.parameters.getRawParameterValue(openclapper::params::kToneFreq)->load() - 2800.0f) < 2.0f);
+
+    // Disengage pitch lock: presets load their own pitch
+    lockParam->setValueNotifyingHost(0.0f);
+    processor.setCurrentProgram(3);
+    REQUIRE(std::abs(processor.parameters.getRawParameterValue(openclapper::params::kToneOctave)->load() - 2.0f) < 0.05f);
+}
+
+TEST_CASE("Tone Octave supports high octaves up to 8", "[plugin][octave]") {
+    OpenClapperProcessor processor;
+    auto* octaveParam = processor.parameters.getParameter(openclapper::params::kToneOctave);
+    REQUIRE(octaveParam != nullptr);
+
+    octaveParam->setValueNotifyingHost(octaveParam->convertTo0to1(8.0f));
+    REQUIRE(std::abs(processor.parameters.getRawParameterValue(openclapper::params::kToneOctave)->load() - 8.0f) < 0.05f);
+
+    octaveParam->setValueNotifyingHost(octaveParam->convertTo0to1(6.0f));
+    REQUIRE(std::abs(processor.parameters.getRawParameterValue(openclapper::params::kToneOctave)->load() - 6.0f) < 0.05f);
 }

@@ -74,10 +74,10 @@ void OpenClapperEditor::paint(juce::Graphics& g) {
     // 1. Solid dark chassis base
     g.fillAll(openclapper::theme::kBackground);
 
-    // 2. Subtle chassis texture in margins (opacity 0.22 so background graphics never compete with text)
+    // 2. Chassis texture in margins (high-tech carbon & cyber trace styling)
     if (faceplate_.isValid()) {
         const juce::Graphics::ScopedSaveState state(g);
-        g.setOpacity(0.22f);
+        g.setOpacity(0.40f);
         g.drawImageWithin(faceplate_, 0, 0, getWidth(), getHeight(),
                           juce::RectanglePlacement::stretchToFit);
     }
@@ -106,7 +106,7 @@ void OpenClapperEditor::paint(juce::Graphics& g) {
     // Tech badges
     g.setColour(openclapper::theme::kTextDim.brighter(0.25f));
     g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
-    g.drawText("v1.1.2 | EDM & TRANCE CLAP SYNTH", getWidth() - 250, headerArea.getY() + 13, 234, 20, juce::Justification::right, true);
+    g.drawText("v1.2.0 | EDM & TRANCE CLAP SYNTH", getWidth() - 250, headerArea.getY() + 13, 234, 20, juce::Justification::right, true);
 }
 
 void OpenClapperEditor::resized() {
@@ -127,7 +127,7 @@ void OpenClapperEditor::resized() {
     stagePanel_.setBounds(area.removeFromLeft(stageWidth).reduced(2, 2));
 
     auto rightArea = area.reduced(2, 2);
-    const int synthHeight = static_cast<int>(rightArea.getHeight() * 0.58f);
+    const int synthHeight = static_cast<int>(static_cast<float>(rightArea.getHeight()) * 0.58f);
     synthPanel_.setBounds(rightArea.removeFromTop(synthHeight).reduced(0, 2));
     effectsPanel_.setBounds(rightArea.reduced(0, 2));
 }
