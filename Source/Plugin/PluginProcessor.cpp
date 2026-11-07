@@ -59,10 +59,12 @@ void OpenClapperProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
     for (const auto meta : midi) {
         const auto msg = meta.getMessage();
         if (msg.isNoteOn()) {
+            const float vel = msg.getFloatVelocity();
+            displayVelocity.store(vel, std::memory_order_relaxed);
             triggers.push_back({
                 .sampleOffset = meta.samplePosition,
                 .noteNumber = msg.getNoteNumber(),
-                .velocity = msg.getFloatVelocity(),
+                .velocity = vel,
                 .audition = false
             });
         } else if (msg.isController()) {
@@ -75,6 +77,7 @@ void OpenClapperProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
     }
 
     if (auditionPending_.exchange(false)) {
+        displayVelocity.store(1.0f, std::memory_order_relaxed);
         triggers.push_back({
             .sampleOffset = 0,
             .noteNumber = 69, // A4

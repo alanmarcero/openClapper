@@ -41,6 +41,7 @@ public:
     std::atomic<float> displayBpm{ 138.0f };
     std::atomic<float> displayBeatsPerBar{ 4.0f };
     std::atomic<float> displayClapProgress{ 1.0f };
+    std::atomic<float> displayVelocity{ 1.0f };
     std::atomic<uint32_t> displayTriggerCount{ 0 };
     std::atomic<bool> displayLockedIn{ false };
 
