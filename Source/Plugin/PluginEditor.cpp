@@ -94,7 +94,7 @@ void OpenClapperEditor::paint(juce::Graphics& g) {
     // Tech badges
     g.setColour(openclapper::theme::kTextDim);
     g.setFont(juce::FontOptions(11.0f));
-    g.drawText("v1.0.0 | EDM & TRANCE CLAP SYNTH", headerArea.getRight() - 250, headerArea.getY() + 6, 240, 20, juce::Justification::right, true);
+    g.drawText("v1.1.0 | EDM & TRANCE CLAP SYNTH", headerArea.getRight() - 250, headerArea.getY() + 6, 240, 20, juce::Justification::right, true);
 }
 
 void OpenClapperEditor::resized() {

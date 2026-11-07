@@ -366,7 +366,11 @@ void ClapEngine::process(
             }
         } else {
             if (synth_.isPlaying()) {
-                const auto frame = synth_.processSample(settings.synth);
+                auto activeSettings = settings.synth;
+                if (std::abs(ccBrightness_ - 1.0f) > 0.001f) {
+                    activeSettings.noiseLPF = std::clamp(settings.synth.noiseLPF * ccBrightness_, 200.0f, 20000.0f);
+                }
+                const auto frame = synth_.processSample(activeSettings);
                 sL = frame.left;
                 sR = frame.right;
                 currentClapProgress_ = synth_.getEnvelopeProgress();

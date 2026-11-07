@@ -18,9 +18,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kPreJitter, 1 }, "Pre-Clap Humanize", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.15f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ kFlamSpread, 1 }, "Flam Pan", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.45f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kPreLevel, 1 }, "Pre-Clap Level", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.85f));
 
     // Resonant Body / Tone
+    juce::StringArray toneModes{ "Bandpass", "Sub Thump", "Saturated Tri", "Cyber Square" };
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID{ kToneMode, 1 }, "Tone Mode", toneModes, 0));
     juce::StringArray noteNames{ "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID{ kToneNote, 1 }, "Tone Note", noteNames, 9)); // A
@@ -73,6 +78,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
         juce::ParameterID{ kNoiseLevel, 1 }, "Noise Level", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.85f));
 
     // Click / Transient
+    juce::StringArray clickTypes{ "Needle", "Crack", "Thump" };
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID{ kClickType, 1 }, "Click Type", clickTypes, 0));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kClickLevel, 1 }, "Click Level", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.4f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
@@ -164,9 +172,15 @@ openclapper::core::EngineSettings readSettings(const juce::AudioProcessorValueTr
     s.synth.preClapSpreadMs = *apvts.getRawParameterValue(kPreSpread);
     s.synth.preClapDecayMs = *apvts.getRawParameterValue(kPreDecay);
     s.synth.preClapJitter = *apvts.getRawParameterValue(kPreJitter);
+    if (const auto* pFlamSpread = apvts.getRawParameterValue(kFlamSpread)) {
+        s.synth.preClapFlamSpread = *pFlamSpread;
+    }
     s.synth.preClapLevel = *apvts.getRawParameterValue(kPreLevel);
 
     // Resonant Body / Tone
+    if (const auto* pToneMode = apvts.getRawParameterValue(kToneMode)) {
+        s.synth.toneMode = static_cast<openclapper::core::ToneMode>(static_cast<int>(*pToneMode));
+    }
     s.synth.note = static_cast<int>(*apvts.getRawParameterValue(kToneNote));
     s.synth.octave = static_cast<int>(*apvts.getRawParameterValue(kToneOctave));
     s.synth.fineCents = *apvts.getRawParameterValue(kToneFine);
@@ -189,6 +203,9 @@ openclapper::core::EngineSettings readSettings(const juce::AudioProcessorValueTr
     s.synth.noiseLevel = *apvts.getRawParameterValue(kNoiseLevel);
 
     // Click
+    if (const auto* pClickType = apvts.getRawParameterValue(kClickType)) {
+        s.synth.clickType = static_cast<openclapper::core::ClickType>(static_cast<int>(*pClickType));
+    }
     s.synth.clickLevel = *apvts.getRawParameterValue(kClickLevel);
     s.synth.clickFreqHz = *apvts.getRawParameterValue(kClickFreq);
 

@@ -12,7 +12,10 @@ TEST_CASE("OpenClapperProcessor instantiates with valid parameters", "[plugin]")
     REQUIRE_FALSE(processor.producesMidi());
 
     REQUIRE(processor.parameters.getParameter(openclapper::params::kPreBursts) != nullptr);
+    REQUIRE(processor.parameters.getParameter(openclapper::params::kFlamSpread) != nullptr);
+    REQUIRE(processor.parameters.getParameter(openclapper::params::kToneMode) != nullptr);
     REQUIRE(processor.parameters.getParameter(openclapper::params::kToneFreq) != nullptr);
+    REQUIRE(processor.parameters.getParameter(openclapper::params::kClickType) != nullptr);
     REQUIRE(processor.parameters.getParameter(openclapper::params::kNoiseType) != nullptr);
     REQUIRE(processor.parameters.getParameter(openclapper::params::kDistDrive) != nullptr);
     REQUIRE(processor.parameters.getParameter(openclapper::params::kCompThresh) != nullptr);
@@ -77,4 +80,16 @@ TEST_CASE("OpenClapperEditor instantiates with correct dimensions", "[plugin][gu
     REQUIRE(editor != nullptr);
     REQUIRE(editor->getWidth() == 1100);
     REQUIRE(editor->getHeight() == 740);
+
+    juce::Image snapshot = editor->createComponentSnapshot(editor->getLocalBounds());
+    REQUIRE(snapshot.isValid());
+    REQUIRE(snapshot.getWidth() == 1100);
+    REQUIRE(snapshot.getHeight() == 740);
+
+    juce::File outputFile("/Users/alan.marcero/Development/openClapper/assets/openClapper-screenshot.png");
+    outputFile.deleteFile();
+    juce::FileOutputStream stream(outputFile);
+    juce::PNGImageFormat png;
+    REQUIRE(png.writeImageToStream(snapshot, stream));
+    REQUIRE(outputFile.existsAsFile());
 }
