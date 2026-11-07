@@ -1,5 +1,7 @@
 # openClapper
 
+[Install with OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest)
+
 > **Clap on. Clap off.**
 
 EDM & Trance clap drum synthesizer instrument plugin with multi-burst micro-slap flam, 12-note chromatic body tuning, multi-texture noise shaping, impact distortion, studio dynamics with brickwall limiter, trance gated reverb, host-synced reverse swells, WAV session lock-in, and the animated **DJ Clappy** cyber mascot stage.
