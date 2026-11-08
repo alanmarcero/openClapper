@@ -4,11 +4,9 @@
 
 Clap on. Clap off.
 
-openClapper is an EDM and trance clap drum synthesizer plugin. It includes multi-burst micro-slap flam with stereo micro-panning, continuous resonant body tuning across 8 octaves with dedicated pitch lock-in across preset browsing, four-texture noise shaping, transient click selection, warm impact saturation, compressor and brickwall limiter dynamics, non-linear gated reverb with allpass diffusion, host-synced reverse swells, session WAV lock-in, and the animated DJ Clappy stage.
+openClapper is an EDM and trance clap drum synthesizer plugin. It includes multi-burst micro-slap flam with stereo micro-panning, chromatic resonant body tuning across 8 octaves with root note selection, fine cents, and dedicated pitch lock-in across preset browsing, four-texture noise shaping, transient click selection, warm impact saturation, compressor and brickwall limiter dynamics, non-linear gated reverb with allpass diffusion, host-synced reverse swells, session WAV lock-in, and the animated clap visualizer stage.
 
 Available as VST3, AU, LV2, and Standalone on macOS, Windows, and Linux.
-
-![openClapper hero banner](assets/openClapper-hero.png)
 
 ![openClapper user interface](assets/openClapper-screenshot.png)
 
@@ -27,14 +25,15 @@ Controls the micro-bursts that precede the main collective slap impact. Pre-burs
 
 ### Resonant body
 
-Provides the tuned harmonic weight, continuous frequency tuning, and pitch drop of the clap core.
+Provides the tuned harmonic weight and pitch drop of the clap core, with musical root note selection, octave register, and fine cents tuning.
 
 | Parameter | ID | Range | Description |
 |---|---|---|---|
 | Mode | `tone_mode` | Bandpass, Sub Thump, Saturated Tri, Cyber Square | Tonal generator algorithm |
-| Octave | `tone_octave` | 1 to 8 | Octave register (extended with high octaves 6-8) |
-| Lock Pitch | `lock_pitch` | On / Off | Locks octave and frequency across presets so tuned pitch stays intact |
-| Tone Freq | `tone_freq` | 100 to 6000 Hz | Resonant body center frequency with real-time response |
+| Note | `tone_note` | C through B | Musical root pitch |
+| Octave | `tone_octave` | 1 to 8 | Octave register (extended with high octaves) |
+| Fine | `tone_fine` | -50 to +50 cents | Fine frequency tuning |
+| Lock Pitch | `lock_pitch` | On / Off | Locks musical pitch across presets so tuned pitch stays intact |
 | Res / Q | `tone_q` | 0.5 to 12.0 | Filter resonance |
 | Decay | `tone_decay` | 15 to 600 ms | Body decay envelope |
 | Pitch Drop | `tone_pitch_env` | -24 to +24 semitones | Initial pitch dive depth |
@@ -178,7 +177,7 @@ ctest --test-dir build -C Release --output-on-failure
 | `Source/Core` | C++20 DSP engine: `ClapSynth`, `Effects`, and `ClapEngine` |
 | `Source/Plugin` | JUCE 8 plugin wrappers, UI controls, panels, parameters, presets |
 | `Tests` | Catch2 unit test suite |
-| `assets` | Faceplate graphics, mascot artwork, and UI screenshots |
+| `assets` | Faceplate graphics and UI screenshots |
 | `.github/workflows` | Multi-platform CI workflow for macOS, Windows, and Linux |
 
 ## License

@@ -152,7 +152,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID{ kMidiMode, 1 }, "MIDI Mode", midiModes, 0));
     params.push_back(std::make_unique<juce::AudioParameterBool>(
-        juce::ParameterID{ kLockPitch, 1 }, "Lock Oct/Freq", false));
+        juce::ParameterID{ kLockPitch, 1 }, "Lock Pitch", false));
     params.push_back(std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID{ kLockIn, 1 }, "Lock In (WAV)", false));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
