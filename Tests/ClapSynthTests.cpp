@@ -143,3 +143,39 @@ TEST_CASE("ClapSynth flam spread creates stereo differentiation during pre-burst
     }
     REQUIRE(diffSum > 0.01f);
 }
+
+TEST_CASE("ClapSynth tone pitch responds to note and octave settings", "[core][synth]") {
+    ClapSynth synth;
+    synth.prepare(48000.0);
+
+    ClapSynthSettings lowPitchSettings;
+    lowPitchSettings.toneLevel = 1.0f;
+    lowPitchSettings.noiseLevel = 0.0f;
+    lowPitchSettings.clickLevel = 0.0f;
+    lowPitchSettings.reverbMix = 0.0f;
+    lowPitchSettings.preClapCount = 0;
+    lowPitchSettings.note = 0; // C
+    lowPitchSettings.octave = 2;
+    lowPitchSettings.fineCents = 0.0f;
+
+    ClapSynthSettings highPitchSettings = lowPitchSettings;
+    highPitchSettings.note = 9; // A
+    highPitchSettings.octave = 5;
+
+    std::vector<float> leftLow, rightLow;
+    synth.renderBlock(leftLow, rightLow, lowPitchSettings, 1.0f, 0);
+
+    std::vector<float> leftHigh, rightHigh;
+    synth.renderBlock(leftHigh, rightHigh, highPitchSettings, 1.0f, 0);
+
+    REQUIRE(!leftLow.empty());
+    REQUIRE(!leftHigh.empty());
+
+    // Waveforms with different note/octave pitches must not be identical
+    float diffSum = 0.0f;
+    const size_t len = std::min(leftLow.size(), leftHigh.size());
+    for (size_t i = 0; i < len; ++i) {
+        diffSum += std::abs(leftLow[i] - leftHigh[i]);
+    }
+    REQUIRE(diffSum > 1.0f);
+}

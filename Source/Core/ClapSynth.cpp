@@ -404,11 +404,8 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings) noexcept
         const float pitchEnvFrac = std::exp(-static_cast<float>(mainAge) / std::max(1.0f, pitchDecaySamples));
         const float pitchSemitones = static_cast<float>(semitoneOffset_) + settings.tonePitchEnv * pitchEnvFrac;
 
-        // When triggered by MIDI note tracking (semitoneOffset_ != 0), track chromatic root;
-        // otherwise in standard clap mode, toneFreqHz directly sets resonant frequency scaled by octave knob.
-        const float baseHz = (semitoneOffset_ != 0)
-            ? noteToHz(settings.note, settings.octave, settings.fineCents)
-            : (settings.toneFreqHz * std::pow(2.0f, static_cast<float>(settings.octave - 3)));
+        // Base tuned pitch computed from Note (0..11), Octave (1..8), and Fine cents (-50..+50)
+        const float baseHz = noteToHz(settings.note, settings.octave, settings.fineCents);
         const float tunedHz = std::clamp(baseHz * std::pow(2.0f, pitchSemitones / 12.0f), 20.0f, static_cast<float>(sampleRate_) * 0.48f);
 
         float toneSample = 0.0f;

@@ -20,7 +20,6 @@ private:
     void timerCallback() override;
 
     OpenClapperProcessor& processor_;
-    juce::Image mascot_;
     juce::TextButton auditionBtn_{ "CLAP ON!" };
     uint32_t seenTriggers_ = 0;
     double clapTriggerTimeMs_ = 0.0;
@@ -47,9 +46,10 @@ private:
 
     // Resonant Body / Tone
     Choice toneMode_;
+    Choice toneNote_;
     Knob toneOctave_;
+    Knob toneFine_;
     Toggle lockPitchBtn_;
-    Knob toneFreq_;
     Knob toneQ_;
     Knob toneDecay_;
     Knob tonePitchEnv_;

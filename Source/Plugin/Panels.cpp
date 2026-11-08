@@ -21,8 +21,6 @@ constexpr int kRefreshHz = 60;
 
 ClappyStagePanel::ClappyStagePanel(OpenClapperProcessor& processor)
     : processor_(processor) {
-    mascot_ = juce::ImageCache::getFromMemory(BinaryData::djclappy_png, BinaryData::djclappy_pngSize);
-
     auditionBtn_.setColour(juce::TextButton::buttonColourId, theme::kKnobBody);
     auditionBtn_.setColour(juce::TextButton::textColourOffId, theme::kAccentNeonGreen);
     auditionBtn_.onClick = [this]() {
@@ -53,7 +51,7 @@ void ClappyStagePanel::resized() {
 }
 
 void ClappyStagePanel::paint(juce::Graphics& g) {
-    drawPanel(g, getLocalBounds(), "DJ Clappy Stage", theme::kAccentCyan);
+    drawPanel(g, getLocalBounds(), "Clap Visualizer Stage", theme::kAccentCyan);
 
     auto stage = getLocalBounds().reduced(8, 28).withTrimmedBottom(28).toFloat();
     const juce::Graphics::ScopedSaveState saved(g);
@@ -172,27 +170,17 @@ void ClappyStagePanel::paint(juce::Graphics& g) {
         g.fillPath(beam);
     }
 
-    // Mascot transform parameters
-    float scaleX = 1.0f;
-    float scaleY = 1.0f;
+    // Impact vertical recoil
     float shiftY = 0.0f;
-
     if (isTriggerActive) {
         if (clapPhase < 0.28f) {
-            // Compress downward on impact slam
             const float frac = (1.0f - clapPhase / 0.28f);
-            scaleX = 1.0f + 0.14f * impactIntensity_ * frac;
-            scaleY = 1.0f - 0.10f * impactIntensity_ * frac;
             shiftY = 6.0f * impactIntensity_ * frac;
         } else {
-            // Spring recoil rebound
-            scaleX = 1.0f - clapPose_ * 0.08f * impactIntensity_;
-            scaleY = 1.0f + clapPose_ * 0.10f * impactIntensity_;
             shiftY = -clapPose_ * 10.0f * impactIntensity_;
         }
     } else {
         shiftY = idleBob_;
-        scaleY = 1.0f - std::abs(idleBob_) * 0.005f;
     }
 
     // Expanding shockwave rings & spark flares from robotic hands
@@ -233,37 +221,6 @@ void ClappyStagePanel::paint(juce::Graphics& g) {
             g.setColour(juce::Colours::white.withAlpha(shockwave_ * 0.8f));
             g.drawLine(x1, y1, x2, y2, 1.8f);
         }
-    }
-
-    // Draw the 3D DJ Clappy mascot with clap animations and transforms
-    if (mascot_.isValid()) {
-        const juce::Graphics::ScopedSaveState mascotSave(g);
-        const float pivotX = stage.getCentreX();
-        const float pivotY = stage.getCentreY() + 12.0f;
-
-        g.addTransform(juce::AffineTransform::translation(-pivotX, -pivotY));
-        g.addTransform(juce::AffineTransform::rotation(headTilt_));
-        g.addTransform(juce::AffineTransform::scale(scaleX, scaleY));
-        g.addTransform(juce::AffineTransform::translation(pivotX, pivotY + shiftY));
-
-        g.setColour(juce::Colours::white);
-        g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
-        const auto mascotBounds = stage.reduced(10.0f, 6.0f).toNearestInt();
-        g.drawImageWithin(mascot_, mascotBounds.getX(), mascotBounds.getY(), mascotBounds.getWidth(), mascotBounds.getHeight(),
-                          juce::RectanglePlacement::centred);
-    }
-
-    // Visor laser highlight flash across cyber eyewear
-    if (impactFlash_ > 0.02f) {
-        const float visorY = stage.getCentreY() - 36.0f + shiftY;
-        const float visorWidth = 84.0f + impactFlash_ * 30.0f;
-        const auto visorRect = juce::Rectangle<float>(stage.getCentreX() - visorWidth * 0.5f, visorY - 7.0f, visorWidth, 14.0f);
-        drawGlow(g, visorRect.expanded(12.0f), theme::kAccentCyan.withAlpha(impactFlash_ * 0.85f));
-
-        g.setGradientFill(juce::ColourGradient(
-            juce::Colour(0xffffffff).withAlpha(impactFlash_ * 0.95f), stage.getCentreX(), visorY,
-            theme::kAccentCyan.withAlpha(0.0f), stage.getCentreX() - visorWidth * 0.5f, visorY, true));
-        g.fillRoundedRectangle(visorRect, 4.0f);
     }
 
     // Slogan banner at top of stage: "Clap on. Clap off."
@@ -312,9 +269,10 @@ ClapSynthPanel::ClapSynthPanel(OpenClapperProcessor& processor)
       preLevel_(processor.parameters, openclapper::params::kPreLevel, "Level", theme::kAccentCyan),
 
       toneMode_(processor.parameters, openclapper::params::kToneMode, "Mode", theme::kAccentAmber),
+      toneNote_(processor.parameters, openclapper::params::kToneNote, "Note", theme::kAccentAmber),
       toneOctave_(processor.parameters, openclapper::params::kToneOctave, "Octave", theme::kAccentAmber),
+      toneFine_(processor.parameters, openclapper::params::kToneFine, "Fine", theme::kAccentAmber),
       lockPitchBtn_(processor.parameters, openclapper::params::kLockPitch, "LOCK PITCH", theme::kAccentAmber),
-      toneFreq_(processor.parameters, openclapper::params::kToneFreq, "Tone Freq", theme::kAccentAmber),
       toneQ_(processor.parameters, openclapper::params::kToneQ, "Res / Q", theme::kAccentAmber),
       toneDecay_(processor.parameters, openclapper::params::kToneDecay, "Decay", theme::kAccentAmber),
       tonePitchEnv_(processor.parameters, openclapper::params::kTonePitchEnv, "Pitch Drop", theme::kAccentAmber),
@@ -340,9 +298,10 @@ ClapSynthPanel::ClapSynthPanel(OpenClapperProcessor& processor)
     addAndMakeVisible(clickFreq_);
 
     addAndMakeVisible(toneMode_);
+    addAndMakeVisible(toneNote_);
     addAndMakeVisible(toneOctave_);
+    addAndMakeVisible(toneFine_);
     addAndMakeVisible(lockPitchBtn_);
-    addAndMakeVisible(toneFreq_);
     addAndMakeVisible(toneQ_);
     addAndMakeVisible(toneDecay_);
     addAndMakeVisible(tonePitchEnv_);
@@ -370,9 +329,9 @@ void ClapSynthPanel::resized() {
     layoutRow(flamArea, { &preBursts_, &preSpread_, &flamSpread_, &preLevel_ });
     layoutRow(row1, { &clickType_, &clickLevel_, &clickFreq_ });
 
-    // Row 2: Resonant Body / Tone (Mode, Octave, Lock Oct/Freq, Tone Freq, Q, Decay, Pitch Drop, Level)
+    // Row 2: Resonant Body / Tone (Mode, Note, Octave, Fine, Lock Pitch, Q, Decay, Pitch Drop, Level)
     auto row2 = area.removeFromTop(rowHeight);
-    layoutRow(row2, { &toneMode_, &toneOctave_, &lockPitchBtn_, &toneFreq_, &toneQ_, &toneDecay_, &tonePitchEnv_, &toneLevel_ });
+    layoutRow(row2, { &toneMode_, &toneNote_, &toneOctave_, &toneFine_, &lockPitchBtn_, &toneQ_, &toneDecay_, &tonePitchEnv_, &toneLevel_ });
 
     // Row 3: Noise & Sizzle (Type, Decay, HPF, LPF, Width, Level)
     layoutRow(area, { &noiseType_, &noiseDecay_, &noiseHPF_, &noiseLPF_, &noiseWidth_, &noiseLevel_ });
