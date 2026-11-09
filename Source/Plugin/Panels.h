@@ -36,8 +36,12 @@ public:
     explicit ClapSynthPanel(OpenClapperProcessor& processor);
     void paint(juce::Graphics& g) override;
     void resized() override;
+    void setAdvancedMode(bool advanced);
+    [[nodiscard]] bool isAdvancedMode() const noexcept { return advancedMode_; }
 
 private:
+    bool advancedMode_ = false;
+
     // Pre-Clap Flam
     Knob preBursts_;
     Knob preSpread_;
@@ -74,8 +78,12 @@ public:
     explicit EffectsPanel(OpenClapperProcessor& processor);
     void paint(juce::Graphics& g) override;
     void resized() override;
+    void setAdvancedMode(bool advanced);
+    [[nodiscard]] bool isAdvancedMode() const noexcept { return advancedMode_; }
 
 private:
+    bool advancedMode_ = false;
+
     // Distortion
     Choice distType_;
     Knob distDrive_;

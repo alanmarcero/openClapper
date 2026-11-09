@@ -84,30 +84,69 @@ void computeLowpassCoeffs(float freqHz, double sampleRate, float& b0, float& b1,
 // GatedStereoReverb
 // ============================================================================
 
+float GatedStereoReverb::readHermite(const std::vector<float>& buffer, double delaySamples, int writePos) noexcept {
+    const double size = static_cast<double>(buffer.size());
+    double readPos = static_cast<double>(writePos) - delaySamples;
+    while (readPos < 0.0) readPos += size;
+    while (readPos >= size) readPos -= size;
+
+    const int i1 = static_cast<int>(readPos);
+    const float frac = static_cast<float>(readPos - static_cast<double>(i1));
+    const int i0 = (i1 - 1 + static_cast<int>(buffer.size())) % static_cast<int>(buffer.size());
+    const int i2 = (i1 + 1) % static_cast<int>(buffer.size());
+    const int i3 = (i1 + 2) % static_cast<int>(buffer.size());
+
+    const float y0 = buffer[static_cast<size_t>(i0)];
+    const float y1 = buffer[static_cast<size_t>(i1)];
+    const float y2 = buffer[static_cast<size_t>(i2)];
+    const float y3 = buffer[static_cast<size_t>(i3)];
+
+    const float c0 = y1;
+    const float c1 = 0.5f * (y2 - y0);
+    const float c2 = y0 - 2.5f * y1 + 2.0f * y2 - 0.5f * y3;
+    const float c3 = 0.5f * (y3 - y0) + 1.5f * (y1 - y2);
+
+    return ((c3 * frac + c2) * frac + c1) * frac + c0;
+}
+
 void GatedStereoReverb::prepare(double sampleRate) {
     diffL1_.prepare(std::max(8, static_cast<int>(sampleRate * 0.0031)), 0.65f);
     diffL2_.prepare(std::max(8, static_cast<int>(sampleRate * 0.0079)), 0.60f);
+    diffL3_.prepare(std::max(8, static_cast<int>(sampleRate * 0.0113)), 0.55f);
     diffR1_.prepare(std::max(8, static_cast<int>(sampleRate * 0.0023)), 0.65f);
     diffR2_.prepare(std::max(8, static_cast<int>(sampleRate * 0.0058)), 0.60f);
+    diffR3_.prepare(std::max(8, static_cast<int>(sampleRate * 0.0097)), 0.55f);
 
-    delayL1_.assign(std::max(16, static_cast<int>(sampleRate * 0.0297)), 0.0f);
-    delayL2_.assign(std::max(16, static_cast<int>(sampleRate * 0.0371)), 0.0f);
-    delayR1_.assign(std::max(16, static_cast<int>(sampleRate * 0.0313)), 0.0f);
-    delayR2_.assign(std::max(16, static_cast<int>(sampleRate * 0.0419)), 0.0f);
+    const int margin = static_cast<int>(sampleRate * 0.003); // headroom for LFO modulation
+    delayL1_.assign(std::max(16, static_cast<int>(sampleRate * 0.0297)) + margin, 0.0f);
+    delayL2_.assign(std::max(16, static_cast<int>(sampleRate * 0.0371)) + margin, 0.0f);
+    delayL3_.assign(std::max(16, static_cast<int>(sampleRate * 0.0439)) + margin, 0.0f);
+    delayR1_.assign(std::max(16, static_cast<int>(sampleRate * 0.0313)) + margin, 0.0f);
+    delayR2_.assign(std::max(16, static_cast<int>(sampleRate * 0.0419)) + margin, 0.0f);
+    delayR3_.assign(std::max(16, static_cast<int>(sampleRate * 0.0487)) + margin, 0.0f);
     reset();
 }
 
 void GatedStereoReverb::reset() noexcept {
     diffL1_.reset();
     diffL2_.reset();
+    diffL3_.reset();
     diffR1_.reset();
     diffR2_.reset();
+    diffR3_.reset();
     std::fill(delayL1_.begin(), delayL1_.end(), 0.0f);
     std::fill(delayL2_.begin(), delayL2_.end(), 0.0f);
+    std::fill(delayL3_.begin(), delayL3_.end(), 0.0f);
     std::fill(delayR1_.begin(), delayR1_.end(), 0.0f);
     std::fill(delayR2_.begin(), delayR2_.end(), 0.0f);
-    writeL1_ = writeL2_ = writeR1_ = writeR2_ = 0;
-    dampStateL_ = dampStateR_ = 0.0f;
+    std::fill(delayR3_.begin(), delayR3_.end(), 0.0f);
+    writeL1_ = writeL2_ = writeL3_ = 0;
+    writeR1_ = writeR2_ = writeR3_ = 0;
+    dampStateL1_ = dampStateL2_ = 0.0f;
+    dampStateR1_ = dampStateR2_ = 0.0f;
+    hpfStateL_ = hpfStateR_ = 0.0f;
+    lfoPhaseL_ = 0.0;
+    lfoPhaseR_ = 0.25;
     sampleCounter_ = 0;
     gateEnvelope_ = 1.0f;
 }
@@ -126,10 +165,10 @@ StereoFrame GatedStereoReverb::process(
 
     sampleCounter_++;
 
-    // Compute gate envelope
+    // Compute gate envelope with smooth exponential-release damping
     if (gateMs > 0.0f) {
         const float gateSamples = (gateMs * 0.001f) * static_cast<float>(sampleRate);
-        const float releaseSamples = (15.0f * 0.001f) * static_cast<float>(sampleRate);
+        const float releaseSamples = (18.0f * 0.001f) * static_cast<float>(sampleRate);
         if (static_cast<float>(sampleCounter_) > gateSamples) {
             const float samplesOver = static_cast<float>(sampleCounter_) - gateSamples;
             gateEnvelope_ = std::max(0.0f, 1.0f - (samplesOver / releaseSamples));
@@ -144,39 +183,71 @@ StereoFrame GatedStereoReverb::process(
         return { 0.0f, 0.0f };
     }
 
-    // Disperse transient impulses with allpass diffuser stages
-    const float diffInL = diffL2_.process(diffL1_.process(inLeft));
-    const float diffInR = diffR2_.process(diffR1_.process(inRight));
+    // Input highpass filter (140 Hz) to keep the reverb tank clean from low rumble
+    const float hpfCoeff = static_cast<float>(1.0 - std::exp(-2.0 * pi() * 140.0 / sampleRate));
+    hpfStateL_ += hpfCoeff * (inLeft - hpfStateL_);
+    const float cleanInL = inLeft - hpfStateL_;
+    hpfStateR_ += hpfCoeff * (inRight - hpfStateR_);
+    const float cleanInR = inRight - hpfStateR_;
+
+    // Multi-stage allpass diffuser cascade for dense transient dispersion
+    const float diffInL = diffL3_.process(diffL2_.process(diffL1_.process(cleanInL)));
+    const float diffInR = diffR3_.process(diffR2_.process(diffR1_.process(cleanInR)));
 
     const float feedback = std::clamp(std::pow(0.001f, 30.0f / std::max(10.0f, decayMs)), 0.1f, 0.94f) * (0.6f + 0.4f * size);
     const float dampFactor = std::clamp(damp, 0.0f, 0.85f);
 
-    // Read delay lines
-    const float outL1 = delayL1_[writeL1_];
-    const float outL2 = delayL2_[writeL2_];
-    const float outR1 = delayR1_[writeR1_];
-    const float outR2 = delayR2_[writeR2_];
+    // LFO modulations to disperse metallic room modes and flutter
+    lfoPhaseL_ += 2.0 * pi() * 0.73 / sampleRate;
+    if (lfoPhaseL_ > 2.0 * pi()) lfoPhaseL_ -= 2.0 * pi();
+    lfoPhaseR_ += 2.0 * pi() * 0.91 / sampleRate;
+    if (lfoPhaseR_ > 2.0 * pi()) lfoPhaseR_ -= 2.0 * pi();
+
+    const double modL = std::sin(lfoPhaseL_) * (0.0008 * sampleRate);
+    const double modR = std::cos(lfoPhaseR_) * (0.0008 * sampleRate);
+
+    const double baseL1 = sampleRate * 0.0297;
+    const double baseL2 = sampleRate * 0.0371;
+    const double baseL3 = sampleRate * 0.0439;
+    const double baseR1 = sampleRate * 0.0313;
+    const double baseR2 = sampleRate * 0.0419;
+    const double baseR3 = sampleRate * 0.0487;
+
+    // Hermite interpolated delay line reads
+    const float outL1 = readHermite(delayL1_, baseL1 + modL, writeL1_);
+    const float outL2 = readHermite(delayL2_, baseL2 - modR, writeL2_);
+    const float outL3 = readHermite(delayL3_, baseL3 + modR * 0.5, writeL3_);
+
+    const float outR1 = readHermite(delayR1_, baseR1 + modR, writeR1_);
+    const float outR2 = readHermite(delayR2_, baseR2 - modL, writeR2_);
+    const float outR3 = readHermite(delayR3_, baseR3 - modL * 0.5, writeR3_);
 
     // Cross-coupled matrix
-    const float wetL = 0.5f * (outL1 + outL2);
-    const float wetR = 0.5f * (outR1 + outR2);
+    const float wetL = 0.35f * (outL1 + outL2 + outL3);
+    const float wetR = 0.35f * (outR1 + outR2 + outR3);
 
-    dampStateL_ = dampStateL_ * dampFactor + wetL * (1.0f - dampFactor);
-    dampStateR_ = dampStateR_ * dampFactor + wetR * (1.0f - dampFactor);
+    dampStateL1_ = dampStateL1_ * dampFactor + wetL * (1.0f - dampFactor);
+    dampStateR1_ = dampStateR1_ * dampFactor + wetR * (1.0f - dampFactor);
 
-    // Write back with cross feedback
-    delayL1_[writeL1_] = diffInL + dampStateR_ * feedback;
-    delayL2_[writeL2_] = diffInL * 0.7f + dampStateL_ * feedback * 0.8f;
+    // Unitary cross-feedback injection
+    delayL1_[static_cast<size_t>(writeL1_)] = diffInL + dampStateR1_ * feedback;
+    delayL2_[static_cast<size_t>(writeL2_)] = diffInL * 0.65f + dampStateL1_ * feedback * 0.75f;
+    delayL3_[static_cast<size_t>(writeL3_)] = diffInL * 0.5f + (dampStateR1_ - dampStateL1_) * feedback * 0.45f;
 
-    delayR1_[writeR1_] = diffInR + dampStateL_ * feedback;
-    delayR2_[writeR2_] = diffInR * 0.7f + dampStateR_ * feedback * 0.8f;
+    delayR1_[static_cast<size_t>(writeR1_)] = diffInR + dampStateL1_ * feedback;
+    delayR2_[static_cast<size_t>(writeR2_)] = diffInR * 0.65f + dampStateR1_ * feedback * 0.75f;
+    delayR3_[static_cast<size_t>(writeR3_)] = diffInR * 0.5f + (dampStateL1_ - dampStateR1_) * feedback * 0.45f;
 
     writeL1_ = (writeL1_ + 1) % static_cast<int>(delayL1_.size());
     writeL2_ = (writeL2_ + 1) % static_cast<int>(delayL2_.size());
+    writeL3_ = (writeL3_ + 1) % static_cast<int>(delayL3_.size());
     writeR1_ = (writeR1_ + 1) % static_cast<int>(delayR1_.size());
     writeR2_ = (writeR2_ + 1) % static_cast<int>(delayR2_.size());
+    writeR3_ = (writeR3_ + 1) % static_cast<int>(delayR3_.size());
 
-    return { (wetL - wetR * 0.3f) * gateEnvelope_, (wetR - wetL * 0.3f) * gateEnvelope_ };
+    const float outLeft = (wetL - wetR * 0.25f) * gateEnvelope_;
+    const float outRight = (wetR - wetL * 0.25f) * gateEnvelope_;
+    return { outLeft, outRight };
 }
 
 // ============================================================================

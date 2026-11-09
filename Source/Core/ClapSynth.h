@@ -150,18 +150,27 @@ public:
     [[nodiscard]] StereoFrame process(float inLeft, float inRight, float size, float decayMs, float damp, float gateMs, double sampleRate) noexcept;
 
 private:
+    [[nodiscard]] static float readHermite(const std::vector<float>& buffer, double delaySamples, int writePos) noexcept;
+
     AllpassDiffuser diffL1_;
     AllpassDiffuser diffL2_;
+    AllpassDiffuser diffL3_;
     AllpassDiffuser diffR1_;
     AllpassDiffuser diffR2_;
+    AllpassDiffuser diffR3_;
     std::vector<float> delayL1_;
     std::vector<float> delayL2_;
+    std::vector<float> delayL3_;
     std::vector<float> delayR1_;
     std::vector<float> delayR2_;
-    int writeL1_ = 0, writeL2_ = 0;
-    int writeR1_ = 0, writeR2_ = 0;
-    float dampStateL_ = 0.0f;
-    float dampStateR_ = 0.0f;
+    std::vector<float> delayR3_;
+    int writeL1_ = 0, writeL2_ = 0, writeL3_ = 0;
+    int writeR1_ = 0, writeR2_ = 0, writeR3_ = 0;
+    float dampStateL1_ = 0.0f, dampStateL2_ = 0.0f;
+    float dampStateR1_ = 0.0f, dampStateR2_ = 0.0f;
+    float hpfStateL_ = 0.0f, hpfStateR_ = 0.0f;
+    double lfoPhaseL_ = 0.0;
+    double lfoPhaseR_ = 0.0;
     int sampleCounter_ = 0;
     float gateEnvelope_ = 1.0f;
 };

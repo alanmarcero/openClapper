@@ -24,6 +24,7 @@ private:
     juce::ComboBox presetBox_;
     juce::TextButton prevPresetBtn_{ "<" };
     juce::TextButton nextPresetBtn_{ ">" };
+    juce::TextButton viewToggleBtn_{ "SIMPLE" };
 
     openclapper::ui::ClappyStagePanel stagePanel_;
     openclapper::ui::ClapSynthPanel synthPanel_;
