@@ -325,6 +325,7 @@ void ClapSynthPanel::setAdvancedMode(bool advanced) {
     toneQ_.setVisible(advanced);
     tonePitchEnv_.setVisible(advanced);
     toneLevel_.setVisible(advanced);
+    noiseDecay_.setVisible(advanced);
     noiseHPF_.setVisible(advanced);
     noiseLPF_.setVisible(advanced);
     noiseLevel_.setVisible(advanced);
@@ -335,37 +336,71 @@ void ClapSynthPanel::setAdvancedMode(bool advanced) {
 
 void ClapSynthPanel::paint(juce::Graphics& g) {
     const juce::String title = advancedMode_
-        ? "Clap Synthesis Architecture (Advanced View)"
-        : "Clap Synthesis Architecture (Simple Mode)";
+        ? "Clap Architecture & Tunable Tail (Advanced View)"
+        : "Clap Architecture & Tunable Tail (Simple Mode)";
     drawPanel(g, getLocalBounds(), title, theme::kAccentCyan);
+
+    // Emphasized Tunable Tail Section
+    if (!tailSectionBounds_.isEmpty()) {
+        const auto tailRect = tailSectionBounds_.toFloat().reduced(1.0f);
+        drawGlow(g, tailRect, theme::kAccentAmber.withAlpha(0.12f));
+        g.setColour(theme::kBackground.brighter(0.04f));
+        g.fillRoundedRectangle(tailRect, 6.0f);
+        g.setColour(theme::kAccentAmber.withAlpha(0.85f));
+        g.drawRoundedRectangle(tailRect, 6.0f, 1.2f);
+
+        const auto badge = juce::Rectangle<float>(tailRect.getX() + 8.0f, tailRect.getY() + 3.0f, 240.0f, 14.0f);
+        g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+        g.setColour(theme::kAccentAmber);
+        g.drawText("★ TUNABLE TAIL & HARMONIC BODY", badge, juce::Justification::centredLeft);
+    }
+
+    if (!attackSectionBounds_.isEmpty()) {
+        const auto attackRect = attackSectionBounds_.toFloat().reduced(1.0f);
+        g.setColour(theme::kBackground.brighter(0.02f));
+        g.fillRoundedRectangle(attackRect, 5.0f);
+        g.setColour(theme::kPanelEdge.withAlpha(0.7f));
+        g.drawRoundedRectangle(attackRect, 5.0f, 1.0f);
+
+        const auto badge = juce::Rectangle<float>(attackRect.getX() + 8.0f, attackRect.getY() + 3.0f, 180.0f, 14.0f);
+        g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+        g.setColour(theme::kAccentCyan.withAlpha(0.85f));
+        g.drawText("ATTACK: FLAMS & CLICK", badge, juce::Justification::centredLeft);
+    }
 }
 
 void ClapSynthPanel::resized() {
     auto area = getLocalBounds().reduced(8, 26);
 
     if (!advancedMode_) {
-        // Simple Mode: 2 clean, spacious rows of core musical controls
         const int rowHeight = area.getHeight() / 2;
-        auto row1 = area.removeFromTop(rowHeight);
-        layoutRow(row1, { &preBursts_, &preSpread_, &clickType_, &clickLevel_, &toneMode_, &toneNote_, &toneOctave_, &lockPitchBtn_ });
-        layoutRow(area, { &toneDecay_, &noiseType_, &noiseDecay_, &noiseWidth_ });
+        attackSectionBounds_ = area.removeFromTop(rowHeight).reduced(0, 2);
+        auto row1Controls = attackSectionBounds_.withTrimmedTop(16);
+        layoutRow(row1Controls, { &preBursts_, &preSpread_, &clickType_, &clickLevel_, &noiseType_, &noiseWidth_ });
+
+        tailSectionBounds_ = area.reduced(0, 2);
+        auto row2Controls = tailSectionBounds_.withTrimmedTop(16);
+        layoutRow(row2Controls, { &toneNote_, &toneOctave_, &toneMode_, &lockPitchBtn_, &toneDecay_ });
         return;
     }
 
     const int rowHeight = area.getHeight() / 3;
 
-    // Row 1: Pre-Clap Flam (left ~58%) & Click (right ~42%)
-    auto row1 = area.removeFromTop(rowHeight);
+    // Row 1: Attack: Pre-Clap Flam (left ~58%) & Click (right ~42%)
+    attackSectionBounds_ = area.removeFromTop(rowHeight).reduced(0, 2);
+    auto row1 = attackSectionBounds_.withTrimmedTop(16);
     auto flamArea = row1.removeFromLeft(static_cast<int>(static_cast<float>(row1.getWidth()) * 0.58f));
     layoutRow(flamArea, { &preBursts_, &preSpread_, &flamSpread_, &preLevel_ });
     layoutRow(row1, { &clickType_, &clickLevel_, &clickFreq_ });
 
-    // Row 2: Resonant Body / Tone (Mode, Note, Octave, Fine, Lock Pitch, Q, Decay, Pitch Drop, Level)
-    auto row2 = area.removeFromTop(rowHeight);
-    layoutRow(row2, { &toneMode_, &toneNote_, &toneOctave_, &toneFine_, &lockPitchBtn_, &toneQ_, &toneDecay_, &tonePitchEnv_, &toneLevel_ });
+    // Row 2: TUNABLE TAIL (Note, Octave, Fine, Mode, Lock Pitch, Q, Decay, Pitch Drop, Level)
+    tailSectionBounds_ = area.removeFromTop(rowHeight).reduced(0, 2);
+    auto row2 = tailSectionBounds_.withTrimmedTop(16);
+    layoutRow(row2, { &toneNote_, &toneOctave_, &toneFine_, &toneMode_, &lockPitchBtn_, &toneQ_, &toneDecay_, &tonePitchEnv_, &toneLevel_ });
 
     // Row 3: Noise & Sizzle (Type, Decay, HPF, LPF, Width, Level)
-    layoutRow(area, { &noiseType_, &noiseDecay_, &noiseHPF_, &noiseLPF_, &noiseWidth_, &noiseLevel_ });
+    noiseSectionBounds_ = area.reduced(0, 2);
+    layoutRow(noiseSectionBounds_, { &noiseType_, &noiseDecay_, &noiseHPF_, &noiseLPF_, &noiseWidth_, &noiseLevel_ });
 }
 
 // ============================================================================

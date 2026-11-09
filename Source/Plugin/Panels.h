@@ -20,7 +20,7 @@ private:
     void timerCallback() override;
 
     OpenClapperProcessor& processor_;
-    juce::TextButton auditionBtn_{ "CLAP ON!" };
+    juce::TextButton auditionBtn_{ "PUSH IT" };
     uint32_t seenTriggers_ = 0;
     double clapTriggerTimeMs_ = 0.0;
     float clapPose_ = 0.0f; // -1 (open flam) .. 0 (slap) .. +1 (recoil)
@@ -71,6 +71,10 @@ private:
     Choice clickType_;
     Knob clickLevel_;
     Knob clickFreq_;
+
+    juce::Rectangle<int> attackSectionBounds_;
+    juce::Rectangle<int> tailSectionBounds_;
+    juce::Rectangle<int> noiseSectionBounds_;
 };
 
 class EffectsPanel : public juce::Component {
