@@ -46,6 +46,22 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& processorToEdit)
     };
     addAndMakeVisible(nextPresetBtn_);
 
+    // Mode toggle button (Simple vs Advanced)
+    viewToggleBtn_.setButtonText(synthPanel_.isAdvancedMode() ? "ADVANCED" : "SIMPLE");
+    viewToggleBtn_.setColour(juce::TextButton::buttonColourId, openclapper::theme::kKnobBody);
+    viewToggleBtn_.setColour(juce::TextButton::textColourOffId, openclapper::theme::kAccentCyan);
+    viewToggleBtn_.setTooltip("Toggle between clean Simple mode and deep Advanced tweak controls.");
+    viewToggleBtn_.onClick = [this]() {
+        const bool nextAdv = !synthPanel_.isAdvancedMode();
+        synthPanel_.setAdvancedMode(nextAdv);
+        effectsPanel_.setAdvancedMode(nextAdv);
+        viewToggleBtn_.setButtonText(nextAdv ? "ADVANCED" : "SIMPLE");
+        viewToggleBtn_.setColour(juce::TextButton::textColourOffId,
+            nextAdv ? openclapper::theme::kAccentAmber : openclapper::theme::kAccentCyan);
+        resized();
+    };
+    addAndMakeVisible(viewToggleBtn_);
+
     addAndMakeVisible(stagePanel_);
     addAndMakeVisible(synthPanel_);
     addAndMakeVisible(effectsPanel_);
@@ -119,15 +135,17 @@ void OpenClapperEditor::resized() {
     prevPresetBtn_.setBounds(presetArea.getX() - 28, presetArea.getY() + 4, 24, 26);
     presetBox_.setBounds(presetArea.withHeight(26).translated(0, 4));
     nextPresetBtn_.setBounds(presetArea.getRight() + 4, presetArea.getY() + 4, 24, 26);
+    viewToggleBtn_.setBounds(nextPresetBtn_.getRight() + 12, presetArea.getY() + 4, 86, 26);
 
     // Main Layout:
     // Left side: ClappyStagePanel (approx 340 px width)
-    // Right side: Top = ClapSynthPanel (3 rows of knobs), Bottom = EffectsPanel (2 rows of knobs)
+    // Right side: Top = ClapSynthPanel, Bottom = EffectsPanel
     const int stageWidth = 330;
     stagePanel_.setBounds(area.removeFromLeft(stageWidth).reduced(2, 2));
 
     auto rightArea = area.reduced(2, 2);
-    const int synthHeight = static_cast<int>(static_cast<float>(rightArea.getHeight()) * 0.58f);
+    const float synthRatio = synthPanel_.isAdvancedMode() ? 0.58f : 0.50f;
+    const int synthHeight = static_cast<int>(static_cast<float>(rightArea.getHeight()) * synthRatio);
     synthPanel_.setBounds(rightArea.removeFromTop(synthHeight).reduced(0, 2));
     effectsPanel_.setBounds(rightArea.reduced(0, 2));
 }

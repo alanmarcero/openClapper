@@ -313,14 +313,45 @@ ClapSynthPanel::ClapSynthPanel(OpenClapperProcessor& processor)
     addAndMakeVisible(noiseLPF_);
     addAndMakeVisible(noiseWidth_);
     addAndMakeVisible(noiseLevel_);
+
+    setAdvancedMode(false);
+}
+
+void ClapSynthPanel::setAdvancedMode(bool advanced) {
+    advancedMode_ = advanced;
+    flamSpread_.setVisible(advanced);
+    preLevel_.setVisible(advanced);
+    toneFine_.setVisible(advanced);
+    toneQ_.setVisible(advanced);
+    tonePitchEnv_.setVisible(advanced);
+    toneLevel_.setVisible(advanced);
+    noiseHPF_.setVisible(advanced);
+    noiseLPF_.setVisible(advanced);
+    noiseLevel_.setVisible(advanced);
+    clickFreq_.setVisible(advanced);
+    resized();
+    repaint();
 }
 
 void ClapSynthPanel::paint(juce::Graphics& g) {
-    drawPanel(g, getLocalBounds(), "Clap Synthesis Architecture", theme::kAccentCyan);
+    const juce::String title = advancedMode_
+        ? "Clap Synthesis Architecture (Advanced View)"
+        : "Clap Synthesis Architecture (Simple Mode)";
+    drawPanel(g, getLocalBounds(), title, theme::kAccentCyan);
 }
 
 void ClapSynthPanel::resized() {
     auto area = getLocalBounds().reduced(8, 26);
+
+    if (!advancedMode_) {
+        // Simple Mode: 2 clean, spacious rows of core musical controls
+        const int rowHeight = area.getHeight() / 2;
+        auto row1 = area.removeFromTop(rowHeight);
+        layoutRow(row1, { &preBursts_, &preSpread_, &clickType_, &clickLevel_, &toneMode_, &toneNote_, &toneOctave_, &lockPitchBtn_ });
+        layoutRow(area, { &toneDecay_, &noiseType_, &noiseDecay_, &noiseWidth_ });
+        return;
+    }
+
     const int rowHeight = area.getHeight() / 3;
 
     // Row 1: Pre-Clap Flam (left ~58%) & Click (right ~42%)
@@ -390,14 +421,45 @@ EffectsPanel::EffectsPanel(OpenClapperProcessor& processor)
     addAndMakeVisible(lockInBtn_);
     addAndMakeVisible(masterWidth_);
     addAndMakeVisible(outputGain_);
+
+    setAdvancedMode(false);
+}
+
+void EffectsPanel::setAdvancedMode(bool advanced) {
+    advancedMode_ = advanced;
+    distType_.setVisible(advanced);
+    distTone_.setVisible(advanced);
+    compThresh_.setVisible(advanced);
+    compRatio_.setVisible(advanced);
+    compMakeup_.setVisible(advanced);
+    limiterCeiling_.setVisible(advanced);
+    reverbDecay_.setVisible(advanced);
+    reverseMode_.setVisible(advanced);
+    reverseMix_.setVisible(advanced);
+    midiMode_.setVisible(advanced);
+    resized();
+    repaint();
 }
 
 void EffectsPanel::paint(juce::Graphics& g) {
-    drawPanel(g, getLocalBounds(), "Impact Distortion, Dynamics & Space", theme::kAccentFlame);
+    const juce::String title = advancedMode_
+        ? "Impact Distortion, Dynamics & Space (Advanced View)"
+        : "Impact Distortion, Dynamics & Space (Simple Mode)";
+    drawPanel(g, getLocalBounds(), title, theme::kAccentFlame);
 }
 
 void EffectsPanel::resized() {
     auto area = getLocalBounds().reduced(8, 26);
+
+    if (!advancedMode_) {
+        // Simple Mode: 2 clean rows with essential impact and space knobs
+        const int rowHeight = area.getHeight() / 2;
+        auto row1 = area.removeFromTop(rowHeight);
+        layoutRow(row1, { &distDrive_, &distMix_, &compMix_, &limiterEnabled_ });
+        layoutRow(area, { &reverbSize_, &reverbMix_, &reverbGate_, &masterWidth_, &outputGain_, &lockInBtn_ });
+        return;
+    }
+
     const int rowHeight = area.getHeight() / 2;
 
     // Row 1: Distortion (left ~40%) & Dynamics: Compressor + Limiter (right ~60%)

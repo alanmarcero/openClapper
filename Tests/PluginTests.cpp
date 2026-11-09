@@ -23,11 +23,11 @@ TEST_CASE("OpenClapperProcessor instantiates with valid parameters", "[plugin]")
     REQUIRE(processor.parameters.getParameter(openclapper::params::kReverbMix) != nullptr);
 }
 
-TEST_CASE("OpenClapperProcessor provides exactly 32 factory presets", "[plugin]") {
+TEST_CASE("OpenClapperProcessor provides exactly 44 factory presets", "[plugin]") {
     OpenClapperProcessor processor;
-    REQUIRE(processor.getNumPrograms() == 32);
+    REQUIRE(processor.getNumPrograms() == 44);
 
-    for (int i = 0; i < 32; ++i) {
+    for (int i = 0; i < 44; ++i) {
         processor.setCurrentProgram(i);
         REQUIRE(processor.getCurrentProgram() == i);
         REQUIRE(processor.getProgramName(i).isNotEmpty());

@@ -454,6 +454,174 @@ const std::vector<FactoryPreset>& factoryPresets() {
                 { kReverbSize, 0.70f }, { kReverbDecay, 550.0f }, { kReverbDamp, 0.35f }, { kReverbGate, 180.0f }, { kReverbMix, 0.40f },
                 { kReverseMode, 2.0f }, { kReverseMix, 0.75f }, { kStereoWidth, 1.25f }, { kOutputGain, 0.2f }
             }
+        },
+        {
+            "33 Clean Club Mainstage",
+            {
+                { kPreBursts, 3.0f }, { kPreSpread, 11.0f }, { kPreDecay, 7.0f }, { kPreJitter, 0.12f }, { kPreLevel, 0.82f },
+                { kToneNote, 9.0f }, { kToneOctave, 3.0f }, { kToneFreq, 1100.0f }, { kToneQ, 3.0f }, { kToneDecay, 110.0f }, { kTonePitchEnv, 6.0f }, { kTonePitchDecay, 16.0f }, { kToneLevel, 0.70f },
+                { kNoiseType, 0.0f }, { kNoiseAttack, 0.0f }, { kNoiseHold, 2.0f }, { kNoiseDecay, 175.0f }, { kNoiseCurve, -0.25f }, { kNoiseHPF, 380.0f }, { kNoiseLPF, 12500.0f }, { kNoiseStereoWidth, 1.2f }, { kNoiseLevel, 0.88f },
+                { kClickLevel, 0.40f }, { kClickFreq, 5000.0f },
+                { kDistType, 0.0f }, { kDistDrive, 0.0f }, { kDistTone, 0.0f }, { kDistMix, 0.0f },
+                { kCompThresh, -12.0f }, { kCompRatio, 3.5f }, { kCompAttack, 6.0f }, { kCompRelease, 70.0f }, { kCompMakeup, 2.0f }, { kCompMix, 0.9f },
+                { kLimiterCeiling, -0.2f }, { kLimiterRelease, 20.0f }, { kLimiterEnabled, 1.0f },
+                { kReverbSize, 0.60f }, { kReverbDecay, 400.0f }, { kReverbDamp, 0.35f }, { kReverbGate, 140.0f }, { kReverbMix, 0.30f },
+                { kReverseMode, 0.0f }, { kReverseMix, 0.4f }, { kStereoWidth, 1.15f }, { kOutputGain, 0.0f }
+            }
+        },
+        {
+            "34 Clean Future House Snap",
+            {
+                { kPreBursts, 2.0f }, { kPreSpread, 9.0f }, { kPreDecay, 6.0f }, { kPreJitter, 0.08f }, { kPreLevel, 0.80f },
+                { kToneNote, 8.0f }, { kToneOctave, 3.0f }, { kToneFreq, 1050.0f }, { kToneQ, 3.6f }, { kToneDecay, 95.0f }, { kTonePitchEnv, 8.0f }, { kTonePitchDecay, 14.0f }, { kToneLevel, 0.78f },
+                { kNoiseType, 2.0f }, { kNoiseAttack, 0.0f }, { kNoiseHold, 1.0f }, { kNoiseDecay, 120.0f }, { kNoiseCurve, -0.4f }, { kNoiseHPF, 450.0f }, { kNoiseLPF, 13000.0f }, { kNoiseStereoWidth, 1.1f }, { kNoiseLevel, 0.85f },
+                { kClickLevel, 0.50f }, { kClickFreq, 6200.0f },
+                { kDistType, 0.0f }, { kDistDrive, 0.0f }, { kDistTone, 0.0f }, { kDistMix, 0.0f },
+                { kCompThresh, -14.0f }, { kCompRatio, 4.0f }, { kCompAttack, 4.0f }, { kCompRelease, 60.0f }, { kCompMakeup, 2.5f }, { kCompMix, 1.0f },
+                { kLimiterCeiling, -0.2f }, { kLimiterRelease, 15.0f }, { kLimiterEnabled, 1.0f },
+                { kReverbSize, 0.45f }, { kReverbDecay, 250.0f }, { kReverbDamp, 0.45f }, { kReverbGate, 100.0f }, { kReverbMix, 0.22f },
+                { kReverseMode, 0.0f }, { kReverseMix, 0.3f }, { kStereoWidth, 1.1f }, { kOutputGain, 0.0f }
+            }
+        },
+        {
+            "35 Clean Melodic Progressive",
+            {
+                { kPreBursts, 4.0f }, { kPreSpread, 15.0f }, { kPreDecay, 10.0f }, { kPreJitter, 0.18f }, { kPreLevel, 0.85f },
+                { kToneNote, 9.0f }, { kToneOctave, 3.0f }, { kToneFreq, 1250.0f }, { kToneQ, 3.2f }, { kToneDecay, 150.0f }, { kTonePitchEnv, 5.0f }, { kTonePitchDecay, 20.0f }, { kToneLevel, 0.72f },
+                { kNoiseType, 0.0f }, { kNoiseAttack, 0.8f }, { kNoiseHold, 3.0f }, { kNoiseDecay, 260.0f }, { kNoiseCurve, -0.15f }, { kNoiseHPF, 340.0f }, { kNoiseLPF, 14000.0f }, { kNoiseStereoWidth, 1.45f }, { kNoiseLevel, 0.90f },
+                { kClickLevel, 0.35f }, { kClickFreq, 4800.0f },
+                { kDistType, 0.0f }, { kDistDrive, 0.0f }, { kDistTone, 0.0f }, { kDistMix, 0.0f },
+                { kCompThresh, -16.0f }, { kCompRatio, 3.2f }, { kCompAttack, 8.0f }, { kCompRelease, 100.0f }, { kCompMakeup, 3.0f }, { kCompMix, 0.85f },
+                { kLimiterCeiling, -0.3f }, { kLimiterRelease, 25.0f }, { kLimiterEnabled, 1.0f },
+                { kReverbSize, 0.75f }, { kReverbDecay, 650.0f }, { kReverbDamp, 0.30f }, { kReverbGate, 200.0f }, { kReverbMix, 0.38f },
+                { kReverseMode, 0.0f }, { kReverseMix, 0.5f }, { kStereoWidth, 1.35f }, { kOutputGain, 0.0f }
+            }
+        },
+        {
+            "36 Clean Deep House Velvet",
+            {
+                { kPreBursts, 3.0f }, { kPreSpread, 12.0f }, { kPreDecay, 8.0f }, { kPreJitter, 0.14f }, { kPreLevel, 0.78f },
+                { kToneNote, 5.0f }, { kToneOctave, 3.0f }, { kToneFreq, 980.0f }, { kToneQ, 2.8f }, { kToneDecay, 130.0f }, { kTonePitchEnv, 4.0f }, { kTonePitchDecay, 18.0f }, { kToneLevel, 0.75f },
+                { kNoiseType, 2.0f }, { kNoiseAttack, 0.2f }, { kNoiseHold, 2.0f }, { kNoiseDecay, 160.0f }, { kNoiseCurve, -0.35f }, { kNoiseHPF, 320.0f }, { kNoiseLPF, 9000.0f }, { kNoiseStereoWidth, 1.15f }, { kNoiseLevel, 0.82f },
+                { kClickLevel, 0.30f }, { kClickFreq, 4200.0f },
+                { kDistType, 0.0f }, { kDistDrive, 0.0f }, { kDistTone, 0.0f }, { kDistMix, 0.0f },
+                { kCompThresh, -15.0f }, { kCompRatio, 3.0f }, { kCompAttack, 10.0f }, { kCompRelease, 90.0f }, { kCompMakeup, 2.8f }, { kCompMix, 0.9f },
+                { kLimiterCeiling, -0.3f }, { kLimiterRelease, 25.0f }, { kLimiterEnabled, 1.0f },
+                { kReverbSize, 0.55f }, { kReverbDecay, 380.0f }, { kReverbDamp, 0.50f }, { kReverbGate, 130.0f }, { kReverbMix, 0.26f },
+                { kReverseMode, 0.0f }, { kReverseMix, 0.3f }, { kStereoWidth, 1.15f }, { kOutputGain, 0.0f }
+            }
+        },
+        {
+            "37 Clean Disco Nu-Funk Slap",
+            {
+                { kPreBursts, 2.0f }, { kPreSpread, 8.0f }, { kPreDecay, 5.0f }, { kPreJitter, 0.06f }, { kPreLevel, 0.82f },
+                { kToneNote, 0.0f }, { kToneOctave, 4.0f }, { kToneFreq, 1320.0f }, { kToneQ, 3.4f }, { kToneDecay, 100.0f }, { kTonePitchEnv, 6.0f }, { kTonePitchDecay, 15.0f }, { kToneLevel, 0.80f },
+                { kNoiseType, 0.0f }, { kNoiseAttack, 0.0f }, { kNoiseHold, 1.5f }, { kNoiseDecay, 140.0f }, { kNoiseCurve, -0.4f }, { kNoiseHPF, 400.0f }, { kNoiseLPF, 11500.0f }, { kNoiseStereoWidth, 1.25f }, { kNoiseLevel, 0.86f },
+                { kClickLevel, 0.45f }, { kClickFreq, 5800.0f },
+                { kDistType, 0.0f }, { kDistDrive, 0.0f }, { kDistTone, 0.0f }, { kDistMix, 0.0f },
+                { kCompThresh, -13.0f }, { kCompRatio, 4.2f }, { kCompAttack, 4.0f }, { kCompRelease, 65.0f }, { kCompMakeup, 2.6f }, { kCompMix, 0.95f },
+                { kLimiterCeiling, -0.2f }, { kLimiterRelease, 18.0f }, { kLimiterEnabled, 1.0f },
+                { kReverbSize, 0.50f }, { kReverbDecay, 280.0f }, { kReverbDamp, 0.40f }, { kReverbGate, 110.0f }, { kReverbMix, 0.25f },
+                { kReverseMode, 0.0f }, { kReverseMix, 0.35f }, { kStereoWidth, 1.2f }, { kOutputGain, 0.0f }
+            }
+        },
+        {
+            "38 Clean Tropical Pop Slap",
+            {
+                { kPreBursts, 3.0f }, { kPreSpread, 10.0f }, { kPreDecay, 7.0f }, { kPreJitter, 0.10f }, { kPreLevel, 0.76f },
+                { kToneNote, 7.0f }, { kToneOctave, 3.0f }, { kToneFreq, 1150.0f }, { kToneQ, 2.9f }, { kToneDecay, 110.0f }, { kTonePitchEnv, 5.0f }, { kTonePitchDecay, 16.0f }, { kToneLevel, 0.70f },
+                { kNoiseType, 0.0f }, { kNoiseAttack, 0.0f }, { kNoiseHold, 1.5f }, { kNoiseDecay, 140.0f }, { kNoiseCurve, -0.3f }, { kNoiseHPF, 360.0f }, { kNoiseLPF, 12000.0f }, { kNoiseStereoWidth, 1.3f }, { kNoiseLevel, 0.84f },
+                { kClickLevel, 0.38f }, { kClickFreq, 5200.0f },
+                { kDistType, 0.0f }, { kDistDrive, 0.0f }, { kDistTone, 0.0f }, { kDistMix, 0.0f },
+                { kCompThresh, -12.0f }, { kCompRatio, 3.2f }, { kCompAttack, 5.0f }, { kCompRelease, 70.0f }, { kCompMakeup, 2.2f }, { kCompMix, 0.9f },
+                { kLimiterCeiling, -0.2f }, { kLimiterRelease, 20.0f }, { kLimiterEnabled, 1.0f },
+                { kReverbSize, 0.52f }, { kReverbDecay, 320.0f }, { kReverbDamp, 0.42f }, { kReverbGate, 120.0f }, { kReverbMix, 0.28f },
+                { kReverseMode, 0.0f }, { kReverseMix, 0.3f }, { kStereoWidth, 1.22f }, { kOutputGain, 0.0f }
+            }
+        },
+        {
+            "39 Clean Tech House Tight",
+            {
+                { kPreBursts, 2.0f }, { kPreSpread, 6.0f }, { kPreDecay, 4.0f }, { kPreJitter, 0.04f }, { kPreLevel, 0.80f },
+                { kToneNote, 2.0f }, { kToneOctave, 3.0f }, { kToneFreq, 1200.0f }, { kToneQ, 4.0f }, { kToneDecay, 70.0f }, { kTonePitchEnv, 9.0f }, { kTonePitchDecay, 12.0f }, { kToneLevel, 0.84f },
+                { kNoiseType, 2.0f }, { kNoiseAttack, 0.0f }, { kNoiseHold, 0.8f }, { kNoiseDecay, 95.0f }, { kNoiseCurve, -0.6f }, { kNoiseHPF, 500.0f }, { kNoiseLPF, 13500.0f }, { kNoiseStereoWidth, 1.05f }, { kNoiseLevel, 0.85f },
+                { kClickLevel, 0.55f }, { kClickFreq, 6500.0f },
+                { kDistType, 0.0f }, { kDistDrive, 0.0f }, { kDistTone, 0.0f }, { kDistMix, 0.0f },
+                { kCompThresh, -15.0f }, { kCompRatio, 5.0f }, { kCompAttack, 2.0f }, { kCompRelease, 45.0f }, { kCompMakeup, 3.2f }, { kCompMix, 1.0f },
+                { kLimiterCeiling, -0.2f }, { kLimiterRelease, 15.0f }, { kLimiterEnabled, 1.0f },
+                { kReverbSize, 0.35f }, { kReverbDecay, 160.0f }, { kReverbDamp, 0.55f }, { kReverbGate, 70.0f }, { kReverbMix, 0.16f },
+                { kReverseMode, 0.0f }, { kReverseMix, 0.25f }, { kStereoWidth, 1.05f }, { kOutputGain, 0.0f }
+            }
+        },
+        {
+            "40 Clean Electro Pop Crisp",
+            {
+                { kPreBursts, 3.0f }, { kPreSpread, 9.0f }, { kPreDecay, 6.0f }, { kPreJitter, 0.08f }, { kPreLevel, 0.84f },
+                { kToneNote, 11.0f }, { kToneOctave, 3.0f }, { kToneFreq, 1400.0f }, { kToneQ, 3.5f }, { kToneDecay, 115.0f }, { kTonePitchEnv, 7.0f }, { kTonePitchDecay, 15.0f }, { kToneLevel, 0.78f },
+                { kNoiseType, 0.0f }, { kNoiseAttack, 0.0f }, { kNoiseHold, 1.2f }, { kNoiseDecay, 165.0f }, { kNoiseCurve, -0.3f }, { kNoiseHPF, 420.0f }, { kNoiseLPF, 14500.0f }, { kNoiseStereoWidth, 1.35f }, { kNoiseLevel, 0.88f },
+                { kClickLevel, 0.48f }, { kClickFreq, 5800.0f },
+                { kDistType, 0.0f }, { kDistDrive, 0.0f }, { kDistTone, 0.0f }, { kDistMix, 0.0f },
+                { kCompThresh, -14.0f }, { kCompRatio, 3.8f }, { kCompAttack, 3.5f }, { kCompRelease, 60.0f }, { kCompMakeup, 2.6f }, { kCompMix, 0.95f },
+                { kLimiterCeiling, -0.2f }, { kLimiterRelease, 18.0f }, { kLimiterEnabled, 1.0f },
+                { kReverbSize, 0.58f }, { kReverbDecay, 360.0f }, { kReverbDamp, 0.38f }, { kReverbGate, 130.0f }, { kReverbMix, 0.28f },
+                { kReverseMode, 0.0f }, { kReverseMix, 0.35f }, { kStereoWidth, 1.25f }, { kOutputGain, 0.0f }
+            }
+        },
+        {
+            "41 Clean Future Bass Air",
+            {
+                { kPreBursts, 4.0f }, { kPreSpread, 16.0f }, { kPreDecay, 10.0f }, { kPreJitter, 0.20f }, { kPreLevel, 0.88f },
+                { kToneNote, 4.0f }, { kToneOctave, 3.0f }, { kToneFreq, 1100.0f }, { kToneQ, 2.8f }, { kToneDecay, 140.0f }, { kTonePitchEnv, 5.0f }, { kTonePitchDecay, 20.0f }, { kToneLevel, 0.74f },
+                { kNoiseType, 0.0f }, { kNoiseAttack, 0.6f }, { kNoiseHold, 2.5f }, { kNoiseDecay, 240.0f }, { kNoiseCurve, -0.2f }, { kNoiseHPF, 350.0f }, { kNoiseLPF, 15000.0f }, { kNoiseStereoWidth, 1.5f }, { kNoiseLevel, 0.92f },
+                { kClickLevel, 0.35f }, { kClickFreq, 4600.0f },
+                { kDistType, 0.0f }, { kDistDrive, 0.0f }, { kDistTone, 0.0f }, { kDistMix, 0.0f },
+                { kCompThresh, -15.0f }, { kCompRatio, 3.5f }, { kCompAttack, 6.0f }, { kCompRelease, 85.0f }, { kCompMakeup, 2.8f }, { kCompMix, 0.9f },
+                { kLimiterCeiling, -0.2f }, { kLimiterRelease, 22.0f }, { kLimiterEnabled, 1.0f },
+                { kReverbSize, 0.80f }, { kReverbDecay, 720.0f }, { kReverbDamp, 0.32f }, { kReverbGate, 220.0f }, { kReverbMix, 0.42f },
+                { kReverseMode, 0.0f }, { kReverseMix, 0.5f }, { kStereoWidth, 1.4f }, { kOutputGain, 0.0f }
+            }
+        },
+        {
+            "42 Clean Stadium Anthem Slap",
+            {
+                { kPreBursts, 4.0f }, { kPreSpread, 18.0f }, { kPreDecay, 11.0f }, { kPreJitter, 0.22f }, { kPreLevel, 0.90f },
+                { kToneNote, 9.0f }, { kToneOctave, 3.0f }, { kToneFreq, 1200.0f }, { kToneQ, 3.3f }, { kToneDecay, 160.0f }, { kTonePitchEnv, 6.0f }, { kTonePitchDecay, 22.0f }, { kToneLevel, 0.76f },
+                { kNoiseType, 0.0f }, { kNoiseAttack, 0.0f }, { kNoiseHold, 3.0f }, { kNoiseDecay, 230.0f }, { kNoiseCurve, -0.25f }, { kNoiseHPF, 370.0f }, { kNoiseLPF, 13500.0f }, { kNoiseStereoWidth, 1.4f }, { kNoiseLevel, 0.92f },
+                { kClickLevel, 0.45f }, { kClickFreq, 5000.0f },
+                { kDistType, 0.0f }, { kDistDrive, 0.0f }, { kDistTone, 0.0f }, { kDistMix, 0.0f },
+                { kCompThresh, -15.0f }, { kCompRatio, 4.0f }, { kCompAttack, 5.0f }, { kCompRelease, 80.0f }, { kCompMakeup, 3.0f }, { kCompMix, 0.95f },
+                { kLimiterCeiling, -0.2f }, { kLimiterRelease, 20.0f }, { kLimiterEnabled, 1.0f },
+                { kReverbSize, 0.85f }, { kReverbDecay, 850.0f }, { kReverbDamp, 0.28f }, { kReverbGate, 180.0f }, { kReverbMix, 0.44f },
+                { kReverseMode, 0.0f }, { kReverseMix, 0.4f }, { kStereoWidth, 1.3f }, { kOutputGain, 0.0f }
+            }
+        },
+        {
+            "43 Clean Minimal Micro Clap",
+            {
+                { kPreBursts, 1.0f }, { kPreSpread, 5.0f }, { kPreDecay, 3.0f }, { kPreJitter, 0.02f }, { kPreLevel, 0.70f },
+                { kToneNote, 0.0f }, { kToneOctave, 3.0f }, { kToneFreq, 1400.0f }, { kToneQ, 4.5f }, { kToneDecay, 55.0f }, { kTonePitchEnv, 10.0f }, { kTonePitchDecay, 8.0f }, { kToneLevel, 0.75f },
+                { kNoiseType, 2.0f }, { kNoiseAttack, 0.0f }, { kNoiseHold, 0.5f }, { kNoiseDecay, 60.0f }, { kNoiseCurve, -0.7f }, { kNoiseHPF, 650.0f }, { kNoiseLPF, 12000.0f }, { kNoiseStereoWidth, 0.9f }, { kNoiseLevel, 0.78f },
+                { kClickLevel, 0.50f }, { kClickFreq, 7200.0f },
+                { kDistType, 0.0f }, { kDistDrive, 0.0f }, { kDistTone, 0.0f }, { kDistMix, 0.0f },
+                { kCompThresh, -12.0f }, { kCompRatio, 4.5f }, { kCompAttack, 1.5f }, { kCompRelease, 35.0f }, { kCompMakeup, 2.0f }, { kCompMix, 1.0f },
+                { kLimiterCeiling, -0.3f }, { kLimiterRelease, 12.0f }, { kLimiterEnabled, 1.0f },
+                { kReverbSize, 0.25f }, { kReverbDecay, 90.0f }, { kReverbDamp, 0.65f }, { kReverbGate, 40.0f }, { kReverbMix, 0.10f },
+                { kReverseMode, 0.0f }, { kReverseMix, 0.2f }, { kStereoWidth, 0.95f }, { kOutputGain, 0.0f }
+            }
+        },
+        {
+            "44 Clean Euphoric Trance Lift",
+            {
+                { kPreBursts, 3.0f }, { kPreSpread, 13.0f }, { kPreDecay, 8.0f }, { kPreJitter, 0.16f }, { kPreLevel, 0.86f },
+                { kToneNote, 11.0f }, { kToneOctave, 3.0f }, { kToneFreq, 1200.0f }, { kToneQ, 3.4f }, { kToneDecay, 140.0f }, { kTonePitchEnv, 6.0f }, { kTonePitchDecay, 18.0f }, { kToneLevel, 0.76f },
+                { kNoiseType, 0.0f }, { kNoiseAttack, 0.2f }, { kNoiseHold, 2.5f }, { kNoiseDecay, 210.0f }, { kNoiseCurve, -0.22f }, { kNoiseHPF, 380.0f }, { kNoiseLPF, 13000.0f }, { kNoiseStereoWidth, 1.35f }, { kNoiseLevel, 0.90f },
+                { kClickLevel, 0.42f }, { kClickFreq, 5200.0f },
+                { kDistType, 0.0f }, { kDistDrive, 0.0f }, { kDistTone, 0.0f }, { kDistMix, 0.0f },
+                { kCompThresh, -14.0f }, { kCompRatio, 3.6f }, { kCompAttack, 4.5f }, { kCompRelease, 75.0f }, { kCompMakeup, 2.8f }, { kCompMix, 0.95f },
+                { kLimiterCeiling, -0.2f }, { kLimiterRelease, 20.0f }, { kLimiterEnabled, 1.0f },
+                { kReverbSize, 0.72f }, { kReverbDecay, 580.0f }, { kReverbDamp, 0.34f }, { kReverbGate, 180.0f }, { kReverbMix, 0.40f },
+                { kReverseMode, 0.0f }, { kReverseMix, 0.4f }, { kStereoWidth, 1.25f }, { kOutputGain, 0.0f }
+            }
         }
     };
     return kPresets;
