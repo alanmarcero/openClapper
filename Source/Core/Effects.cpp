@@ -46,8 +46,9 @@ float DistortionShaper::processSample(
 
     switch (type) {
         case DistortionType::Tape: {
-            // Warm asymmetric soft tape saturation
+            // Warm asymmetric soft tape saturation with even-harmonic richness
             shaped = (std::tanh(x * 1.4f + 0.08f) - std::tanh(0.08f)) * 0.85f;
+            shaped += 0.035f * x * std::abs(x);
             break;
         }
         case DistortionType::Tube: {
@@ -114,9 +115,11 @@ void StereoCompressor::process(float& left, float& right, const CompressorSettin
     const float dryL = left;
     const float dryR = right;
 
-    // Peak sidechain level detector
+    // Peak and RMS blended sidechain detector (80% peak, 20% RMS) for transparent musical snap
     const float peak = std::max(std::abs(left), std::abs(right));
-    const float inputDb = linToDb(peak);
+    const float rms = std::sqrt(0.5f * (left * left + right * right));
+    const float detectorSignal = peak * 0.82f + rms * 0.18f;
+    const float inputDb = linToDb(detectorSignal);
 
     // Attack and release coefficients
     const float attackCoeff = std::exp(-1.0f / (std::max(0.1f, settings.attackMs) * 0.001f * static_cast<float>(sampleRate_)));
