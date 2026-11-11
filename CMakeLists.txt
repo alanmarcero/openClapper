@@ -34,6 +34,7 @@ if(OC_BUILD_PLUGIN)
     set_target_properties(ClapperAssets PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
     juce_add_plugin(OpenClapper
+        VERSION "${PROJECT_VERSION}"
         COMPANY_NAME "Alan Marcero"
         BUNDLE_ID "com.alanmarcero.openclapper"
         PRODUCT_NAME "openClapper"
