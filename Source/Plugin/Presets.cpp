@@ -218,7 +218,7 @@ const std::vector<FactoryPreset>& factoryPresets() {
             }
         },
         {
-            "16 Anjunabeats Melodic Dream",
+            "16 Melodic Progressive Dream",
             {
                 { kPreBursts, 3.0f }, { kPreSpread, 13.0f }, { kPreDecay, 9.0f }, { kPreJitter, 0.20f }, { kPreLevel, 0.82f },
                 { kToneNote, 7.0f }, { kToneOctave, 3.0f }, { kToneFreq, 1150.0f }, { kToneQ, 3.0f }, { kToneDecay, 150.0f }, { kTonePitchEnv, 5.0f }, { kTonePitchDecay, 20.0f }, { kToneLevel, 0.72f },
