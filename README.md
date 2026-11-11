@@ -131,7 +131,7 @@ Algorithmic diffuser reverb with dual allpass stages and gate cutoff.
 | 13 | Hands Up German Party | High-pitched flam with room reverb |
 | 14 | Stadium Crowd Swarm | 5-burst wide flam simulating group claps |
 | 15 | Cyberpunk Neon Slam | Wavefold distortion with wide noise stereo image |
-| 16 | Anjunabeats Melodic Dream | Soft tape drive with velvet noise decay |
+| 16 | Melodic Progressive Dream | Soft tape drive with velvet noise decay |
 | 17 | Melbourne Bounce Spank | Fast compressor release for bouncy offbeat grooves |
 | 18 | Vocal Chop Pre-Swell | Reverse swell into a dry center hit |
 | 19 | Raw Warehouse Techno | Dark filter cutoff with tube saturation |
