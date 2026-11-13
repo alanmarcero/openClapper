@@ -75,17 +75,19 @@
 - Modify: `Source/Core/ClapEngine.h`
 - Modify: `Source/Core/ClapEngine.cpp`
 - Modify: `Source/Plugin/Parameters.cpp`
+- Modify: `Source/Plugin/Parameters.h`
+- Modify: `Source/Core/ClapSynth.h` and `Source/Core/ClapSynth.cpp` to make the shared reverb gate triggerable without clearing its tail state
 
 **Interfaces:**
 - Produces: `enum class SlapbackDivision { Off, Sixteenth, DottedSixteenth, Eighth, DottedEighth, Quarter }`.
 - Produces: `SlapbackDelay::prepare(double sampleRate)`, `reset()`, and `process(float& left, float& right, SlapbackDivision division, float mix, double bpm) noexcept`.
 - Consumes: dry stereo voice sum before shared reverb and output effects.
 
-- [ ] Map the divisions to 0, 0.25, 0.375, 0.5, 0.75, and 1.0 beats; compute delay samples from `beats * 60 / bpm * sampleRate`, with invalid BPM replaced by 138.
-- [ ] Implement one stereo tap with dry/wet mixing and no feedback; preserve delay tails across new note triggers.
-- [ ] Move the existing reverb settings into `ClapEffectSettings` and keep their APVTS parameter IDs; route voice output through slapback, then one shared `GatedStereoReverb`, then the existing distortion/dynamics/master path.
-- [ ] Build the core target: `cmake --build build --target openclapper_core --config Release --parallel`.
-- [ ] Commit the effect and engine routing with the personal git identity.
+- [x] Map the divisions to 0, 0.25, 0.375, 0.5, 0.75, and 1.0 beats; compute delay samples from `beats * 60 / bpm * sampleRate`, with invalid BPM replaced by 138.
+- [x] Implement one stereo tap with dry/wet mixing and no feedback; preserve delay tails across new note triggers.
+- [x] Move the existing reverb settings into `ClapEffectSettings` and keep their APVTS parameter IDs; route voice output through slapback, then one shared `GatedStereoReverb`, then the existing distortion/dynamics/master path.
+- [x] Build the core target: `cmake --build build --target openclapper_core --config Release --parallel`.
+- [x] Commit the effect and engine routing with the personal git identity.
 
 ### Task 3: Route MIDI note-ons through an eight-voice engine
 

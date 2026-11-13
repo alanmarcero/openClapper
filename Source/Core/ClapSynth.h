@@ -60,13 +60,6 @@ struct ClapSynthSettings {
     float clickLevel = 0.4f;      // 0..1
     float clickFreqHz = 4500.0f;  // 1000..12000 Hz
 
-    // Gated Reverb Tail
-    float reverbSize = 0.65f;     // 0.1..1.0
-    float reverbDecayMs = 450.0f; // 50..2500 ms
-    float reverbDamp = 0.4f;      // 0..1 high damping
-    float reverbGateMs = 160.0f;  // 0 (off) .. 600 ms
-    float reverbMix = 0.35f;      // 0..1
-
     bool operator==(const ClapSynthSettings&) const noexcept = default;
 };
 
@@ -127,6 +120,7 @@ class GatedStereoReverb {
 public:
     void prepare(double sampleRate);
     void reset() noexcept;
+    void triggerGate() noexcept;
     [[nodiscard]] StereoFrame process(float inLeft, float inRight, float size, float decayMs, float damp, float gateMs, double sampleRate) noexcept;
 
 private:

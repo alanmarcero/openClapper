@@ -67,6 +67,10 @@ inline constexpr const char* kReverbDamp = "reverb_damp";
 inline constexpr const char* kReverbGate = "reverb_gate";
 inline constexpr const char* kReverbMix = "reverb_mix";
 
+// Host-Synced Slapback
+inline constexpr const char* kSlapbackDivision = "slapback_division";
+inline constexpr const char* kSlapbackMix = "slapback_mix";
+
 // Reverse & Sync
 inline constexpr const char* kReverseMode = "reverse_mode";
 inline constexpr const char* kReverseMix = "reverse_mix";

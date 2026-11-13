@@ -166,6 +166,8 @@ bool ClapWavCache::fromWavBytes(const std::vector<uint8_t>& wavBytes) {
 void ClapEngine::prepare(double sampleRate) {
     sampleRate_ = sampleRate;
     synth_.prepare(sampleRate);
+    slapback_.prepare(sampleRate);
+    reverb_.prepare(sampleRate);
     distL_.reset();
     distR_.reset();
     compressor_.prepare(sampleRate);
@@ -179,6 +181,8 @@ void ClapEngine::prepare(double sampleRate) {
 
 void ClapEngine::reset() noexcept {
     synth_.reset();
+    slapback_.reset();
+    reverb_.reset();
     distL_.reset();
     distR_.reset();
     compressor_.reset();
@@ -253,6 +257,7 @@ void ClapEngine::triggerClap(
     bool reverseCue) noexcept {
     triggerSerial_++;
     currentClapProgress_ = 0.0f;
+    reverb_.triggerGate();
 
     // Check if reverse sync should be engaged
     const bool engageReverse = shouldTriggerReverse(settings.effects.reverseMode, reverseCue, samplePpq, beatsPerBar);
@@ -391,6 +396,20 @@ void ClapEngine::process(
 
         // 3. Effects processing (only applied live if not locked-in)
         if (!wavCache_.isLocked()) {
+            slapback_.process(sL, sR, settings.effects.slapbackDivision, settings.effects.slapbackMix, transport.bpm);
+
+            const auto reverbFrame = reverb_.process(
+                sL,
+                sR,
+                settings.effects.reverbSize,
+                settings.effects.reverbDecayMs,
+                settings.effects.reverbDamp,
+                settings.effects.reverbGateMs,
+                sampleRate_);
+            const float reverbMix = std::clamp(settings.effects.reverbMix, 0.0f, 1.0f);
+            sL = sL * (1.0f - reverbMix * 0.5f) + reverbFrame.left * reverbMix;
+            sR = sR * (1.0f - reverbMix * 0.5f) + reverbFrame.right * reverbMix;
+
             // Distortion impact shaper
             if (settings.effects.distMix > 0.001f) {
                 const float wetDistL = distL_.processSample(sL, settings.effects.distType, settings.effects.distDrive, settings.effects.distTone, sampleRate_);

@@ -140,6 +140,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kReverbMix, 1 }, "Reverb Mix", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.35f));
 
+    juce::StringArray slapbackDivisions{ "Off", "1/16", "Dotted 1/16", "1/8", "Dotted 1/8", "1/4" };
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID{ kSlapbackDivision, 1 }, "Slapback Division", slapbackDivisions, 0));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ kSlapbackMix, 1 }, "Slapback Mix", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.3f));
+
     // Reverse & Sync
     juce::StringArray revModes{ "Off", "Beat End (Sync)", "Beat 4 Auto", "1/2 Beat", "1/4 Beat" };
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
@@ -211,13 +217,6 @@ openclapper::core::EngineSettings readSettings(const juce::AudioProcessorValueTr
     s.synth.clickLevel = *apvts.getRawParameterValue(kClickLevel);
     s.synth.clickFreqHz = *apvts.getRawParameterValue(kClickFreq);
 
-    // Reverb
-    s.synth.reverbSize = *apvts.getRawParameterValue(kReverbSize);
-    s.synth.reverbDecayMs = *apvts.getRawParameterValue(kReverbDecay);
-    s.synth.reverbDamp = *apvts.getRawParameterValue(kReverbDamp);
-    s.synth.reverbGateMs = *apvts.getRawParameterValue(kReverbGate);
-    s.synth.reverbMix = *apvts.getRawParameterValue(kReverbMix);
-
     // Effects
     s.effects.distType = static_cast<openclapper::core::DistortionType>(static_cast<int>(*apvts.getRawParameterValue(kDistType)));
     s.effects.distDrive = *apvts.getRawParameterValue(kDistDrive);
@@ -234,6 +233,16 @@ openclapper::core::EngineSettings readSettings(const juce::AudioProcessorValueTr
     s.effects.limiter.ceilingDb = *apvts.getRawParameterValue(kLimiterCeiling);
     s.effects.limiter.releaseMs = *apvts.getRawParameterValue(kLimiterRelease);
     s.effects.limiter.enabled = *apvts.getRawParameterValue(kLimiterEnabled) > 0.5f;
+
+    s.effects.slapbackDivision = static_cast<openclapper::core::SlapbackDivision>(
+        static_cast<int>(*apvts.getRawParameterValue(kSlapbackDivision)));
+    s.effects.slapbackMix = *apvts.getRawParameterValue(kSlapbackMix);
+
+    s.effects.reverbSize = *apvts.getRawParameterValue(kReverbSize);
+    s.effects.reverbDecayMs = *apvts.getRawParameterValue(kReverbDecay);
+    s.effects.reverbDamp = *apvts.getRawParameterValue(kReverbDamp);
+    s.effects.reverbGateMs = *apvts.getRawParameterValue(kReverbGate);
+    s.effects.reverbMix = *apvts.getRawParameterValue(kReverbMix);
 
     s.effects.reverseMode = static_cast<openclapper::core::ReverseSyncMode>(static_cast<int>(*apvts.getRawParameterValue(kReverseMode)));
     s.effects.reverseMix = *apvts.getRawParameterValue(kReverseMix);
