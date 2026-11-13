@@ -151,7 +151,11 @@
 ### Task 6: Build, push, release, and track completion
 
 **Files:**
-- No additional source files.
+- Modify: `Source/Core/ClapSynth.h` and `Source/Core/ClapSynth.cpp` to place pre-bursts before the main hit.
+- Modify: `Source/Core/Effects.h` and `Source/Core/Effects.cpp` to carry delayed trigger markers to the shared reverb.
+- Modify: `Source/Core/ClapEngine.cpp` to reset shared effect tails for CC120/123 and retrigger reverb on a delayed repeat.
+- Modify: `Source/Plugin/PluginProcessor.h` and `Source/Plugin/PluginProcessor.cpp` to report the active patch's tail duration.
+- Modify: `README.md` to remove the stale v1 screenshot and describe the updated effect behavior.
 
 - [ ] Review the full diff against `origin/main`; run `git diff --check` and confirm only requested files changed.
 - [ ] Configure a Release build if needed: `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOC_BUILD_PLUGIN=ON -DOC_BUILD_TESTS=ON`.

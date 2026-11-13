@@ -27,32 +27,38 @@ void SlapbackDelay::prepare(double sampleRate) {
     const auto capacity = static_cast<size_t>(std::ceil(sampleRate_ * maxDelaySeconds)) + 1;
     leftBuffer_.assign(capacity, 0.0f);
     rightBuffer_.assign(capacity, 0.0f);
+    triggerBuffer_.assign(capacity, 0.0f);
     writeIndex_ = 0;
 }
 
 void SlapbackDelay::reset() noexcept {
     std::fill(leftBuffer_.begin(), leftBuffer_.end(), 0.0f);
     std::fill(rightBuffer_.begin(), rightBuffer_.end(), 0.0f);
+    std::fill(triggerBuffer_.begin(), triggerBuffer_.end(), 0.0f);
     writeIndex_ = 0;
+    delayTriggerActive_ = false;
 }
 
-void SlapbackDelay::process(
+bool SlapbackDelay::process(
     float& left,
     float& right,
     SlapbackDivision division,
     float mix,
-    double bpm) noexcept {
+    double bpm,
+    bool trigger) noexcept {
     if (leftBuffer_.empty() || rightBuffer_.empty()) {
-        return;
+        return false;
     }
 
     const float dryLeft = left;
     const float dryRight = right;
     leftBuffer_[writeIndex_] = dryLeft;
     rightBuffer_[writeIndex_] = dryRight;
+    triggerBuffer_[writeIndex_] = trigger ? 1.0f : 0.0f;
 
     constexpr std::array<double, 6> beatFractions = { 0.0, 0.25, 0.375, 0.5, 0.75, 1.0 };
     const auto divisionIndex = static_cast<size_t>(division);
+    bool delayedTrigger = false;
     if (divisionIndex > 0 && divisionIndex < beatFractions.size() && mix > 0.0f) {
         const double safeBpm = std::isfinite(bpm) && bpm > 0.0 ? bpm : 138.0;
         const double delaySamples = std::clamp(
@@ -69,12 +75,18 @@ void SlapbackDelay::process(
         const float fraction = static_cast<float>(readPosition - static_cast<double>(firstIndex));
         const float delayedLeft = leftBuffer_[firstIndex] + (leftBuffer_[secondIndex] - leftBuffer_[firstIndex]) * fraction;
         const float delayedRight = rightBuffer_[firstIndex] + (rightBuffer_[secondIndex] - rightBuffer_[firstIndex]) * fraction;
+        const float delayedMarker = triggerBuffer_[firstIndex] * (1.0f - fraction) + triggerBuffer_[secondIndex] * fraction;
+        delayedTrigger = delayedMarker > 0.0f && !delayTriggerActive_;
+        delayTriggerActive_ = delayedMarker > 0.0f;
         const float wet = std::clamp(mix, 0.0f, 1.0f);
         left = dryLeft * (1.0f - wet) + delayedLeft * wet;
         right = dryRight * (1.0f - wet) + delayedRight * wet;
+    } else {
+        delayTriggerActive_ = false;
     }
 
     writeIndex_ = (writeIndex_ + 1) % leftBuffer_.size();
+    return delayedTrigger;
 }
 
 // ============================================================================

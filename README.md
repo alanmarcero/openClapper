@@ -8,8 +8,6 @@ openClapper is a trance-focused clap synthesizer for VST3, AU, LV2, and Standalo
 
 The synthesis engine builds each hit from a tuned resonant body, layered noise, a transient click, and up to five pre-clap bursts. Eight voices can overlap. Shared effects add host-tempo slapback, gated stereo reverb, distortion, compression, limiting, and stereo width.
 
-![openClapper user interface](assets/openClapper-screenshot.png)
-
 ## MIDI tuning
 
 Incoming MIDI note-ons trigger the corresponding pitch directly, on any MIDI channel. The tonal body follows the standard MIDI frequency mapping:
@@ -38,7 +36,7 @@ For example, notes 57, 69, and 81 produce A3 at 220 Hz, A4 at 440 Hz, and A5 at 
 
 ### Host-synced slapback
 
-Slapback uses the tempo reported by the host and keeps its delay tail between hits. Choose Off, 1/16, dotted 1/16, 1/8, dotted 1/8, or 1/4. The delay makes one repeat without feedback. If the host has no usable tempo, the engine uses 138 BPM.
+Slapback uses the tempo reported by the host and keeps its delay tail between hits. Choose Off, 1/16, dotted 1/16, 1/8, dotted 1/8, or 1/4. The delay makes one repeat without feedback, and each repeat opens the shared reverb gate when it arrives. If the host has no usable tempo, the engine uses 138 BPM.
 
 ## Factory presets
 
@@ -75,7 +73,7 @@ The 44 factory presets are redesigned for trance, from tight gated impacts to wi
 |---|---|
 | CC 7 | Master output volume |
 | CC 74 | Noise low-pass cutoff |
-| CC 120 / 123 | All sound off / all notes off |
+| CC 120 / 123 | All sound off / all notes off, including shared effect tails |
 | CC 121 | Reset CC 7 and CC 74 |
 
 ## Build
