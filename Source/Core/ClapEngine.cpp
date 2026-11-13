@@ -286,7 +286,7 @@ void ClapEngine::triggerClap(
         wavPlayHead_ = 0;
         wavVelocity_ = velocity;
     } else {
-        synth_.trigger(settings.synth, velocity, semitoneOffset);
+        synth_.trigger(settings.synth, 69 + semitoneOffset, velocity);
     }
 }
 
@@ -344,7 +344,7 @@ void ClapEngine::process(
             int semitoneOffset = 0;
             if (settings.noteTracking && !trig.audition) {
                 // Pitch relative to root note
-                const int rootMidi = 12 * (settings.synth.octave + 1) + settings.synth.note;
+                const int rootMidi = 69;
                 semitoneOffset = trig.noteNumber - rootMidi;
             }
             triggerClap(settings, ppq, transport.bpm, beatsPerBar, trig.velocity, semitoneOffset, trig.audition);

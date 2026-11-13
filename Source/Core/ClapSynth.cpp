@@ -7,6 +7,11 @@ namespace openclapper::core {
 
 namespace {
 
+constexpr std::array<float, 8> kBandpassPartials = { 1.0f, 0.34f, 0.18f, 0.10f, 0.06f, 0.03f, 0.015f, 0.008f };
+constexpr std::array<float, 8> kSubThumpPartials = { 1.0f, 0.08f, 0.02f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+constexpr std::array<float, 8> kSaturatedTriPartials = { 1.0f, 0.0f, 0.16f, 0.0f, 0.07f, 0.0f, 0.035f, 0.0f };
+constexpr std::array<float, 8> kCyberSquarePartials = { 1.0f, 0.42f, 0.26f, 0.18f, 0.12f, 0.08f, 0.05f, 0.03f };
+
 [[nodiscard]] constexpr float pi() noexcept {
     return std::numbers::pi_v<float>;
 }
@@ -17,23 +22,6 @@ namespace {
     state ^= state >> 17;
     state ^= state << 5;
     return (static_cast<float>(state) * (2.0f / 4294967296.0f)) - 1.0f;
-}
-
-// Biquad bandpass filter coefficients (constant 0 dB peak gain)
-void computeBandpassCoeffs(float freqHz, float q, double sampleRate, float& b0, float& b1, float& b2, float& a1, float& a2) noexcept {
-    const float nyquist = static_cast<float>(sampleRate) * 0.5f;
-    const float clampedFreq = std::clamp(freqHz, 20.0f, nyquist * 0.95f);
-    const float clampedQ = std::clamp(q, 0.1f, 30.0f);
-    const float w0 = 2.0f * pi() * clampedFreq / static_cast<float>(sampleRate);
-    const float alpha = std::sin(w0) / (2.0f * clampedQ);
-    const float cosW0 = std::cos(w0);
-
-    const float a0 = 1.0f + alpha;
-    b0 = alpha / a0;
-    b1 = 0.0f;
-    b2 = -alpha / a0;
-    a1 = (-2.0f * cosW0) / a0;
-    a2 = (1.0f - alpha) / a0;
 }
 
 // Biquad highpass filter coefficients (12 dB/oct)
@@ -256,9 +244,6 @@ StereoFrame GatedStereoReverb::process(
 
 void ClapSynth::prepare(double sampleRate) {
     sampleRate_ = sampleRate;
-    reverb_.prepare(sampleRate);
-    const int maxDelay = static_cast<int>(sampleRate * 0.05); // 50 ms max stereo delay
-    widthDelayBuffer_.assign(std::max(64, maxDelay), 0.0f);
     reset();
 }
 
@@ -266,53 +251,57 @@ void ClapSynth::reset() noexcept {
     isPlaying_ = false;
     totalSamplesPlayed_ = 0;
     totalDurationSamples_ = 0;
-    tonePhase_ = 0.0f;
+    burstCount_ = 0;
+    partialFrequencies_.fill(0.0f);
+    partialPhases_.fill(0.0f);
     lastHPF_ = -1.0f;
     lastLPF_ = -1.0f;
-    toneFilterL_.reset();
-    toneFilterR_.reset();
     noiseHPF_L_.reset();
     noiseHPF_R_.reset();
     noiseLPF_L_.reset();
     noiseLPF_R_.reset();
-    clickBPF_.reset();
-    reverb_.reset();
     pinkB0_ = pinkB1_ = pinkB2_ = 0.0f;
     lofiHeld_ = 0.0f;
     lofiCounter_ = 0;
-    std::fill(widthDelayBuffer_.begin(), widthDelayBuffer_.end(), 0.0f);
-    widthDelayWritePos_ = 0;
 }
 
-void ClapSynth::trigger(const ClapSynthSettings& settings, float velocity, int semitoneOffset) noexcept {
+void ClapSynth::trigger(const ClapSynthSettings& settings, int midiNote, float velocity) noexcept {
     reset();
     isPlaying_ = true;
     velocity_ = std::clamp(velocity, 0.0f, 1.0f);
-    semitoneOffset_ = semitoneOffset;
+    midiNote_ = std::clamp(midiNote, 0, 127);
+    ++triggerCount_;
+    prngState_ = 0x9e3779b9U ^ (static_cast<uint32_t>(midiNote_) * 0x85ebca6bU) ^ (triggerCount_ * 0xc2b2ae35U);
+    if (prngState_ == 0) {
+        prngState_ = 0x12345678U;
+    }
 
-    preClapCount_ = std::clamp(settings.preClapCount, 1, 5);
-    const float spreadSamples = (settings.preClapSpreadMs * 0.001f) * static_cast<float>(sampleRate_);
+    burstCount_ = std::clamp(settings.preClapCount, 0, 5);
+    const float spreadSamples = std::max(0.0f, settings.preClapSpreadMs) * 0.001f * static_cast<float>(sampleRate_);
 
-    // Set micro-burst start times, humanized amplitudes, and micro-panning
-    for (int i = 0; i < preClapCount_; ++i) {
-        const float jitterTime = (nextRandomFloat(prngState_) * 0.5f) * settings.preClapJitter * spreadSamples;
-        burstStartSamples_[i] = std::max(0, static_cast<int>(static_cast<float>(i) * spreadSamples + jitterTime));
-        const float jitterAmp = 1.0f + nextRandomFloat(prngState_) * 0.2f * settings.preClapJitter;
-        burstAmplitudes_[i] = std::clamp(settings.preClapLevel * jitterAmp, 0.1f, 1.0f);
-
-        // Alternating micro-panning spread across stereo field
+    for (int i = 0; i < burstCount_; ++i) {
+        const float jitter = std::clamp(settings.preClapJitter, 0.0f, 1.0f);
+        const float jitterTime = nextRandomFloat(prngState_) * 0.5f * jitter * spreadSamples;
+        burstStartSamples_[i] = std::max(0, static_cast<int>(static_cast<float>(i + 1) * spreadSamples + jitterTime));
+        const float jitterAmp = 1.0f + nextRandomFloat(prngState_) * 0.2f * jitter;
+        burstAmplitudes_[i] = std::clamp(settings.preClapLevel * jitterAmp, 0.0f, 1.0f);
         const float dir = (i % 2 == 0) ? -1.0f : 1.0f;
-        const float spreadFrac = (preClapCount_ > 1) ? static_cast<float>(i + 1) / static_cast<float>(preClapCount_) : 0.5f;
+        const float spreadFrac = static_cast<float>(i + 1) / static_cast<float>(std::max(1, burstCount_));
         burstPans_[i] = std::clamp(dir * settings.preClapFlamSpread * spreadFrac, -1.0f, 1.0f);
     }
 
-    // Main collective slap hit occurs right after the pre-bursts
-    mainSlapSample_ = static_cast<int>(static_cast<float>(preClapCount_) * spreadSamples);
+    const float fundamentalHz = midiNoteToHz(midiNote_);
+    for (size_t i = 0; i < partialFrequencies_.size(); ++i) {
+        const float partialHz = fundamentalHz * static_cast<float>(i + 1);
+        partialFrequencies_[i] = partialHz < static_cast<float>(sampleRate_) * 0.48f ? partialHz : 0.0f;
+    }
 
-    // Calculate total duration to cover decay and reverb tail
-    const float totalTimeMs = settings.preClapSpreadMs * static_cast<float>(preClapCount_)
-        + std::max({ settings.noiseDecayMs, settings.toneDecayMs, settings.reverbDecayMs, settings.reverbGateMs });
-    totalDurationSamples_ = static_cast<int>((totalTimeMs * 0.001f + 0.1f) * static_cast<float>(sampleRate_));
+    const float burstTailMs = burstCount_ > 0
+        ? static_cast<float>(burstCount_) * settings.preClapSpreadMs + settings.preClapDecayMs * 4.0f
+        : 0.0f;
+    const float noiseTailMs = settings.noiseAttackMs + settings.noiseHoldMs + settings.noiseDecayMs * 4.0f;
+    const float totalTimeMs = std::max({ burstTailMs, noiseTailMs, settings.toneDecayMs * 6.0f, 20.0f });
+    totalDurationSamples_ = static_cast<int>(totalTimeMs * 0.001f * static_cast<float>(sampleRate_));
 }
 
 float ClapSynth::generateNoiseSample(NoiseType type) noexcept {
@@ -360,98 +349,82 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings) noexcept
     }
 
     const int currentSample = totalSamplesPlayed_++;
-    if (totalSamplesPlayed_ >= totalDurationSamples_) {
+    if (currentSample >= totalDurationSamples_) {
         isPlaying_ = false;
         return { 0.0f, 0.0f };
     }
 
-    // 1. Evaluate Pre-Clap Micro-bursts with alternating stereo micro-panning
-    float preClapGainL = 0.0f;
-    float preClapGainR = 0.0f;
-    const float effectiveBurstDecayMs = std::max(2.0f, std::min(settings.preClapDecayMs, settings.preClapSpreadMs * 0.75f));
-    const float burstDecaySamples = (effectiveBurstDecayMs * 0.001f) * static_cast<float>(sampleRate_);
-
-    for (int i = 0; i < preClapCount_; ++i) {
+    float burstGainL = 0.0f;
+    float burstGainR = 0.0f;
+    const float burstDecaySamples = std::max(1.0f, settings.preClapDecayMs * 0.001f * static_cast<float>(sampleRate_));
+    for (int i = 0; i < burstCount_; ++i) {
         const int age = currentSample - burstStartSamples_[i];
-        if (age >= 0 && static_cast<float>(age) < burstDecaySamples * 4.0f) {
-            const float env = std::exp(-static_cast<float>(age) / std::max(1.0f, burstDecaySamples));
-            const float pan = burstPans_[i]; // -1 to +1
-            const float gainL = std::clamp(0.5f * (1.0f - pan), 0.0f, 1.0f);
-            const float gainR = std::clamp(0.5f * (1.0f + pan), 0.0f, 1.0f);
-            const float amp = env * burstAmplitudes_[i];
-            preClapGainL += amp * gainL * 1.414f;
-            preClapGainR += amp * gainR * 1.414f;
+        if (age < 0 || static_cast<float>(age) >= burstDecaySamples * 4.0f) {
+            continue;
         }
+
+        const float env = std::exp(-static_cast<float>(age) / burstDecaySamples);
+        const float pan = burstPans_[i];
+        const float gainL = std::clamp(0.5f * (1.0f - pan), 0.0f, 1.0f);
+        const float gainR = std::clamp(0.5f * (1.0f + pan), 0.0f, 1.0f);
+        const float amplitude = env * burstAmplitudes_[i] * 1.414f;
+        burstGainL += amplitude * gainL;
+        burstGainR += amplitude * gainR;
     }
 
-    // 2. Evaluate Main Slap Envelopes
-    const int mainAge = currentSample - mainSlapSample_;
+    const float mainAge = static_cast<float>(currentSample);
+    const float attackSamples = std::max(0.0f, settings.noiseAttackMs * 0.001f * static_cast<float>(sampleRate_));
+    const float holdSamples = std::max(0.0f, settings.noiseHoldMs * 0.001f * static_cast<float>(sampleRate_));
+    const float decaySamples = std::max(1.0f, settings.noiseDecayMs * 0.001f * static_cast<float>(sampleRate_));
     float noiseEnv = 0.0f;
-    float toneEnv = 0.0f;
-    float clickSample = 0.0f;
-
-    if (mainAge >= 0) {
-        const float attackSamples = (settings.noiseAttackMs * 0.001f) * static_cast<float>(sampleRate_);
-        const float holdSamples = (settings.noiseHoldMs * 0.001f) * static_cast<float>(sampleRate_);
-        const float decaySamples = (settings.noiseDecayMs * 0.001f) * static_cast<float>(sampleRate_);
-        const float toneDecaySamples = (settings.toneDecayMs * 0.001f) * static_cast<float>(sampleRate_);
-
-        // Main noise envelope with attack, hold, shaped decay
-        const float t = static_cast<float>(mainAge);
-        if (t < attackSamples && attackSamples > 0.0f) {
-            noiseEnv = t / attackSamples;
-        } else if (t < (attackSamples + holdSamples)) {
-            noiseEnv = 1.0f;
+    if (mainAge < attackSamples && attackSamples > 0.0f) {
+        noiseEnv = mainAge / attackSamples;
+    } else if (mainAge < attackSamples + holdSamples) {
+        noiseEnv = 1.0f;
+    } else {
+        const float decayT = mainAge - attackSamples - holdSamples;
+        const float linearFraction = std::clamp(decayT / decaySamples, 0.0f, 1.0f);
+        const float expDecay = std::exp(-decayT / std::max(1.0f, decaySamples * 0.35f));
+        const float curve = std::clamp(settings.noiseCurve, -1.0f, 1.0f);
+        if (curve < 0.0f) {
+            noiseEnv = (1.0f + curve) * (1.0f - linearFraction) - curve * expDecay;
         } else {
-            const float decayT = t - (attackSamples + holdSamples);
-            const float linearFraction = std::clamp(decayT / std::max(1.0f, decaySamples), 0.0f, 1.0f);
-            const float expDecay = std::exp(-decayT / std::max(1.0f, decaySamples * 0.35f));
-            if (settings.noiseCurve < 0.0f) {
-                const float factor = -settings.noiseCurve;
-                noiseEnv = (1.0f - factor) * (1.0f - linearFraction) + factor * expDecay;
-            } else {
-                const float factor = settings.noiseCurve;
-                noiseEnv = (1.0f - factor) * expDecay + factor * (1.0f - linearFraction);
-            }
+            noiseEnv = (1.0f - curve) * expDecay + curve * (1.0f - linearFraction);
         }
+    }
 
-        // Resonant body tone envelope
-        toneEnv = std::exp(-t / std::max(1.0f, toneDecaySamples));
-
-        // Click spike / transient crack
-        if (mainAge < static_cast<int>(sampleRate_ * 0.005)) {
-            const float clickT = static_cast<float>(mainAge) / static_cast<float>(sampleRate_);
-            const float envFast = std::exp(-static_cast<float>(mainAge) / (0.0008f * static_cast<float>(sampleRate_)));
-            switch (settings.clickType) {
-                case ClickType::Needle: {
-                    const float clickPhase = 2.0f * pi() * settings.clickFreqHz * clickT;
-                    clickSample = std::sin(clickPhase) * envFast * settings.clickLevel;
-                    break;
-                }
-                case ClickType::Crack: {
-                    const float clickPhase1 = 2.0f * pi() * settings.clickFreqHz * clickT;
-                    const float clickPhase2 = 2.0f * pi() * (settings.clickFreqHz * 1.6f) * clickT;
-                    clickSample = (std::sin(clickPhase1) * 0.6f + std::sin(clickPhase2) * 0.4f) * envFast * settings.clickLevel * 1.3f;
-                    break;
-                }
-                case ClickType::Thump: {
-                    const float clickPhase = 2.0f * pi() * (settings.clickFreqHz * 0.45f) * clickT;
-                    clickSample = std::sin(clickPhase) * std::exp(-static_cast<float>(mainAge) / (0.002f * static_cast<float>(sampleRate_))) * settings.clickLevel * 1.2f;
-                    break;
-                }
+    const float toneDecaySamples = std::max(1.0f, settings.toneDecayMs * 0.001f * static_cast<float>(sampleRate_));
+    const float toneEnv = std::exp(-mainAge / toneDecaySamples);
+    float clickSample = 0.0f;
+    if (mainAge < sampleRate_ * 0.005f) {
+        const float clickT = mainAge / static_cast<float>(sampleRate_);
+        const float clickHz = std::min(settings.clickFreqHz, static_cast<float>(sampleRate_) * 0.45f);
+        const float envFast = std::exp(-mainAge / (0.0008f * static_cast<float>(sampleRate_)));
+        switch (settings.clickType) {
+            case ClickType::Needle: {
+                clickSample = std::sin(2.0f * pi() * clickHz * clickT) * envFast * settings.clickLevel;
+                break;
+            }
+            case ClickType::Crack: {
+                const float phase1 = 2.0f * pi() * clickHz * clickT;
+                const float phase2 = 2.0f * pi() * std::min(clickHz * 1.6f, static_cast<float>(sampleRate_) * 0.45f) * clickT;
+                clickSample = (std::sin(phase1) * 0.6f + std::sin(phase2) * 0.4f) * envFast * settings.clickLevel * 1.3f;
+                break;
+            }
+            case ClickType::Thump: {
+                clickSample = std::sin(2.0f * pi() * clickHz * 0.45f * clickT)
+                    * std::exp(-mainAge / (0.002f * static_cast<float>(sampleRate_)))
+                    * settings.clickLevel * 1.2f;
+                break;
             }
         }
     }
 
-    // Combine raw noise for pre-claps and main slap
     const float rawNoiseL = generateNoiseSample(settings.noiseType);
     const float rawNoiseR = generateNoiseSample(settings.noiseType);
+    const float totalNoiseL = (rawNoiseL * burstGainL + rawNoiseL * noiseEnv * settings.noiseLevel) * velocity_;
+    const float totalNoiseR = (rawNoiseR * burstGainR + rawNoiseR * noiseEnv * settings.noiseLevel) * velocity_;
 
-    // Apply pre-clap flam + main slap noise envelope
-    const float totalNoiseL = (rawNoiseL * preClapGainL + rawNoiseL * noiseEnv * settings.noiseLevel) * velocity_;
-    const float totalNoiseR = (rawNoiseR * preClapGainR + rawNoiseR * noiseEnv * settings.noiseLevel) * velocity_;
-
-    // Filter noise with HPF and LPF (cached to avoid redundant trigonometric evaluation)
     if (std::abs(settings.noiseHPF - lastHPF_) > 0.1f) {
         lastHPF_ = settings.noiseHPF;
         computeHighpassCoeffs(lastHPF_, sampleRate_, b0_h_, b1_h_, b2_h_, a1_h_, a2_h_);
@@ -466,57 +439,36 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings) noexcept
     float filteredNoiseL = processBiquad(filteredHP_L, noiseLPF_L_, b0_l_, b1_l_, b2_l_, a1_l_, a2_l_);
     float filteredNoiseR = processBiquad(filteredHP_R, noiseLPF_R_, b0_l_, b1_l_, b2_l_, a1_l_, a2_l_);
 
-    // 3. Resonant Body / Tone synthesis
-    float toneL = 0.0f;
-    float toneR = 0.0f;
-    if (mainAge >= 0 && settings.toneLevel > 0.001f) {
-        // Pitch drop envelope
-        const float pitchDecaySamples = (settings.tonePitchDecayMs * 0.001f) * static_cast<float>(sampleRate_);
-        const float pitchEnvFrac = std::exp(-static_cast<float>(mainAge) / std::max(1.0f, pitchDecaySamples));
-        const float pitchSemitones = static_cast<float>(semitoneOffset_) + settings.tonePitchEnv * pitchEnvFrac;
-
-        // Base tuned pitch computed from Note (0..11), Octave (1..8), and Fine cents (-50..+50)
-        const float baseHz = noteToHz(settings.note, settings.octave, settings.fineCents);
-        const float tunedHz = std::clamp(baseHz * std::pow(2.0f, pitchSemitones / 12.0f), 20.0f, static_cast<float>(sampleRate_) * 0.48f);
-
-        float toneSample = 0.0f;
-        tonePhase_ += 2.0f * pi() * tunedHz / static_cast<float>(sampleRate_);
-        if (tonePhase_ >= 2.0f * pi()) {
-            tonePhase_ = std::fmod(tonePhase_, 2.0f * pi());
-        }
-
+    float toneSample = 0.0f;
+    if (settings.toneLevel > 0.001f) {
+        const std::array<float, 8>* weights = &kBandpassPartials;
         switch (settings.toneMode) {
-            case ToneMode::Bandpass: {
-                float b0_t, b1_t, b2_t, a1_t, a2_t;
-                computeBandpassCoeffs(tunedHz, settings.toneQ, sampleRate_, b0_t, b1_t, b2_t, a1_t, a2_t);
-                const float exciter = (mainAge < 4 ? 1.0f : 0.0f) + rawNoiseL * 0.35f;
-                toneSample = processBiquad(exciter * toneEnv, toneFilterL_, b0_t, b1_t, b2_t, a1_t, a2_t) * 2.2f;
-                break;
-            }
-            case ToneMode::SubThump: {
-                const float sine = std::sin(tonePhase_);
-                toneSample = sine * toneEnv * 1.6f;
-                break;
-            }
-            case ToneMode::SaturatedTri: {
-                const float tri = (std::asin(std::sin(tonePhase_)) * (2.0f / pi()));
-                toneSample = std::tanh(tri * 2.0f) * toneEnv * 1.5f;
-                break;
-            }
-            case ToneMode::CyberSquare: {
-                const float sq = (std::sin(tonePhase_) >= 0.0f ? 0.75f : -0.75f);
-                float b0_t, b1_t, b2_t, a1_t, a2_t;
-                computeLowpassCoeffs(std::min(tunedHz * 3.0f, static_cast<float>(sampleRate_) * 0.45f), sampleRate_, b0_t, b1_t, b2_t, a1_t, a2_t);
-                toneSample = processBiquad(sq * toneEnv, toneFilterL_, b0_t, b1_t, b2_t, a1_t, a2_t) * 1.4f;
-                break;
-            }
+            case ToneMode::Bandpass: weights = &kBandpassPartials; break;
+            case ToneMode::SubThump: weights = &kSubThumpPartials; break;
+            case ToneMode::SaturatedTri: weights = &kSaturatedTriPartials; break;
+            case ToneMode::CyberSquare: weights = &kCyberSquarePartials; break;
         }
 
-        toneL = toneSample * settings.toneLevel * velocity_;
-        toneR = toneL; // Tone centered for solid mono compatibility in club systems
+        const float resonance = std::clamp(settings.toneQ / 6.0f, 0.1f, 2.0f);
+        float weightSum = 0.0f;
+        for (size_t i = 0; i < partialFrequencies_.size(); ++i) {
+            const float frequency = partialFrequencies_[i];
+            if (frequency <= 0.0f) {
+                continue;
+            }
+
+            partialPhases_[i] += 2.0f * pi() * frequency / static_cast<float>(sampleRate_);
+            if (partialPhases_[i] >= 2.0f * pi()) {
+                partialPhases_[i] -= 2.0f * pi();
+            }
+            const float highPartial = static_cast<float>(i) / static_cast<float>(partialFrequencies_.size() - 1);
+            const float weight = (*weights)[i] * (1.0f + (resonance - 1.0f) * highPartial);
+            toneSample += std::sin(partialPhases_[i]) * weight;
+            weightSum += weight;
+        }
+        toneSample = toneSample / std::max(1.0f, weightSum) * toneEnv * settings.toneLevel * velocity_;
     }
 
-    // 4. Stereo Width (Mid/Side processing without phase cancellation)
     if (settings.noiseStereoWidth != 1.0f) {
         const float mid = (filteredNoiseL + filteredNoiseR) * 0.5f;
         const float side = (filteredNoiseL - filteredNoiseR) * 0.5f * settings.noiseStereoWidth;
@@ -524,26 +476,8 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings) noexcept
         filteredNoiseR = mid - side;
     }
 
-    // Sum dry clap components
-    const float dryL = filteredNoiseL + toneL + clickSample;
-    const float dryR = filteredNoiseR + toneR + clickSample;
-
-    // 5. Gated Reverb Tail
-    StereoFrame reverbOut = { 0.0f, 0.0f };
-    if (settings.reverbMix > 0.001f) {
-        reverbOut = reverb_.process(
-            dryL, dryR,
-            settings.reverbSize,
-            settings.reverbDecayMs,
-            settings.reverbDamp,
-            settings.reverbGateMs,
-            sampleRate_);
-    }
-
-    const float outL = dryL * (1.0f - settings.reverbMix * 0.5f) + reverbOut.left * settings.reverbMix;
-    const float outR = dryR * (1.0f - settings.reverbMix * 0.5f) + reverbOut.right * settings.reverbMix;
-
-    return { outL, outR };
+    const float click = clickSample * velocity_;
+    return { filteredNoiseL + toneSample + click, filteredNoiseR + toneSample + click };
 }
 
 void ClapSynth::renderBlock(
@@ -552,7 +486,7 @@ void ClapSynth::renderBlock(
     const ClapSynthSettings& settings,
     float velocity,
     int semitoneOffset) noexcept {
-    trigger(settings, velocity, semitoneOffset);
+    trigger(settings, 69 + semitoneOffset, velocity);
 
     leftOut.resize(totalDurationSamples_);
     rightOut.resize(totalDurationSamples_);

@@ -4,15 +4,12 @@
 
 using namespace openclapper::core;
 
-TEST_CASE("noteToHz calculation is musically correct", "[core][synth]") {
-    // Octave 4 A (MIDI 69 = 440 Hz)
-    const float a4 = noteToHz(9, 4, 0.0f);
+TEST_CASE("midiNoteToHz maps MIDI pitch accurately", "[core][synth]") {
+    const float a4 = midiNoteToHz(69);
     REQUIRE(std::abs(a4 - 440.0f) < 0.1f);
 
-    // Fine cents test: +100 cents should equal one semitone up (A#4)
-    const float aSharp4 = noteToHz(10, 4, 0.0f);
-    const float a4Plus100 = noteToHz(9, 4, 100.0f);
-    REQUIRE(std::abs(aSharp4 - a4Plus100) < 0.2f);
+    const float a3 = midiNoteToHz(57);
+    REQUIRE(std::abs(a4 / a3 - 2.0f) < 0.001f);
 }
 
 TEST_CASE("ClapSynth produces valid audio block without NaNs", "[core][synth]") {
@@ -50,7 +47,7 @@ TEST_CASE("ClapSynth finishes and stops playing after duration", "[core][synth]"
     settings.reverbDecayMs = 50.0f;
     settings.reverbGateMs = 40.0f;
 
-    synth.trigger(settings, 1.0f, 0);
+    synth.trigger(settings, 69, 1.0f);
     REQUIRE(synth.isPlaying());
 
     // Process until finished
@@ -154,19 +151,13 @@ TEST_CASE("ClapSynth tone pitch responds to note and octave settings", "[core][s
     lowPitchSettings.clickLevel = 0.0f;
     lowPitchSettings.reverbMix = 0.0f;
     lowPitchSettings.preClapCount = 0;
-    lowPitchSettings.note = 0; // C
-    lowPitchSettings.octave = 2;
-    lowPitchSettings.fineCents = 0.0f;
-
     ClapSynthSettings highPitchSettings = lowPitchSettings;
-    highPitchSettings.note = 9; // A
-    highPitchSettings.octave = 5;
 
     std::vector<float> leftLow, rightLow;
-    synth.renderBlock(leftLow, rightLow, lowPitchSettings, 1.0f, 0);
+    synth.renderBlock(leftLow, rightLow, lowPitchSettings, 1.0f, 36 - 69);
 
     std::vector<float> leftHigh, rightHigh;
-    synth.renderBlock(leftHigh, rightHigh, highPitchSettings, 1.0f, 0);
+    synth.renderBlock(leftHigh, rightHigh, highPitchSettings, 1.0f, 81 - 69);
 
     REQUIRE(!leftLow.empty());
     REQUIRE(!leftHigh.empty());
