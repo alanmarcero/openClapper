@@ -486,8 +486,8 @@ void ClapSynth::renderBlock(
     std::vector<float>& rightOut,
     const ClapSynthSettings& settings,
     float velocity,
-    int semitoneOffset) noexcept {
-    trigger(settings, 69 + semitoneOffset, velocity);
+    int midiNote) noexcept {
+    trigger(settings, midiNote, velocity);
 
     leftOut.resize(totalDurationSamples_);
     rightOut.resize(totalDurationSamples_);

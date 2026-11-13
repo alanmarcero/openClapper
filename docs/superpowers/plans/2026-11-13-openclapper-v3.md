@@ -94,17 +94,19 @@
 **Files:**
 - Modify: `Source/Core/ClapEngine.h`
 - Modify: `Source/Core/ClapEngine.cpp`
+- Modify: `Source/Core/ClapSynth.h` and `Source/Core/ClapSynth.cpp` to render reverse swells at the raw MIDI note
 - Modify: `Source/Plugin/PluginProcessor.cpp`
-- Modify: `Tests/ClapEngineTests.cpp` only for APIs removed with WAV Lock In
+- Modify: `Source/Plugin/Parameters.cpp` to remove retired engine settings
+- Modify: `Tests/ClapEngineTests.cpp` and `Tests/ClapSynthTests.cpp` only to retire removed lock and offset APIs
 
 **Interfaces:**
 - Consumes: `ClapSynth::trigger(settings, midiNote, velocity)` and `SlapbackDelay` from Tasks 1 and 2.
 - Produces: sample-offset note-on dispatch to one of eight `ClapSynth` voices, with oldest-voice stealing when all are active.
 
-- [ ] Allocate and prepare eight voices; record trigger order so the oldest active voice can be selected when all are busy.
-- [ ] Dispatch every `MidiTrigger` at its event sample and pass its note number and velocity unchanged; leave audition on MIDI note 69.
-- [ ] Remove Fixed/Note Tracking and WAV Lock In from engine settings and saved plugin state, including the WAV playback/cache path and obsolete lock test.
-- [ ] Build all configured targets: `cmake --build build --config Release --parallel`.
+- [x] Allocate and prepare eight voices; record trigger order so the oldest active voice can be selected when all are busy.
+- [x] Dispatch every `MidiTrigger` at its event sample and pass its note number and velocity unchanged; leave audition on MIDI note 69.
+- [x] Remove Fixed/Note Tracking and WAV Lock In from engine settings and saved plugin state, including the WAV playback/cache path and obsolete lock test.
+- [x] Build all configured targets: `cmake --build build --config Release --parallel`.
 - [ ] Commit the MIDI and voice allocation changes with the personal git identity.
 
 ### Task 4: Replace pitch controls with MIDI-only behavior and slapback controls

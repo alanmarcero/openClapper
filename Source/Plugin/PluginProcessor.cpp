@@ -97,7 +97,6 @@ void OpenClapperProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
     displayBeatPhase.store(engine_.currentBeatPhase());
     displayClapProgress.store(engine_.currentClapProgress());
     displayTriggerCount.store(engine_.triggerSerial());
-    displayLockedIn.store(engine_.isClapLocked());
 }
 
 juce::AudioProcessorEditor* OpenClapperProcessor::createEditor() {
@@ -131,12 +130,6 @@ void OpenClapperProcessor::setCurrentProgram(int index) {
 
 void OpenClapperProcessor::getStateInformation(juce::MemoryBlock& destData) {
     auto state = parameters.copyState();
-    if (engine_.isClapLocked()) {
-        const auto wav = engine_.wavCache().toWavBytes();
-        if (!wav.empty()) {
-            state.setProperty("locked_wav", juce::MemoryBlock(wav.data(), wav.size()).toBase64Encoding(), nullptr);
-        }
-    }
     std::unique_ptr<juce::XmlElement> xml(state.createXml());
     copyXmlToBinary(*xml, destData);
 }
@@ -145,15 +138,8 @@ void OpenClapperProcessor::setStateInformation(const void* data, int sizeInBytes
     std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
     if (xmlState != nullptr && xmlState->hasTagName(parameters.state.getType())) {
         auto state = juce::ValueTree::fromXml(*xmlState);
+        state.removeProperty("locked_wav", nullptr);
         parameters.replaceState(state);
-        if (state.hasProperty("locked_wav")) {
-            juce::MemoryBlock block;
-            block.fromBase64Encoding(state.getProperty("locked_wav").toString());
-            const auto* bytePtr = static_cast<const uint8_t*>(block.getData());
-            std::vector<uint8_t> wavBytes(bytePtr, bytePtr + block.getSize());
-            engine_.restoreLockedWav(wavBytes);
-            displayLockedIn.store(true);
-        }
     }
 }
 

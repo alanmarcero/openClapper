@@ -159,13 +159,13 @@ public:
     [[nodiscard]] bool isPlaying() const noexcept { return isPlaying_; }
     [[nodiscard]] float getEnvelopeProgress() const noexcept;
 
-    // Direct render block for offline preview and core checks.
+    // Direct render block for offline preview and reverse swells.
     void renderBlock(
         std::vector<float>& leftOut,
         std::vector<float>& rightOut,
         const ClapSynthSettings& settings,
         float velocity = 1.0f,
-        int semitoneOffset = 0) noexcept;
+        int midiNote = 69) noexcept;
 
 private:
     [[nodiscard]] float generateNoiseSample(NoiseType type) noexcept;

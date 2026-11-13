@@ -20,7 +20,7 @@ TEST_CASE("ClapSynth produces valid audio block without NaNs", "[core][synth]") 
     std::vector<float> left;
     std::vector<float> right;
 
-    synth.renderBlock(left, right, settings, 1.0f, 0);
+    synth.renderBlock(left, right, settings, 1.0f, 69);
 
     REQUIRE(!left.empty());
     REQUIRE(left.size() == right.size());
@@ -44,9 +44,6 @@ TEST_CASE("ClapSynth finishes and stops playing after duration", "[core][synth]"
     ClapSynthSettings settings;
     settings.noiseDecayMs = 30.0f;
     settings.toneDecayMs = 30.0f;
-    settings.reverbDecayMs = 50.0f;
-    settings.reverbGateMs = 40.0f;
-
     synth.trigger(settings, 69, 1.0f);
     REQUIRE(synth.isPlaying());
 
@@ -101,7 +98,7 @@ TEST_CASE("ClapSynth renders across all ToneModes and ClickTypes without errors"
             settings.clickLevel = 0.5f;
 
             std::vector<float> left, right;
-            synth.renderBlock(left, right, settings, 1.0f, 0);
+            synth.renderBlock(left, right, settings, 1.0f, 69);
 
             REQUIRE(!left.empty());
             REQUIRE(left.size() == right.size());
@@ -128,10 +125,9 @@ TEST_CASE("ClapSynth flam spread creates stereo differentiation during pre-burst
     wideFlam.toneLevel = 0.0f;
     wideFlam.noiseLevel = 0.0f;
     wideFlam.clickLevel = 0.0f;
-    wideFlam.reverbMix = 0.0f;
 
     std::vector<float> left, right;
-    synth.renderBlock(left, right, wideFlam, 1.0f, 0);
+    synth.renderBlock(left, right, wideFlam, 1.0f, 69);
 
     // During pre-bursts, left and right channels should not be identical
     float diffSum = 0.0f;
@@ -141,7 +137,7 @@ TEST_CASE("ClapSynth flam spread creates stereo differentiation during pre-burst
     REQUIRE(diffSum > 0.01f);
 }
 
-TEST_CASE("ClapSynth tone pitch responds to note and octave settings", "[core][synth]") {
+TEST_CASE("ClapSynth tone pitch follows MIDI notes", "[core][synth]") {
     ClapSynth synth;
     synth.prepare(48000.0);
 
@@ -149,15 +145,14 @@ TEST_CASE("ClapSynth tone pitch responds to note and octave settings", "[core][s
     lowPitchSettings.toneLevel = 1.0f;
     lowPitchSettings.noiseLevel = 0.0f;
     lowPitchSettings.clickLevel = 0.0f;
-    lowPitchSettings.reverbMix = 0.0f;
     lowPitchSettings.preClapCount = 0;
     ClapSynthSettings highPitchSettings = lowPitchSettings;
 
     std::vector<float> leftLow, rightLow;
-    synth.renderBlock(leftLow, rightLow, lowPitchSettings, 1.0f, 36 - 69);
+    synth.renderBlock(leftLow, rightLow, lowPitchSettings, 1.0f, 36);
 
     std::vector<float> leftHigh, rightHigh;
-    synth.renderBlock(leftHigh, rightHigh, highPitchSettings, 1.0f, 81 - 69);
+    synth.renderBlock(leftHigh, rightHigh, highPitchSettings, 1.0f, 81);
 
     REQUIRE(!leftLow.empty());
     REQUIRE(!leftHigh.empty());

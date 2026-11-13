@@ -1,7 +1,6 @@
 #include "ClapEngine.h"
 #include <algorithm>
 #include <cmath>
-#include <cstring>
 
 namespace openclapper::core {
 
@@ -11,153 +10,7 @@ namespace {
     return std::pow(10.0f, db / 20.0f);
 }
 
-// RIFF header helpers
-void writeUint16LE(std::vector<uint8_t>& buf, uint16_t v) {
-    buf.push_back(static_cast<uint8_t>(v & 0xff));
-    buf.push_back(static_cast<uint8_t>((v >> 8) & 0xff));
-}
-
-void writeUint32LE(std::vector<uint8_t>& buf, uint32_t v) {
-    buf.push_back(static_cast<uint8_t>(v & 0xff));
-    buf.push_back(static_cast<uint8_t>((v >> 8) & 0xff));
-    buf.push_back(static_cast<uint8_t>((v >> 16) & 0xff));
-    buf.push_back(static_cast<uint8_t>((v >> 24) & 0xff));
-}
-
 } // namespace
-
-// ============================================================================
-// ClapWavCache
-// ============================================================================
-
-void ClapWavCache::clear() noexcept {
-    isLocked_ = false;
-    left_.clear();
-    right_.clear();
-}
-
-void ClapWavCache::capture(const std::vector<float>& left, const std::vector<float>& right, double sampleRate) {
-    left_ = left;
-    right_ = right;
-    sampleRate_ = sampleRate;
-    isLocked_ = !left_.empty();
-}
-
-std::vector<uint8_t> ClapWavCache::toWavBytes() const {
-    if (!isLocked_ || left_.empty()) {
-        return {};
-    }
-
-    const uint32_t numFrames = static_cast<uint32_t>(left_.size());
-    const uint16_t numChannels = 2;
-    const uint32_t sRate = static_cast<uint32_t>(sampleRate_);
-    const uint16_t bitsPerSample = 32;
-    const uint32_t dataBytes = numFrames * numChannels * sizeof(float);
-    const uint32_t chunkSize = 36 + dataBytes;
-
-    std::vector<uint8_t> wav;
-    wav.reserve(44 + dataBytes);
-
-    // "RIFF"
-    wav.insert(wav.end(), { 'R', 'I', 'F', 'F' });
-    writeUint32LE(wav, chunkSize);
-    // "WAVE"
-    wav.insert(wav.end(), { 'W', 'A', 'V', 'E' });
-
-    // "fmt " chunk
-    wav.insert(wav.end(), { 'f', 'm', 't', ' ' });
-    writeUint32LE(wav, 16);
-    writeUint16LE(wav, 3); // IEEE float format
-    writeUint16LE(wav, numChannels);
-    writeUint32LE(wav, sRate);
-    writeUint32LE(wav, sRate * numChannels * sizeof(float)); // byte rate
-    writeUint16LE(wav, numChannels * sizeof(float));         // block align
-    writeUint16LE(wav, bitsPerSample);
-
-    // "data" chunk
-    wav.insert(wav.end(), { 'd', 'a', 't', 'a' });
-    writeUint32LE(wav, dataBytes);
-
-    for (size_t i = 0; i < left_.size(); ++i) {
-        float sampleL = left_[i];
-        float sampleR = (i < right_.size()) ? right_[i] : sampleL;
-
-        uint32_t rawL, rawR;
-        std::memcpy(&rawL, &sampleL, sizeof(float));
-        std::memcpy(&rawR, &sampleR, sizeof(float));
-        writeUint32LE(wav, rawL);
-        writeUint32LE(wav, rawR);
-    }
-
-    return wav;
-}
-
-bool ClapWavCache::fromWavBytes(const std::vector<uint8_t>& wavBytes) {
-    if (wavBytes.size() < 44) {
-        return false;
-    }
-
-    if (std::memcmp(wavBytes.data(), "RIFF", 4) != 0 || std::memcmp(wavBytes.data() + 8, "WAVE", 4) != 0) {
-        return false;
-    }
-
-    size_t offset = 12;
-    uint16_t numChannels = 0;
-    uint32_t sRate = 48000;
-    uint16_t formatTag = 0;
-    size_t dataOffset = 0;
-    size_t dataSize = 0;
-
-    while (offset + 8 <= wavBytes.size()) {
-        char chunkId[5] = { 0 };
-        std::memcpy(chunkId, wavBytes.data() + offset, 4);
-        uint32_t chunkSize = 0;
-        std::memcpy(&chunkSize, wavBytes.data() + offset + 4, 4);
-        offset += 8;
-
-        if (std::memcmp(chunkId, "fmt ", 4) == 0 && chunkSize >= 16) {
-            std::memcpy(&formatTag, wavBytes.data() + offset, 2);
-            std::memcpy(&numChannels, wavBytes.data() + offset + 2, 2);
-            std::memcpy(&sRate, wavBytes.data() + offset + 4, 4);
-        } else if (std::memcmp(chunkId, "data", 4) == 0) {
-            dataOffset = offset;
-            dataSize = chunkSize;
-            break;
-        }
-
-        offset += chunkSize;
-    }
-
-    if (dataOffset == 0 || numChannels == 0 || (formatTag != 3 && formatTag != 1)) {
-        return false;
-    }
-
-    sampleRate_ = sRate;
-    const size_t bytesPerFrame = numChannels * (formatTag == 3 ? sizeof(float) : 2);
-    const size_t numFrames = dataSize / bytesPerFrame;
-
-    left_.resize(numFrames);
-    right_.resize(numFrames);
-
-    if (formatTag == 3) {
-        // IEEE Float
-        const auto* floatPtr = reinterpret_cast<const float*>(wavBytes.data() + dataOffset);
-        for (size_t i = 0; i < numFrames; ++i) {
-            left_[i] = floatPtr[i * numChannels];
-            right_[i] = (numChannels > 1) ? floatPtr[i * numChannels + 1] : left_[i];
-        }
-    } else {
-        // 16-bit PCM
-        const auto* intPtr = reinterpret_cast<const int16_t*>(wavBytes.data() + dataOffset);
-        for (size_t i = 0; i < numFrames; ++i) {
-            left_[i] = static_cast<float>(intPtr[i * numChannels]) / 32768.0f;
-            right_[i] = (numChannels > 1) ? static_cast<float>(intPtr[i * numChannels + 1]) / 32768.0f : left_[i];
-        }
-    }
-
-    isLocked_ = true;
-    return true;
-}
 
 // ============================================================================
 // ClapEngine
@@ -165,7 +18,9 @@ bool ClapWavCache::fromWavBytes(const std::vector<uint8_t>& wavBytes) {
 
 void ClapEngine::prepare(double sampleRate) {
     sampleRate_ = sampleRate;
-    synth_.prepare(sampleRate);
+    for (auto& voice : voices_) {
+        voice.synth.prepare(sampleRate);
+    }
     slapback_.prepare(sampleRate);
     reverb_.prepare(sampleRate);
     distL_.reset();
@@ -180,14 +35,18 @@ void ClapEngine::prepare(double sampleRate) {
 }
 
 void ClapEngine::reset() noexcept {
-    synth_.reset();
+    for (auto& voice : voices_) {
+        voice.synth.reset();
+        voice.triggerOrder = 0;
+    }
+    voiceOrderCounter_ = 0;
+    lastTriggeredVoice_ = 0;
     slapback_.reset();
     reverb_.reset();
     distL_.reset();
     distR_.reset();
     compressor_.reset();
     limiter_.reset();
-    wavPlayHead_ = -1;
     reversePlayHead_ = -1;
     reverseDuration_ = 0;
     isReversing_ = false;
@@ -198,66 +57,20 @@ void ClapEngine::reset() noexcept {
     ccBrightness_ = 1.0f;
 }
 
-void ClapEngine::lockCurrentClap(const EngineSettings& settings) {
-    std::vector<float> dryL, dryR;
-    synth_.renderBlock(dryL, dryR, settings.synth);
-
-    std::vector<float> renderedL(dryL.size());
-    std::vector<float> renderedR(dryR.size());
-
-    DistortionShaper dL, dR;
-    StereoCompressor comp;
-    BrickwallLimiter lim;
-    comp.prepare(sampleRate_);
-    lim.prepare(sampleRate_);
-
-    for (size_t i = 0; i < dryL.size(); ++i) {
-        float sL = dryL[i];
-        float sR = dryR[i];
-
-        if (settings.effects.distMix > 0.001f) {
-            const float wetDistL = dL.processSample(sL, settings.effects.distType, settings.effects.distDrive, settings.effects.distTone, sampleRate_);
-            const float wetDistR = dR.processSample(sR, settings.effects.distType, settings.effects.distDrive, settings.effects.distTone, sampleRate_);
-            sL = sL * (1.0f - settings.effects.distMix) + wetDistL * settings.effects.distMix;
-            sR = sR * (1.0f - settings.effects.distMix) + wetDistR * settings.effects.distMix;
-        }
-
-        if (settings.effects.stereoWidth != 1.0f) {
-            const float mid = (sL + sR) * 0.5f;
-            const float side = (sL - sR) * 0.5f * settings.effects.stereoWidth;
-            sL = mid + side;
-            sR = mid - side;
-        }
-
-        comp.process(sL, sR, settings.effects.compressor);
-        lim.process(sL, sR, settings.effects.limiter);
-
-        renderedL[i] = sL;
-        renderedR[i] = sR;
-    }
-
-    wavCache_.capture(renderedL, renderedR, sampleRate_);
-}
-
-void ClapEngine::unlockClap() noexcept {
-    wavCache_.clear();
-}
-
-bool ClapEngine::restoreLockedWav(const std::vector<uint8_t>& wavBytes) {
-    return wavCache_.fromWavBytes(wavBytes);
-}
-
 void ClapEngine::triggerClap(
     const EngineSettings& settings,
     double samplePpq,
     double bpm,
     double beatsPerBar,
     float velocity,
-    int semitoneOffset,
+    int midiNote,
     bool reverseCue) noexcept {
     triggerSerial_++;
     currentClapProgress_ = 0.0f;
     reverb_.triggerGate();
+
+    const std::size_t voiceIndex = allocateVoice();
+    auto& voice = voices_[voiceIndex];
 
     // Check if reverse sync should be engaged
     const bool engageReverse = shouldTriggerReverse(settings.effects.reverseMode, reverseCue, samplePpq, beatsPerBar);
@@ -267,7 +80,7 @@ void ClapEngine::triggerClap(
 
         // Pre-render a brief clap hit into reverse buffer
         std::vector<float> forwardL, forwardR;
-        synth_.renderBlock(forwardL, forwardR, settings.synth, velocity, semitoneOffset);
+        voice.synth.renderBlock(forwardL, forwardR, settings.synth, velocity, midiNote);
 
         const int copyCount = std::min(reverseDuration_, static_cast<int>(forwardL.size()));
         for (int i = 0; i < reverseDuration_; ++i) {
@@ -286,13 +99,25 @@ void ClapEngine::triggerClap(
         isReversing_ = true;
     }
 
-    // Trigger normal hit
-    if (wavCache_.isLocked()) {
-        wavPlayHead_ = 0;
-        wavVelocity_ = velocity;
-    } else {
-        synth_.trigger(settings.synth, 69 + semitoneOffset, velocity);
+    voice.synth.trigger(settings.synth, midiNote, velocity);
+    voice.triggerOrder = ++voiceOrderCounter_;
+    lastTriggeredVoice_ = voiceIndex;
+}
+
+std::size_t ClapEngine::allocateVoice() const noexcept {
+    for (std::size_t i = 0; i < voices_.size(); ++i) {
+        if (!voices_[i].synth.isPlaying()) {
+            return i;
+        }
     }
+
+    std::size_t oldestVoice = 0;
+    for (std::size_t i = 1; i < voices_.size(); ++i) {
+        if (voices_[i].triggerOrder < voices_[oldestVoice].triggerOrder) {
+            oldestVoice = i;
+        }
+    }
+    return oldestVoice;
 }
 
 void ClapEngine::process(
@@ -314,22 +139,15 @@ void ClapEngine::process(
         } else if (cc.controller == 74) {
             ccBrightness_ = static_cast<float>(cc.value) / 127.0f;
         } else if (cc.controller == 120 || cc.controller == 123) {
-            synth_.reset();
-            wavPlayHead_ = -1;
+            for (auto& voice : voices_) {
+                voice.synth.reset();
+                voice.triggerOrder = 0;
+            }
+            voiceOrderCounter_ = 0;
             reversePlayHead_ = -1;
         } else if (cc.controller == 121) {
             ccVolume_ = 1.0f;
             ccBrightness_ = 1.0f;
-        }
-    }
-
-    // Check lock state changes
-    if (settings.lockIn != previousLockState_) {
-        previousLockState_ = settings.lockIn;
-        if (settings.lockIn && !wavCache_.isLocked()) {
-            lockCurrentClap(settings);
-        } else if (!settings.lockIn && wavCache_.isLocked()) {
-            unlockClap();
         }
     }
 
@@ -346,42 +164,29 @@ void ClapEngine::process(
         // Trigger MIDI events occurring at this sample offset
         while (triggerIdx < static_cast<int>(midiTriggers.size()) && midiTriggers[triggerIdx].sampleOffset <= sample) {
             const auto& trig = midiTriggers[triggerIdx++];
-            int semitoneOffset = 0;
-            if (settings.noteTracking && !trig.audition) {
-                // Pitch relative to root note
-                const int rootMidi = 69;
-                semitoneOffset = trig.noteNumber - rootMidi;
-            }
-            triggerClap(settings, ppq, transport.bpm, beatsPerBar, trig.velocity, semitoneOffset, trig.audition);
+            triggerClap(settings, ppq, transport.bpm, beatsPerBar, trig.velocity, trig.noteNumber, trig.audition);
         }
 
         float sL = 0.0f;
         float sR = 0.0f;
 
-        // 1. Play locked WAV or realtime synth
-        if (wavCache_.isLocked()) {
-            if (wavPlayHead_ >= 0 && wavPlayHead_ < static_cast<int>(wavCache_.left().size())) {
-                sL = wavCache_.left()[wavPlayHead_] * wavVelocity_;
-                sR = wavCache_.right()[wavPlayHead_] * wavVelocity_;
-                wavPlayHead_++;
-                currentClapProgress_ = static_cast<float>(wavPlayHead_) / static_cast<float>(wavCache_.left().size());
-            } else {
-                wavPlayHead_ = -1;
-                currentClapProgress_ = 1.0f;
+        // Sum all active procedural voices.
+        auto activeSettings = settings.synth;
+        if (std::abs(ccBrightness_ - 1.0f) > 0.001f) {
+            activeSettings.noiseLPF = std::clamp(settings.synth.noiseLPF * ccBrightness_, 200.0f, 20000.0f);
+        }
+        for (auto& voice : voices_) {
+            if (!voice.synth.isPlaying()) {
+                continue;
             }
+            const auto frame = voice.synth.processSample(activeSettings);
+            sL += frame.left;
+            sR += frame.right;
+        }
+        if (voices_[lastTriggeredVoice_].synth.isPlaying()) {
+            currentClapProgress_ = voices_[lastTriggeredVoice_].synth.getEnvelopeProgress();
         } else {
-            if (synth_.isPlaying()) {
-                auto activeSettings = settings.synth;
-                if (std::abs(ccBrightness_ - 1.0f) > 0.001f) {
-                    activeSettings.noiseLPF = std::clamp(settings.synth.noiseLPF * ccBrightness_, 200.0f, 20000.0f);
-                }
-                const auto frame = synth_.processSample(activeSettings);
-                sL = frame.left;
-                sR = frame.right;
-                currentClapProgress_ = synth_.getEnvelopeProgress();
-            } else {
-                currentClapProgress_ = 1.0f;
-            }
+            currentClapProgress_ = 1.0f;
         }
 
         // 2. Mix reverse swell
@@ -394,44 +199,42 @@ void ClapEngine::process(
             isReversing_ = false;
         }
 
-        // 3. Effects processing (only applied live if not locked-in)
-        if (!wavCache_.isLocked()) {
-            slapback_.process(sL, sR, settings.effects.slapbackDivision, settings.effects.slapbackMix, transport.bpm);
+        // 3. Shared effects processing
+        slapback_.process(sL, sR, settings.effects.slapbackDivision, settings.effects.slapbackMix, transport.bpm);
 
-            const auto reverbFrame = reverb_.process(
-                sL,
-                sR,
-                settings.effects.reverbSize,
-                settings.effects.reverbDecayMs,
-                settings.effects.reverbDamp,
-                settings.effects.reverbGateMs,
-                sampleRate_);
-            const float reverbMix = std::clamp(settings.effects.reverbMix, 0.0f, 1.0f);
-            sL = sL * (1.0f - reverbMix * 0.5f) + reverbFrame.left * reverbMix;
-            sR = sR * (1.0f - reverbMix * 0.5f) + reverbFrame.right * reverbMix;
+        const auto reverbFrame = reverb_.process(
+            sL,
+            sR,
+            settings.effects.reverbSize,
+            settings.effects.reverbDecayMs,
+            settings.effects.reverbDamp,
+            settings.effects.reverbGateMs,
+            sampleRate_);
+        const float reverbMix = std::clamp(settings.effects.reverbMix, 0.0f, 1.0f);
+        sL = sL * (1.0f - reverbMix * 0.5f) + reverbFrame.left * reverbMix;
+        sR = sR * (1.0f - reverbMix * 0.5f) + reverbFrame.right * reverbMix;
 
-            // Distortion impact shaper
-            if (settings.effects.distMix > 0.001f) {
-                const float wetDistL = distL_.processSample(sL, settings.effects.distType, settings.effects.distDrive, settings.effects.distTone, sampleRate_);
-                const float wetDistR = distR_.processSample(sR, settings.effects.distType, settings.effects.distDrive, settings.effects.distTone, sampleRate_);
-                sL = sL * (1.0f - settings.effects.distMix) + wetDistL * settings.effects.distMix;
-                sR = sR * (1.0f - settings.effects.distMix) + wetDistR * settings.effects.distMix;
-            }
-
-            // Global Stereo Width (Mid/Side processing)
-            if (settings.effects.stereoWidth != 1.0f) {
-                const float mid = (sL + sR) * 0.5f;
-                const float side = (sL - sR) * 0.5f * settings.effects.stereoWidth;
-                sL = mid + side;
-                sR = mid - side;
-            }
-
-            // Dynamics: Compressor
-            compressor_.process(sL, sR, settings.effects.compressor);
-
-            // Dynamics: Brickwall Limiter
-            limiter_.process(sL, sR, settings.effects.limiter);
+        // Distortion impact shaper
+        if (settings.effects.distMix > 0.001f) {
+            const float wetDistL = distL_.processSample(sL, settings.effects.distType, settings.effects.distDrive, settings.effects.distTone, sampleRate_);
+            const float wetDistR = distR_.processSample(sR, settings.effects.distType, settings.effects.distDrive, settings.effects.distTone, sampleRate_);
+            sL = sL * (1.0f - settings.effects.distMix) + wetDistL * settings.effects.distMix;
+            sR = sR * (1.0f - settings.effects.distMix) + wetDistR * settings.effects.distMix;
         }
+
+        // Global Stereo Width (Mid/Side processing)
+        if (settings.effects.stereoWidth != 1.0f) {
+            const float mid = (sL + sR) * 0.5f;
+            const float side = (sL - sR) * 0.5f * settings.effects.stereoWidth;
+            sL = mid + side;
+            sR = mid - side;
+        }
+
+        // Dynamics: Compressor
+        compressor_.process(sL, sR, settings.effects.compressor);
+
+        // Dynamics: Brickwall Limiter
+        limiter_.process(sL, sR, settings.effects.limiter);
 
         // Apply master gain
         sL *= masterGain;

@@ -2,7 +2,8 @@
 
 #include "ClapSynth.h"
 #include "Effects.h"
-#include <atomic>
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -58,29 +59,7 @@ struct ClapEffectSettings {
 struct EngineSettings {
     ClapSynthSettings synth{};
     ClapEffectSettings effects{};
-    bool noteTracking = false;     // false = Fixed (audition root), true = Note tracking
-    bool lockIn = false;           // Lock in rendered WAV buffer
     bool bypass = false;
-};
-
-// Internal 32-bit float stereo WAV cache for deterministic Lock-In mode
-class ClapWavCache {
-public:
-    void clear() noexcept;
-    void capture(const std::vector<float>& left, const std::vector<float>& right, double sampleRate);
-    [[nodiscard]] bool isLocked() const noexcept { return isLocked_; }
-    [[nodiscard]] double sampleRate() const noexcept { return sampleRate_; }
-    [[nodiscard]] const std::vector<float>& left() const noexcept { return left_; }
-    [[nodiscard]] const std::vector<float>& right() const noexcept { return right_; }
-
-    [[nodiscard]] std::vector<uint8_t> toWavBytes() const;
-    bool fromWavBytes(const std::vector<uint8_t>& wavBytes);
-
-private:
-    bool isLocked_ = false;
-    double sampleRate_ = 48000.0;
-    std::vector<float> left_;
-    std::vector<float> right_;
 };
 
 class ClapEngine {
@@ -99,13 +78,6 @@ public:
         int numSamples,
         std::span<const MidiCcEvent> controlChanges = {}) noexcept;
 
-    void lockCurrentClap(const EngineSettings& settings);
-    void unlockClap() noexcept;
-    bool restoreLockedWav(const std::vector<uint8_t>& wavBytes);
-
-    [[nodiscard]] bool isClapLocked() const noexcept { return wavCache_.isLocked(); }
-    [[nodiscard]] const ClapWavCache& wavCache() const noexcept { return wavCache_; }
-
     [[nodiscard]] float currentPeak() const noexcept { return currentPeak_; }
     [[nodiscard]] float currentBeatPhase() const noexcept { return currentBeatPhase_; }
     [[nodiscard]] float currentClapProgress() const noexcept { return currentClapProgress_; }
@@ -119,24 +91,27 @@ private:
         double bpm,
         double beatsPerBar,
         float velocity,
-        int semitoneOffset,
+        int midiNote,
         bool reverseCue) noexcept;
+
+    [[nodiscard]] std::size_t allocateVoice() const noexcept;
+
+    struct Voice {
+        ClapSynth synth;
+        uint64_t triggerOrder = 0;
+    };
 
     double sampleRate_ = 48000.0;
     double fallbackPpq_ = 0.0;
-    bool previousLockState_ = false;
-
-    ClapSynth synth_;
+    std::array<Voice, 8> voices_{};
+    uint64_t voiceOrderCounter_ = 0;
+    std::size_t lastTriggeredVoice_ = 0;
     SlapbackDelay slapback_;
     GatedStereoReverb reverb_;
     DistortionShaper distL_;
     DistortionShaper distR_;
     StereoCompressor compressor_;
     BrickwallLimiter limiter_;
-
-    ClapWavCache wavCache_;
-    int wavPlayHead_ = -1;
-    float wavVelocity_ = 1.0f;
 
     // Reverse swell buffer
     std::vector<float> reverseBufferL_;
