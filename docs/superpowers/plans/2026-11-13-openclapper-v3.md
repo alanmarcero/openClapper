@@ -157,7 +157,7 @@
 - Modify: `Source/Plugin/PluginProcessor.h` and `Source/Plugin/PluginProcessor.cpp` to report the active patch's tail duration.
 - Modify: `README.md` to remove the stale v1 screenshot and describe the updated effect behavior.
 
-- [ ] Review the full diff against `origin/main`; run `git diff --check` and confirm only requested files changed.
+- [x] Review the full diff against updated `origin/main`; `git diff --check` is clean, changes are within the plan's source/docs and legacy test updates, and the read-only review found no Critical or Important issues.
 - [x] Configure a Release build if needed: `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOC_BUILD_PLUGIN=ON -DOC_BUILD_TESTS=ON` (the existing build was auto-reconfigured after the version update).
 - [x] Build the plugin and test executables without running tests: `cmake --build build --config Release --parallel`.
 - [x] Confirm the build exits successfully and inspect its complete output (exit code 0; tests not run).
