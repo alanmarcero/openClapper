@@ -189,14 +189,8 @@ openclapper::core::EngineSettings readSettings(const juce::AudioProcessorValueTr
     if (const auto* pToneMode = apvts.getRawParameterValue(kToneMode)) {
         s.synth.toneMode = static_cast<openclapper::core::ToneMode>(static_cast<int>(*pToneMode));
     }
-    s.synth.note = static_cast<int>(*apvts.getRawParameterValue(kToneNote));
-    s.synth.octave = static_cast<int>(*apvts.getRawParameterValue(kToneOctave));
-    s.synth.fineCents = *apvts.getRawParameterValue(kToneFine);
-    s.synth.toneFreqHz = *apvts.getRawParameterValue(kToneFreq);
     s.synth.toneQ = *apvts.getRawParameterValue(kToneQ);
     s.synth.toneDecayMs = *apvts.getRawParameterValue(kToneDecay);
-    s.synth.tonePitchEnv = *apvts.getRawParameterValue(kTonePitchEnv);
-    s.synth.tonePitchDecayMs = *apvts.getRawParameterValue(kTonePitchDecay);
     s.synth.toneLevel = *apvts.getRawParameterValue(kToneLevel);
 
     // Noise & Sizzle
@@ -249,9 +243,6 @@ openclapper::core::EngineSettings readSettings(const juce::AudioProcessorValueTr
 
     s.effects.stereoWidth = *apvts.getRawParameterValue(kStereoWidth);
     s.effects.outputGainDb = *apvts.getRawParameterValue(kOutputGain);
-
-    s.noteTracking = *apvts.getRawParameterValue(kMidiMode) > 0.5f;
-    s.lockIn = *apvts.getRawParameterValue(kLockIn) > 0.5f;
 
     return s;
 }

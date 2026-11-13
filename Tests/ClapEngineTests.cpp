@@ -27,28 +27,6 @@ TEST_CASE("ClapEngine responds to MIDI trigger and processes audio", "[core][eng
     REQUIRE(engine.currentClapProgress() < 1.0f);
 }
 
-TEST_CASE("ClapEngine WAV Lock-In captures and recalls audio bit-exact", "[core][engine]") {
-    ClapEngine engine;
-    engine.prepare(48000.0);
-
-    EngineSettings settings;
-    engine.lockCurrentClap(settings);
-
-    REQUIRE(engine.isClapLocked());
-    REQUIRE(!engine.wavCache().left().empty());
-
-    const auto wavBytes = engine.wavCache().toWavBytes();
-    REQUIRE(wavBytes.size() > 44);
-
-    ClapEngine restoredEngine;
-    restoredEngine.prepare(48000.0);
-    const bool success = restoredEngine.restoreLockedWav(wavBytes);
-
-    REQUIRE(success);
-    REQUIRE(restoredEngine.isClapLocked());
-    REQUIRE(restoredEngine.wavCache().left().size() == engine.wavCache().left().size());
-}
-
 TEST_CASE("ClapEngine responds to MIDI CC 74 brightness sweep", "[core][engine]") {
     ClapEngine engine;
     engine.prepare(48000.0);
