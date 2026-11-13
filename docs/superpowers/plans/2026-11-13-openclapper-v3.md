@@ -52,6 +52,7 @@
 **Files:**
 - Modify: `Source/Core/ClapSynth.h`
 - Modify: `Source/Core/ClapSynth.cpp`
+- Modify: `Source/Core/ClapEngine.cpp` only to adapt its existing synth trigger call
 - Modify: `Tests/ClapSynthTests.cpp` only where existing calls use removed pitch fields or signatures
 
 **Interfaces:**
@@ -61,6 +62,7 @@
 
 - [ ] Replace note/octave/fine-cent synthesis fields with a MIDI note number captured by `trigger`.
 - [ ] Build the voice from a stable fundamental, tuned partials below Nyquist, separately shaped noise bursts, and an independent transient layer. Keep the fundamental fixed to the captured MIDI note for the tonal decay.
+- [ ] Adapt the current engine call from relative semitones to MIDI note `69 + semitoneOffset`; Task 3 replaces that temporary conversion with the event's raw MIDI note.
 - [ ] Update the existing pitch-oriented core test calls to the MIDI-note API without adding test cases.
 - [ ] Build the core target: `cmake --build build --target openclapper_core --config Release --parallel`.
 - [ ] Commit the completed core voice with the personal git identity.

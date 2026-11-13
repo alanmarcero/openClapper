@@ -5,16 +5,9 @@
 #include <cmath>
 #include <cstdint>
 #include <numbers>
-#include <string_view>
 #include <vector>
 
 namespace openclapper::core {
-
-inline constexpr int kNumNotes = 12;
-
-inline constexpr std::array<std::string_view, kNumNotes> kNoteNames = {
-    "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
-};
 
 enum class NoiseType {
     White = 0,
@@ -37,11 +30,6 @@ enum class ClickType {
 };
 
 struct ClapSynthSettings {
-    // Pitch & Tuning
-    int note = 9;                 // 0..11 (A), default A
-    int octave = 3;               // 1..8, default 3 (expanded with high octaves)
-    float fineCents = 0.0f;       // -50..+50 cents
-
     // Pre-Clap Flam (Micro-bursts)
     int preClapCount = 3;         // 1..5 micro-bursts before main slap
     float preClapSpreadMs = 12.0f;// 2..45 ms spacing between bursts
@@ -52,11 +40,8 @@ struct ClapSynthSettings {
 
     // Resonant Body / Tone
     ToneMode toneMode = ToneMode::Bandpass;
-    float toneFreqHz = 1100.0f;   // 200..4000 Hz center frequency
     float toneQ = 3.2f;           // 0.5..12.0 resonance
     float toneDecayMs = 120.0f;   // 15..600 ms tone decay
-    float tonePitchEnv = 7.0f;    // -24..+24 semitones pitch drop
-    float tonePitchDecayMs = 18.0f;// 3..80 ms pitch decay
     float toneLevel = 0.75f;      // 0..1 level of tone core
 
     // Noise & Sizzle
@@ -85,14 +70,9 @@ struct ClapSynthSettings {
     bool operator==(const ClapSynthSettings&) const noexcept = default;
 };
 
-// Computes base tuned frequency from note index, octave, and fine cents.
-[[nodiscard]] inline float noteToHz(int noteIndex, int octave, float fineCents = 0.0f) noexcept {
-    const int note = (noteIndex % kNumNotes + kNumNotes) % kNumNotes;
-    const int oct = std::clamp(octave, 1, 8);
-    // MIDI note: Octave 4 C is 60, Octave 4 A is 69 (440 Hz)
-    const int midiNote = 12 * (oct + 1) + note;
-    const float totalNotes = static_cast<float>(midiNote - 69) + (fineCents / 100.0f);
-    return 440.0f * std::pow(2.0f, totalNotes / 12.0f);
+[[nodiscard]] inline float midiNoteToHz(int midiNote) noexcept {
+    const int note = std::clamp(midiNote, 0, 127);
+    return 440.0f * std::pow(2.0f, static_cast<float>(note - 69) / 12.0f);
 }
 
 // Biquad filter state
@@ -175,17 +155,17 @@ private:
     float gateEnvelope_ = 1.0f;
 };
 
-// Pure C++20 Clap Synthesizer
+// Procedural MIDI-pitched clap voice
 class ClapSynth {
 public:
     void prepare(double sampleRate);
     void reset() noexcept;
-    void trigger(const ClapSynthSettings& settings, float velocity = 1.0f, int semitoneOffset = 0) noexcept;
+    void trigger(const ClapSynthSettings& settings, int midiNote, float velocity = 1.0f) noexcept;
     [[nodiscard]] StereoFrame processSample(const ClapSynthSettings& settings) noexcept;
     [[nodiscard]] bool isPlaying() const noexcept { return isPlaying_; }
     [[nodiscard]] float getEnvelopeProgress() const noexcept;
 
-    // Direct render block for offline preview, tests, or WAV lock-in
+    // Direct render block for offline preview and core checks.
     void renderBlock(
         std::vector<float>& leftOut,
         std::vector<float>& rightOut,
@@ -199,29 +179,24 @@ private:
     double sampleRate_ = 48000.0;
     bool isPlaying_ = false;
     float velocity_ = 1.0f;
-    int semitoneOffset_ = 0;
+    int midiNote_ = 69;
+    uint32_t triggerCount_ = 0;
 
     int totalSamplesPlayed_ = 0;
     int totalDurationSamples_ = 0;
 
-    // Micro-burst pre-clap timing
-    int preClapCount_ = 3;
+    int burstCount_ = 0;
     std::array<int, 5> burstStartSamples_{};
     std::array<float, 5> burstAmplitudes_{};
     std::array<float, 5> burstPans_{};
-    int mainSlapSample_ = 0;
 
-    // Tone synthesis state
-    float tonePhase_ = 0.0f;
+    std::array<float, 8> partialFrequencies_{};
+    std::array<float, 8> partialPhases_{};
 
-    // Filter states
-    BiquadState toneFilterL_{};
-    BiquadState toneFilterR_{};
     BiquadState noiseHPF_L_{};
     BiquadState noiseHPF_R_{};
     BiquadState noiseLPF_L_{};
     BiquadState noiseLPF_R_{};
-    BiquadState clickBPF_{};
 
     // Filter cache to avoid recalculating biquad trig every sample
     float lastHPF_ = -1.0f;
@@ -234,13 +209,6 @@ private:
     float pinkB0_ = 0.0f, pinkB1_ = 0.0f, pinkB2_ = 0.0f;
     float lofiHeld_ = 0.0f;
     int lofiCounter_ = 0;
-
-    // Delay buffer for stereo width
-    std::vector<float> widthDelayBuffer_;
-    int widthDelayWritePos_ = 0;
-
-    // Gated Reverb
-    GatedStereoReverb reverb_;
 };
 
 } // namespace openclapper::core
