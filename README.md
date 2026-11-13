@@ -1,184 +1,101 @@
-# openClapper
+# openClapper v3
 
 [Install with OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest)
 
 Clap on. Clap off.
 
-openClapper is an EDM and trance clap drum synthesizer plugin. It includes multi-burst micro-slap flam with stereo micro-panning, chromatic resonant body tuning across 8 octaves with root note selection, fine cents, and dedicated pitch lock-in across preset browsing, four-texture noise shaping, transient click selection, warm impact saturation, compressor and brickwall limiter dynamics, non-linear gated reverb with allpass diffusion, host-synced reverse swells, session WAV lock-in, and the animated clap visualizer stage.
+openClapper is a trance-focused clap synthesizer for VST3, AU, LV2, and Standalone on macOS, Windows, and Linux. Version 3 replaces pitch selection and sample lock-in with direct MIDI tuning: each incoming note sets the clap's tonal fundamental. MIDI note 69 is A4 at 440 Hz, so playing A4 produces an A-tuned clap; every semitone and octave follows equal temperament.
 
-Available as VST3, AU, LV2, and Standalone on macOS, Windows, and Linux.
+The synthesis engine builds each hit from a tuned resonant body, layered noise, a transient click, and up to five pre-clap bursts. Eight voices can overlap. Shared effects add host-tempo slapback, gated stereo reverb, distortion, compression, limiting, and stereo width.
 
 ![openClapper user interface](assets/openClapper-screenshot.png)
 
-## Sound architecture
+## MIDI tuning
 
-### Pre-clap flam
+Incoming MIDI note-ons trigger the corresponding pitch directly, on any MIDI channel. The tonal body follows the standard MIDI frequency mapping:
 
-Controls the micro-bursts that precede the main collective slap impact. Pre-burst decay and organic jitter are baked into the spread spacing for tight, mud-free transient definition.
+```text
+frequency = 440 × 2^((MIDI note - 69) / 12)
+```
 
-| Parameter | ID | Range | Description |
-|---|---|---|---|
-| Bursts | `pre_bursts` | 1 to 5 | Number of micro-bursts before the main slap |
-| Spread | `pre_spread` | 2.0 to 45.0 ms | Time spacing between bursts |
-| Flam Pan | `flam_spread` | 0.0 to 1.0 | Alternating stereo micro-panning width across pre-bursts |
-| Level | `pre_level` | 0.0 to 1.0 | Pre-clap output volume |
+For example, notes 57, 69, and 81 produce A3 at 220 Hz, A4 at 440 Hz, and A5 at 880 Hz. Velocity scales the voice level. The on-screen audition button triggers A4.
 
-### Resonant body
+## Sound controls
 
-Provides the tuned harmonic weight and pitch drop of the clap core, with musical root note selection, octave register, and fine cents tuning.
+| Section | Controls | What they shape |
+|---|---|---|
+| Pre-clap flam | Bursts, spread, decay, humanize, pan, level | Micro-bursts and stereo movement before the main hit |
+| Resonant body | Mode, Q, decay, level | MIDI-tuned body character and sustain |
+| Noise | Type, attack, hold, decay, curve, HPF, LPF, width, level | The clap's broadband texture and stereo spread |
+| Transient click | Type, level, frequency | The initial needle, crack, or thump |
+| Distortion | Type, drive, tone, mix | Tape, tube, hard-clip, or wavefold color |
+| Compressor | Threshold, ratio, attack, release, makeup, mix | Transient density and loudness |
+| Limiter | Ceiling, release, enabled | Output peak control |
+| Gated reverb | Size, decay, damping, gate time, mix | Shared stereo room and gated tail |
+| Slapback | Division, mix | One host-synced repeat with no feedback |
+| Reverse swell | Sync mode, mix | Host-tempo reverse build into the clap |
+| Master | Width, output gain | Final stereo image and level |
 
-| Parameter | ID | Range | Description |
-|---|---|---|---|
-| Mode | `tone_mode` | Bandpass, Sub Thump, Saturated Tri, Cyber Square | Tonal generator algorithm |
-| Note | `tone_note` | C through B | Musical root pitch |
-| Octave | `tone_octave` | 1 to 8 | Octave register (extended with high octaves) |
-| Fine | `tone_fine` | -50 to +50 cents | Fine frequency tuning |
-| Lock Pitch | `lock_pitch` | On / Off | Locks musical pitch across presets so tuned pitch stays intact |
-| Res / Q | `tone_q` | 0.5 to 12.0 | Filter resonance |
-| Decay | `tone_decay` | 15 to 600 ms | Body decay envelope |
-| Pitch Drop | `tone_pitch_env` | -24 to +24 semitones | Initial pitch dive depth |
-| Level | `tone_level` | 0.0 to 1.0 | Tonal body volume |
+### Host-synced slapback
 
-### Noise and sizzle
-
-Shapes the primary high-frequency noise body and stereo spread. Attack is baked to instantaneous punch and hold is optimized for maximum transient clarity.
-
-| Parameter | ID | Range | Description |
-|---|---|---|---|
-| Type | `noise_type` | White, Pink, Velvet, Lo-Fi | Noise spectrum source |
-| Decay | `noise_decay` | 20 to 1000 ms | Noise decay time |
-| HPF | `noise_hpf` | 20 to 2500 Hz | 12 dB/oct high-pass filter cutoff |
-| LPF | `noise_lpf` | 800 to 20000 Hz | 12 dB/oct low-pass filter cutoff |
-| Width | `noise_stereo_width` | 0.0 to 2.0 | Mid/Side stereo width (0 mono, 1 stereo, 2 wide) |
-| Level | `noise_level` | 0.0 to 1.0 | Noise level |
-
-### Transient click
-
-Adds an initial impact needle or crack to define the clap start.
-
-| Parameter | ID | Range | Description |
-|---|---|---|---|
-| Click Type | `click_type` | Needle, Crack, Thump | Transient generator shape |
-| Click Lvl | `click_level` | 0.0 to 1.0 | Level of the initial transient |
-| Click Freq | `click_freq` | 1000 to 12000 Hz | Center frequency of the click impulse |
-
-### Impact distortion
-
-Saturates and hardens the clap attack and body.
-
-| Parameter | ID | Range | Description |
-|---|---|---|---|
-| Dist Type | `dist_type` | Tape, Tube, Hard Clip, Wavefold | Distortion transfer curve |
-| Drive | `dist_drive` | 0.0 to 1.0 | Saturation drive (adds up to +28 dB internal gain) |
-| Tone | `dist_tone` | -1.0 to +1.0 | Post-distortion tilt filter (-1 dark, +1 bright) |
-| Dist Mix | `dist_mix` | 0.0 to 1.0 | Parallel distortion mix |
-
-### Compressor and limiter
-
-Dynamics processing stage for transient control and loudness.
-
-| Parameter | ID | Range | Description |
-|---|---|---|---|
-| Threshold | `comp_thresh` | -40.0 to 0.0 dB | Compressor threshold |
-| Ratio | `comp_ratio` | 1.0:1 to 20.0:1 | Compression ratio |
-| Attack | `comp_attack` | 0.1 to 50.0 ms | Compressor attack time |
-| Release | `comp_release` | 10 to 500 ms | Compressor release time |
-| Makeup | `comp_makeup` | 0.0 to 24.0 dB | Makeup gain |
-| Comp Mix | `comp_mix` | 0.0 to 1.0 | Parallel compression blend |
-| Ceiling | `limiter_ceiling` | -12.0 to 0.0 dB | Brickwall limiter ceiling |
-| Release | `limiter_release` | 5 to 100 ms | Limiter release time |
-| Limiter Enabled | `limiter_enabled` | On / Off | Engages the zero-overshoot limiter |
-
-### Gated reverb
-
-Algorithmic diffuser reverb with dual allpass stages and gate cutoff.
-
-| Parameter | ID | Range | Description |
-|---|---|---|---|
-| Size | `reverb_size` | 0.1 to 1.0 | Room dimension scaling |
-| Decay | `reverb_decay` | 50 to 2500 ms | Tail reverberation time |
-| Damping | `reverb_damp` | 0.0 to 1.0 | High-frequency damping factor |
-| Gate Time | `reverb_gate` | 0 to 600 ms | Gate cutoff time (0 disables gate) |
-| Rev Mix | `reverb_mix` | 0.0 to 1.0 | Reverb dry/wet blend |
-
-### Reverse swells and master
-
-| Parameter | ID | Range | Description |
-|---|---|---|---|
-| Rev Sync | `reverse_mode` | Off, Beat End, Beat 4 Auto, 1/2 Beat, 1/4 Beat | Host tempo sync mode for reverse swell |
-| Rev Mix | `reverse_mix` | 0.0 to 1.0 | Level of reverse swell |
-| MIDI Mode | `midi_mode` | Fixed (Root), Note Tracking | Fixed pitch or MIDI note pitch tracking |
-| Lock In | `lock_in` | On / Off | Bakes rendered clap into session WAV memory |
-| Width | `stereo_width` | 0.0 to 2.0 | Master stereo image width |
-| Output | `output_gain` | -36.0 to +12.0 dB | Master output volume trim |
+Slapback uses the tempo reported by the host and keeps its delay tail between hits. Choose Off, 1/16, dotted 1/16, 1/8, dotted 1/8, or 1/4. The delay makes one repeat without feedback. If the host has no usable tempo, the engine uses 138 BPM.
 
 ## Factory presets
 
-| Index | Name | Style |
-|---|---|---|
-| 01 | Init Trance Clap | Balanced trance clap with 3-burst flam and gated tail |
-| 02 | Uplifting Euphoria | Extended decay with wide stereo sizzle and hall reverb |
-| 03 | Psytrance Laser Snap | Fast pitch envelope, high Q resonance, tight gate |
-| 04 | Big Room Festival Stomp | Compressed body with tape saturation and sub weight |
-| 05 | 138 BPM Peak Time | Fast transient attack tailored for 138 BPM arrangements |
-| 06 | Dutch Hardstyle Smacker | Hard clip distortion with boosted mid tone |
-| 07 | Progressive Velvet Air | Velvet noise texture with gentle compression |
-| 08 | Future Rave Cyber Slap | Wavefolded resonance with bright click needle |
-| 09 | 90s Eurodance Gated Classic | 160 ms gated tail reminiscent of early digital reverb units |
-| 10 | Vocal Layering Clap | Mid-scooped wide clap designed to leave room for leads |
-| 11 | Electro Sizzle Punch | Lo-fi bit-reduced noise with high distortion drive |
-| 12 | Tech Trance Acid Bite | Narrow bandpass body with quick release gate |
-| 13 | Hands Up German Party | High-pitched flam with room reverb |
-| 14 | Stadium Crowd Swarm | 5-burst wide flam simulating group claps |
-| 15 | Cyberpunk Neon Slam | Wavefold distortion with wide noise stereo image |
-| 16 | Melodic Progressive Dream | Soft tape drive with velvet noise decay |
-| 17 | Melbourne Bounce Spank | Fast compressor release for bouncy offbeat grooves |
-| 18 | Vocal Chop Pre-Swell | Reverse swell into a dry center hit |
-| 19 | Raw Warehouse Techno | Dark filter cutoff with tube saturation |
-| 20 | Trance Energy 2000 | Classic early 2000s gated space with high damping |
-| 21 | Dual Flam Stereo Split | Two wide micro-bursts with maximum channel separation |
-| 22 | Hardcore Punch In Face | Heavy limiter reduction and hard clipping |
-| 23 | Sunset Balearic Chill | Pink noise with gentle attack envelope |
-| 24 | Goa Psy Resonance Ring | High resonance pitch drop in key |
-| 25 | Mainstage Drop Impact | Hard click transient with compressor makeup gain |
-| 26 | Minimal Click & Flam | Dry transient without reverb tail |
-| 27 | Dirty Dutch Pitch Drop | 24-semitone pitch dive on the body core |
-| 28 | Gated Snare-Clap Hybrid | Low 200 Hz body weight layered with noise |
-| 29 | Euphoric Whiteout Noise | Broad-spectrum white noise sweep |
-| 30 | Cyber Clapper Signature | Default sound with 3-burst flam, body tone, and gated space |
-| 31 | Fast Roll 16th Anti-Mud | Short decay envelope optimized for fast 16th-note rolls |
-| 32 | Beat 4 Reverse Pickup | Automatically triggers reverse swell on measure beat 4 |
+The 44 factory presets are redesigned for trance, from tight gated impacts to wide euphoric and psytrance textures. Each preset recalls the full sound and effect settings, including slapback Off when that preset does not use a repeat.
 
-## MIDI implementation
+| # | Preset | # | Preset |
+|---:|---|---:|---|
+| 01 | Mainstage Anthem Gate | 23 | Full-On Bloom |
+| 02 | Uplift Wide Gate | 24 | Forest Crackle |
+| 03 | Euphoric Bloom 1/8 Slap | 25 | Night Psy Metal |
+| 04 | Festival Stack | 26 | Dark Psy Pulse |
+| 05 | 138 Peak Punch | 27 | Tech Trance Stab |
+| 06 | Dutch Hard Gate | 28 | Rave Siren Pickup |
+| 07 | Progressive Velvet Air | 29 | Millennium Hands Up |
+| 08 | Future Rave Cyber Slap | 30 | Classic 138 Gate |
+| 09 | Euro Gated Classic | 31 | Dutch Lead Impact |
+| 10 | Hands Up Shimmer | 32 | Reverse Skyline |
+| 11 | Progressive Glass | 33 | Big Room Lift |
+| 12 | Sunset Wide | 34 | Piano Anthem Gate |
+| 13 | Rolling Progressive | 35 | Laser Stadium |
+| 14 | Deep Pool Clap | 36 | Vintage Euro Lift |
+| 15 | Late Night Pulse | 37 | Minimal Club Tap |
+| 16 | Aurora Whisper | 38 | Warm Dub 1/8 |
+| 17 | Supersaw Haze | 39 | Dry Utility Clap |
+| 18 | Progressive Dotted Slap | 40 | Wide Utility Clap |
+| 19 | Psy Fractal Snap | 41 | Tight Roll Clap |
+| 20 | Offbeat Goa | 42 | Quarter Note Bloom |
+| 21 | Spiral Acid Bite | 43 | MIDI Reference Clap |
+| 22 | Cosmic Ping 1/4 | 44 | Euphoric Trance Lift |
 
-All MIDI channels are received. Incoming MIDI note-on events trigger the voice. Note velocity scales synth volume, body attack, and locked WAV playback. When MIDI mode is set to Note Tracking, the pitch transposes relative to the root note.
+## MIDI controllers
 
 | Controller | Function |
 |---|---|
 | CC 7 | Master output volume |
-| CC 74 | Noise low-pass filter cutoff sweep |
-| CC 120 / 123 | All sound off / all notes off (silences active voice) |
-| CC 121 | Reset all controllers (resets CC 7 and CC 74 to 127) |
+| CC 74 | Noise low-pass cutoff |
+| CC 120 / 123 | All sound off / all notes off |
+| CC 121 | Reset CC 7 and CC 74 |
 
 ## Build
 
-Building requires CMake 3.22 or newer and a C++20 compiler.
+Building requires CMake 3.22 or newer and a C++20 compiler. JUCE 8.0.9 and Catch2 are fetched by CMake.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release --parallel
-ctest --test-dir build -C Release --output-on-failure
 ```
 
 ## Repository layout
 
 | Path | Contents |
 |---|---|
-| `Source/Core` | C++20 DSP engine: `ClapSynth`, `Effects`, and `ClapEngine` |
-| `Source/Plugin` | JUCE 8 plugin wrappers, UI controls, panels, parameters, presets |
-| `Tests` | Catch2 unit test suite |
+| `Source/Core` | C++20 clap synthesis, voice engine, slapback, and effects |
+| `Source/Plugin` | JUCE plugin wrapper, interface, controls, parameters, and presets |
+| `Tests` | Catch2 unit tests |
 | `assets` | Faceplate graphics and UI screenshots |
-| `.github/workflows` | Multi-platform CI workflow for macOS, Windows, and Linux |
+| `.github/workflows` | Multi-platform CI and release builds |
 
 ## License
 
