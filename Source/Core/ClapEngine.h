@@ -39,6 +39,15 @@ struct ClapEffectSettings {
     CompressorSettings compressor{};
     LimiterSettings limiter{};
 
+    SlapbackDivision slapbackDivision = SlapbackDivision::Off;
+    float slapbackMix = 0.3f;
+
+    float reverbSize = 0.65f;
+    float reverbDecayMs = 450.0f;
+    float reverbDamp = 0.4f;
+    float reverbGateMs = 160.0f;
+    float reverbMix = 0.35f;
+
     ReverseSyncMode reverseMode = ReverseSyncMode::Off;
     float reverseMix = 0.5f;       // 0..1
 
@@ -118,6 +127,8 @@ private:
     bool previousLockState_ = false;
 
     ClapSynth synth_;
+    SlapbackDelay slapback_;
+    GatedStereoReverb reverb_;
     DistortionShaper distL_;
     DistortionShaper distR_;
     StereoCompressor compressor_;

@@ -139,6 +139,11 @@ void GatedStereoReverb::reset() noexcept {
     gateEnvelope_ = 1.0f;
 }
 
+void GatedStereoReverb::triggerGate() noexcept {
+    sampleCounter_ = 0;
+    gateEnvelope_ = 1.0f;
+}
+
 StereoFrame GatedStereoReverb::process(
     float inLeft,
     float inRight,
@@ -165,10 +170,6 @@ StereoFrame GatedStereoReverb::process(
         }
     } else {
         gateEnvelope_ = 1.0f;
-    }
-
-    if (gateEnvelope_ <= 0.0f) {
-        return { 0.0f, 0.0f };
     }
 
     // Input highpass filter (140 Hz) to keep the reverb tank clean from low rumble

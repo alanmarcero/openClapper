@@ -21,6 +21,62 @@ namespace {
 
 } // namespace
 
+void SlapbackDelay::prepare(double sampleRate) {
+    sampleRate_ = std::max(1.0, sampleRate);
+    constexpr double maxDelaySeconds = 4.0;
+    const auto capacity = static_cast<size_t>(std::ceil(sampleRate_ * maxDelaySeconds)) + 1;
+    leftBuffer_.assign(capacity, 0.0f);
+    rightBuffer_.assign(capacity, 0.0f);
+    writeIndex_ = 0;
+}
+
+void SlapbackDelay::reset() noexcept {
+    std::fill(leftBuffer_.begin(), leftBuffer_.end(), 0.0f);
+    std::fill(rightBuffer_.begin(), rightBuffer_.end(), 0.0f);
+    writeIndex_ = 0;
+}
+
+void SlapbackDelay::process(
+    float& left,
+    float& right,
+    SlapbackDivision division,
+    float mix,
+    double bpm) noexcept {
+    if (leftBuffer_.empty() || rightBuffer_.empty()) {
+        return;
+    }
+
+    const float dryLeft = left;
+    const float dryRight = right;
+    leftBuffer_[writeIndex_] = dryLeft;
+    rightBuffer_[writeIndex_] = dryRight;
+
+    constexpr std::array<double, 6> beatFractions = { 0.0, 0.25, 0.375, 0.5, 0.75, 1.0 };
+    const auto divisionIndex = static_cast<size_t>(division);
+    if (divisionIndex > 0 && divisionIndex < beatFractions.size() && mix > 0.0f) {
+        const double safeBpm = std::isfinite(bpm) && bpm > 0.0 ? bpm : 138.0;
+        const double delaySamples = std::clamp(
+            beatFractions[divisionIndex] * 60.0 / safeBpm * sampleRate_,
+            1.0,
+            static_cast<double>(leftBuffer_.size() - 1));
+        double readPosition = static_cast<double>(writeIndex_) - delaySamples;
+        if (readPosition < 0.0) {
+            readPosition += static_cast<double>(leftBuffer_.size());
+        }
+
+        const auto firstIndex = static_cast<size_t>(readPosition);
+        const auto secondIndex = (firstIndex + 1) % leftBuffer_.size();
+        const float fraction = static_cast<float>(readPosition - static_cast<double>(firstIndex));
+        const float delayedLeft = leftBuffer_[firstIndex] + (leftBuffer_[secondIndex] - leftBuffer_[firstIndex]) * fraction;
+        const float delayedRight = rightBuffer_[firstIndex] + (rightBuffer_[secondIndex] - rightBuffer_[firstIndex]) * fraction;
+        const float wet = std::clamp(mix, 0.0f, 1.0f);
+        left = dryLeft * (1.0f - wet) + delayedLeft * wet;
+        right = dryRight * (1.0f - wet) + delayedRight * wet;
+    }
+
+    writeIndex_ = (writeIndex_ + 1) % leftBuffer_.size();
+}
+
 // ============================================================================
 // DistortionShaper
 // ============================================================================

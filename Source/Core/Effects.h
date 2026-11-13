@@ -22,6 +22,28 @@ enum class ReverseSyncMode {
     QuarterBeat = 4
 };
 
+enum class SlapbackDivision {
+    Off = 0,
+    Sixteenth = 1,
+    DottedSixteenth = 2,
+    Eighth = 3,
+    DottedEighth = 4,
+    Quarter = 5
+};
+
+class SlapbackDelay {
+public:
+    void prepare(double sampleRate);
+    void reset() noexcept;
+    void process(float& left, float& right, SlapbackDivision division, float mix, double bpm) noexcept;
+
+private:
+    double sampleRate_ = 48000.0;
+    size_t writeIndex_ = 0;
+    std::vector<float> leftBuffer_;
+    std::vector<float> rightBuffer_;
+};
+
 // ============================================================================
 // Distortion / Impact Shaper
 // ============================================================================
