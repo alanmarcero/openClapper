@@ -32,7 +32,6 @@ public:
     void setStateInformation(const void* data, int sizeInBytes) override;
 
     void triggerAudition() noexcept { auditionPending_.store(true); }
-    [[nodiscard]] bool isClapLockedIn() const noexcept { return displayLockedIn.load(); }
 
     juce::AudioProcessorValueTreeState parameters;
 
@@ -43,7 +42,6 @@ public:
     std::atomic<float> displayClapProgress{ 1.0f };
     std::atomic<float> displayVelocity{ 1.0f };
     std::atomic<uint32_t> displayTriggerCount{ 0 };
-    std::atomic<bool> displayLockedIn{ false };
 
 private:
     openclapper::core::ClapEngine engine_;

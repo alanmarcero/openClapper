@@ -15,14 +15,8 @@ inline constexpr const char* kPreLevel = "pre_level";
 
 // Resonant Body / Tone
 inline constexpr const char* kToneMode = "tone_mode";
-inline constexpr const char* kToneNote = "tone_note";
-inline constexpr const char* kToneOctave = "tone_octave";
-inline constexpr const char* kToneFine = "tone_fine";
-inline constexpr const char* kToneFreq = "tone_freq";
 inline constexpr const char* kToneQ = "tone_q";
 inline constexpr const char* kToneDecay = "tone_decay";
-inline constexpr const char* kTonePitchEnv = "tone_pitch_env";
-inline constexpr const char* kTonePitchDecay = "tone_pitch_decay";
 inline constexpr const char* kToneLevel = "tone_level";
 
 // Noise & Sizzle
@@ -76,9 +70,6 @@ inline constexpr const char* kReverseMode = "reverse_mode";
 inline constexpr const char* kReverseMix = "reverse_mix";
 
 // Global / Master
-inline constexpr const char* kMidiMode = "midi_mode";
-inline constexpr const char* kLockPitch = "lock_pitch";
-inline constexpr const char* kLockIn = "lock_in";
 inline constexpr const char* kStereoWidth = "stereo_width";
 inline constexpr const char* kOutputGain = "output_gain";
 inline constexpr const char* kPreset = "preset";
