@@ -155,7 +155,7 @@ public:
     void prepare(double sampleRate);
     void reset() noexcept;
     void trigger(const ClapSynthSettings& settings, int midiNote, float velocity = 1.0f) noexcept;
-    [[nodiscard]] StereoFrame processSample(const ClapSynthSettings& settings) noexcept;
+    [[nodiscard]] StereoFrame processSample(const ClapSynthSettings& settings, bool* mainHitStarted = nullptr) noexcept;
     [[nodiscard]] bool isPlaying() const noexcept { return isPlaying_; }
     [[nodiscard]] float getEnvelopeProgress() const noexcept;
 

@@ -179,6 +179,7 @@ void ClapEngine::process(
 
         float sL = 0.0f;
         float sR = 0.0f;
+        bool mainHitAtSample = false;
 
         // Sum all active procedural voices.
         auto activeSettings = settings.synth;
@@ -189,9 +190,14 @@ void ClapEngine::process(
             if (!voice.synth.isPlaying()) {
                 continue;
             }
-            const auto frame = voice.synth.processSample(activeSettings);
+            bool voiceMainHitStarted = false;
+            const auto frame = voice.synth.processSample(activeSettings, &voiceMainHitStarted);
             sL += frame.left;
             sR += frame.right;
+            mainHitAtSample = mainHitAtSample || voiceMainHitStarted;
+        }
+        if (mainHitAtSample) {
+            reverb_.triggerGate();
         }
         if (voices_[lastTriggeredVoice_].synth.isPlaying()) {
             currentClapProgress_ = voices_[lastTriggeredVoice_].synth.getEnvelopeProgress();
@@ -216,7 +222,7 @@ void ClapEngine::process(
             settings.effects.slapbackDivision,
             settings.effects.slapbackMix,
             transport.bpm,
-            triggerAtSample);
+            triggerAtSample || mainHitAtSample);
         if (delayedTrigger) {
             reverb_.triggerGate();
         }
