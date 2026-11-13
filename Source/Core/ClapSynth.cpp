@@ -348,12 +348,19 @@ float ClapSynth::getEnvelopeProgress() const noexcept {
     return std::clamp(static_cast<float>(totalSamplesPlayed_) / static_cast<float>(totalDurationSamples_), 0.0f, 1.0f);
 }
 
-StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings) noexcept {
+StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* mainHitStarted) noexcept {
+    if (mainHitStarted != nullptr) {
+        *mainHitStarted = false;
+    }
+
     if (!isPlaying_) {
         return { 0.0f, 0.0f };
     }
 
     const int currentSample = totalSamplesPlayed_++;
+    if (mainHitStarted != nullptr && currentSample == mainStartSamples_) {
+        *mainHitStarted = true;
+    }
     if (currentSample >= totalDurationSamples_) {
         isPlaying_ = false;
         return { 0.0f, 0.0f };

@@ -146,14 +146,14 @@
 - [x] Rewrite README MIDI behavior, synth description, slapback parameters, preset list, and build/release version references.
 - [x] Set CMake and UI display versions to 3.0.0.
 - [x] Build all configured targets: `cmake --build build --config Release --parallel`.
-- [ ] Commit presets, documentation, and version changes with the personal git identity.
+- [x] Commit presets, documentation, and version changes with the personal git identity (`6859150`).
 
 ### Task 6: Build, push, release, and track completion
 
 **Files:**
-- Modify: `Source/Core/ClapSynth.h` and `Source/Core/ClapSynth.cpp` to place pre-bursts before the main hit.
+- Modify: `Source/Core/ClapSynth.h` and `Source/Core/ClapSynth.cpp` to place pre-bursts before the main hit and report main-hit onset.
 - Modify: `Source/Core/Effects.h` and `Source/Core/Effects.cpp` to carry delayed trigger markers to the shared reverb.
-- Modify: `Source/Core/ClapEngine.cpp` to reset shared effect tails for CC120/123 and retrigger reverb on a delayed repeat.
+- Modify: `Source/Core/ClapEngine.cpp` to reset shared effect tails for CC120/123 and retrigger reverb on main hits and delayed repeats.
 - Modify: `Source/Plugin/PluginProcessor.h` and `Source/Plugin/PluginProcessor.cpp` to report the active patch's tail duration.
 - Modify: `README.md` to remove the stale v1 screenshot and describe the updated effect behavior.
 
