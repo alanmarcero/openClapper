@@ -178,6 +178,7 @@ private:
 
     int totalSamplesPlayed_ = 0;
     int totalDurationSamples_ = 0;
+    int mainStartSamples_ = 0;
 
     int burstCount_ = 0;
     std::array<int, 5> burstStartSamples_{};

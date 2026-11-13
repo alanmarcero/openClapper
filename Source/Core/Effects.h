@@ -35,13 +35,15 @@ class SlapbackDelay {
 public:
     void prepare(double sampleRate);
     void reset() noexcept;
-    void process(float& left, float& right, SlapbackDivision division, float mix, double bpm) noexcept;
+    bool process(float& left, float& right, SlapbackDivision division, float mix, double bpm, bool trigger = false) noexcept;
 
 private:
     double sampleRate_ = 48000.0;
     size_t writeIndex_ = 0;
     std::vector<float> leftBuffer_;
     std::vector<float> rightBuffer_;
+    std::vector<float> triggerBuffer_;
+    bool delayTriggerActive_ = false;
 };
 
 // ============================================================================

@@ -145,6 +145,14 @@ void ClapEngine::process(
             }
             voiceOrderCounter_ = 0;
             reversePlayHead_ = -1;
+            reverseDuration_ = 0;
+            isReversing_ = false;
+            slapback_.reset();
+            reverb_.reset();
+            distL_.reset();
+            distR_.reset();
+            compressor_.reset();
+            limiter_.reset();
         } else if (cc.controller == 121) {
             ccVolume_ = 1.0f;
             ccBrightness_ = 1.0f;
@@ -162,9 +170,11 @@ void ClapEngine::process(
 
     for (int sample = 0; sample < numSamples; ++sample) {
         // Trigger MIDI events occurring at this sample offset
+        bool triggerAtSample = false;
         while (triggerIdx < static_cast<int>(midiTriggers.size()) && midiTriggers[triggerIdx].sampleOffset <= sample) {
             const auto& trig = midiTriggers[triggerIdx++];
             triggerClap(settings, ppq, transport.bpm, beatsPerBar, trig.velocity, trig.noteNumber, trig.audition);
+            triggerAtSample = true;
         }
 
         float sL = 0.0f;
@@ -200,7 +210,16 @@ void ClapEngine::process(
         }
 
         // 3. Shared effects processing
-        slapback_.process(sL, sR, settings.effects.slapbackDivision, settings.effects.slapbackMix, transport.bpm);
+        const bool delayedTrigger = slapback_.process(
+            sL,
+            sR,
+            settings.effects.slapbackDivision,
+            settings.effects.slapbackMix,
+            transport.bpm,
+            triggerAtSample);
+        if (delayedTrigger) {
+            reverb_.triggerGate();
+        }
 
         const auto reverbFrame = reverb_.process(
             sL,

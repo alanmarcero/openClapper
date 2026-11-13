@@ -2,6 +2,7 @@
 #include "Parameters.h"
 #include "PluginEditor.h"
 #include "Presets.h"
+#include <algorithm>
 
 OpenClapperProcessor::OpenClapperProcessor()
     : AudioProcessor(BusesProperties().withOutput("Output", juce::AudioChannelSet::stereo(), true)),
@@ -10,6 +11,49 @@ OpenClapperProcessor::OpenClapperProcessor()
 
 void OpenClapperProcessor::prepareToPlay(double sampleRate, int) {
     engine_.prepare(sampleRate);
+}
+
+double OpenClapperProcessor::getTailLengthSeconds() const {
+    const auto value = [this](const char* id) {
+        const auto* parameter = parameters.getRawParameterValue(id);
+        return parameter != nullptr ? parameter->load(std::memory_order_relaxed) : 0.0f;
+    };
+
+    const double burstCount = value(openclapper::params::kPreBursts);
+    const double spreadMs = value(openclapper::params::kPreSpread);
+    const double mainStartMs = burstCount * std::max(0.0, spreadMs);
+    const double burstTailMs = burstCount > 0.0
+        ? mainStartMs + value(openclapper::params::kPreDecay) * 4.0
+        : 0.0;
+    const double noiseTailMs = value(openclapper::params::kNoiseAttack)
+        + value(openclapper::params::kNoiseHold)
+        + value(openclapper::params::kNoiseDecay) * 4.0;
+    const double mainTailMs = mainStartMs + std::max({
+        noiseTailMs,
+        value(openclapper::params::kToneDecay) * 6.0,
+        20.0
+    });
+    const double voiceTail = std::max(burstTailMs, mainTailMs) / 1000.0;
+
+    const bool usesSlapback = value(openclapper::params::kSlapbackDivision) > 0.0f
+        && value(openclapper::params::kSlapbackMix) > 0.0f;
+    const double delayTail = usesSlapback ? 4.0 : 0.0;
+    const double reverseTail = value(openclapper::params::kReverseMode) > 0.0f
+        && value(openclapper::params::kReverseMix) > 0.0f
+        ? 2.0
+        : 0.0;
+    const double effectInputTail = std::max(voiceTail, reverseTail) + delayTail;
+
+    if (value(openclapper::params::kReverbMix) <= 0.0f) {
+        return effectInputTail;
+    }
+
+    const double gateMs = value(openclapper::params::kReverbGate);
+    if (gateMs > 0.0) {
+        return std::max(effectInputTail, delayTail + (gateMs + 18.0) / 1000.0);
+    }
+
+    return effectInputTail + value(openclapper::params::kReverbDecay) / 1000.0;
 }
 
 bool OpenClapperProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const {
