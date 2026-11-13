@@ -65,7 +65,7 @@
 - [x] Adapt the current engine call from relative semitones to MIDI note `69 + semitoneOffset`; Task 3 replaces that temporary conversion with the event's raw MIDI note.
 - [x] Update the existing pitch-oriented core test calls to the MIDI-note API without adding test cases.
 - [x] Build the core target: `cmake --build build --target openclapper_core --config Release --parallel`.
-- [x] Commit the completed core voice with the personal git identity (`28c439e`).
+- [x] Commit the completed core voice with the personal git identity (`50dcf65`).
 
 ### Task 2: Add shared host-synced slapback processing
 
@@ -87,7 +87,7 @@
 - [x] Implement one stereo tap with dry/wet mixing and no feedback; preserve delay tails across new note triggers.
 - [x] Move the existing reverb settings into `ClapEffectSettings` and keep their APVTS parameter IDs; route voice output through slapback, then one shared `GatedStereoReverb`, then the existing distortion/dynamics/master path.
 - [x] Build the core target: `cmake --build build --target openclapper_core --config Release --parallel`.
-- [x] Commit the effect and engine routing with the personal git identity.
+- [x] Commit the effect and engine routing with the personal git identity (`5db0ca7`).
 
 ### Task 3: Route MIDI note-ons through an eight-voice engine
 
@@ -107,7 +107,7 @@
 - [x] Dispatch every `MidiTrigger` at its event sample and pass its note number and velocity unchanged; leave audition on MIDI note 69.
 - [x] Remove Fixed/Note Tracking and WAV Lock In from engine settings and saved plugin state, including the WAV playback/cache path and obsolete lock test.
 - [x] Build all configured targets: `cmake --build build --config Release --parallel`.
-- [x] Commit the MIDI and voice allocation changes with the personal git identity (`87cc1d0`).
+- [x] Commit the MIDI and voice allocation changes with the personal git identity (`2803242`).
 
 ### Task 4: Replace pitch controls with MIDI-only behavior and slapback controls
 
@@ -129,7 +129,7 @@
 - [x] Place the division selector and mix control in the existing effects panel without changing the overall window size or visual style.
 - [x] Remove preset pitch preservation from `OpenClapperProcessor::setCurrentProgram` and update existing plugin tests only for the retired controls.
 - [x] Build all configured targets: `cmake --build build --config Release --parallel`.
-- [x] Commit the parameter and panel changes with the personal git identity (`cb8ac8f`).
+- [x] Commit the parameter and panel changes with the personal git identity (`1cc5b10`).
 
 ### Task 5: Rebuild all presets and update v3 documentation/versioning
 
@@ -146,7 +146,7 @@
 - [x] Rewrite README MIDI behavior, synth description, slapback parameters, preset list, and build/release version references.
 - [x] Set CMake and UI display versions to 3.0.0.
 - [x] Build all configured targets: `cmake --build build --config Release --parallel`.
-- [x] Commit presets, documentation, and version changes with the personal git identity (`6859150`).
+- [x] Commit presets, documentation, and version changes with the personal git identity (`c9876d5`).
 
 ### Task 6: Build, push, release, and track completion
 
@@ -158,9 +158,9 @@
 - Modify: `README.md` to remove the stale v1 screenshot and describe the updated effect behavior.
 
 - [ ] Review the full diff against `origin/main`; run `git diff --check` and confirm only requested files changed.
-- [ ] Configure a Release build if needed: `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOC_BUILD_PLUGIN=ON -DOC_BUILD_TESTS=ON`.
-- [ ] Build the plugin and test executables without running tests: `cmake --build build --config Release --parallel`.
-- [ ] Confirm the build exits successfully and inspect its complete output.
+- [x] Configure a Release build if needed: `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOC_BUILD_PLUGIN=ON -DOC_BUILD_TESTS=ON` (the existing build was auto-reconfigured after the version update).
+- [x] Build the plugin and test executables without running tests: `cmake --build build --config Release --parallel`.
+- [x] Confirm the build exits successfully and inspect its complete output (exit code 0; tests not run).
 - [ ] Before pushing, run `git log --format='%h %ae %ce' origin/main..HEAD`; every author and committer email must be `221119764+alanmarcero@users.noreply.github.com`.
 - [ ] Push `main` and tag `v3.0.0` to `origin`.
 - [ ] Monitor the GitHub Actions run and release at [issue #1](https://github.com/alanmarcero/openClapper/issues/1); close the issue only after the release workflow succeeds.
