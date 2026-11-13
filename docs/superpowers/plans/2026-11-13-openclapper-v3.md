@@ -60,12 +60,12 @@
 - Produces: `ClapSynth::trigger(const ClapSynthSettings& settings, int midiNote, float velocity) noexcept`.
 - Produces: dry stereo frames from `ClapSynth::processSample`; no per-voice reverb.
 
-- [ ] Replace note/octave/fine-cent synthesis fields with a MIDI note number captured by `trigger`.
-- [ ] Build the voice from a stable fundamental, tuned partials below Nyquist, separately shaped noise bursts, and an independent transient layer. Keep the fundamental fixed to the captured MIDI note for the tonal decay.
-- [ ] Adapt the current engine call from relative semitones to MIDI note `69 + semitoneOffset`; Task 3 replaces that temporary conversion with the event's raw MIDI note.
-- [ ] Update the existing pitch-oriented core test calls to the MIDI-note API without adding test cases.
-- [ ] Build the core target: `cmake --build build --target openclapper_core --config Release --parallel`.
-- [ ] Commit the completed core voice with the personal git identity.
+- [x] Replace note/octave/fine-cent synthesis fields with a MIDI note number captured by `trigger`.
+- [x] Build the voice from a stable fundamental, tuned partials below Nyquist, separately shaped noise bursts, and an independent transient layer. Keep the fundamental fixed to the captured MIDI note for the tonal decay.
+- [x] Adapt the current engine call from relative semitones to MIDI note `69 + semitoneOffset`; Task 3 replaces that temporary conversion with the event's raw MIDI note.
+- [x] Update the existing pitch-oriented core test calls to the MIDI-note API without adding test cases.
+- [x] Build the core target: `cmake --build build --target openclapper_core --config Release --parallel`.
+- [x] Commit the completed core voice with the personal git identity (`28c439e`).
 
 ### Task 2: Add shared host-synced slapback processing
 
@@ -107,7 +107,7 @@
 - [x] Dispatch every `MidiTrigger` at its event sample and pass its note number and velocity unchanged; leave audition on MIDI note 69.
 - [x] Remove Fixed/Note Tracking and WAV Lock In from engine settings and saved plugin state, including the WAV playback/cache path and obsolete lock test.
 - [x] Build all configured targets: `cmake --build build --config Release --parallel`.
-- [ ] Commit the MIDI and voice allocation changes with the personal git identity.
+- [x] Commit the MIDI and voice allocation changes with the personal git identity (`87cc1d0`).
 
 ### Task 4: Replace pitch controls with MIDI-only behavior and slapback controls
 
@@ -129,22 +129,23 @@
 - [x] Place the division selector and mix control in the existing effects panel without changing the overall window size or visual style.
 - [x] Remove preset pitch preservation from `OpenClapperProcessor::setCurrentProgram` and update existing plugin tests only for the retired controls.
 - [x] Build all configured targets: `cmake --build build --config Release --parallel`.
-- [ ] Commit the parameter and panel changes with the personal git identity.
+- [x] Commit the parameter and panel changes with the personal git identity (`cb8ac8f`).
 
 ### Task 5: Rebuild all presets and update v3 documentation/versioning
 
 **Files:**
 - Modify: `Source/Plugin/Presets.cpp`
 - Modify: `Source/Plugin/Presets.h` if the `apply` signature changes
+- Modify: `Source/Plugin/Parameters.cpp` to set the preset parameter range to 44 programs
 - Modify: `README.md`
 - Modify: `CMakeLists.txt`
 - Modify: `Source/Plugin/PluginEditor.cpp`
 
-- [ ] Replace all 44 preset names and values with distinct trance-focused designs; no preset sets a MIDI root or fixed note.
-- [ ] Set slapback mix and division in presets that use the effect; default other presets to Off.
-- [ ] Rewrite README MIDI behavior, synth description, slapback parameters, preset list, and build/release version references.
-- [ ] Set CMake and UI display versions to 3.0.0.
-- [ ] Build all configured targets: `cmake --build build --config Release --parallel`.
+- [x] Replace all 44 preset names and values with distinct trance-focused designs; no preset sets a MIDI root or fixed note.
+- [x] Set slapback mix and division in presets that use the effect; default other presets to Off.
+- [x] Rewrite README MIDI behavior, synth description, slapback parameters, preset list, and build/release version references.
+- [x] Set CMake and UI display versions to 3.0.0.
+- [x] Build all configured targets: `cmake --build build --config Release --parallel`.
 - [ ] Commit presets, documentation, and version changes with the personal git identity.
 
 ### Task 6: Build, push, release, and track completion
