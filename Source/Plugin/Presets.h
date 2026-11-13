@@ -12,6 +12,6 @@ struct FactoryPreset {
 };
 
 const std::vector<FactoryPreset>& factoryPresets();
-void apply(const FactoryPreset& preset, juce::AudioProcessorValueTreeState& state, bool preservePitch = false);
+void apply(const FactoryPreset& preset, juce::AudioProcessorValueTreeState& state);
 
 } // namespace openclapper::presets

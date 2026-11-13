@@ -68,8 +68,6 @@ void ClappyStagePanel::paint(juce::Graphics& g) {
     const float peak = std::clamp(processor_.displayPeak.load(), 0.0f, 1.0f);
     const float beatPhase = std::clamp(processor_.displayBeatPhase.load(), 0.0f, 1.0f);
     const float pulse = std::max(peak, 0.35f * std::pow(1.0f - beatPhase, 3.0f));
-    const bool locked = processor_.isClapLockedIn();
-
     // Trigger animation timing across multi-stage choreography
     const double clapAgeMs = juce::Time::getMillisecondCounterHiRes() - clapTriggerTimeMs_;
     constexpr double kAnimDurationMs = 520.0;
@@ -247,15 +245,6 @@ void ClappyStagePanel::paint(juce::Graphics& g) {
     g.setColour(isClapOn ? theme::kAccentNeonGreen : theme::kTextDim);
     g.drawText(isClapOn ? "CLAP ON" : "CLAP OFF", ledRect, juce::Justification::centred, true);
 
-    // Locked WAV badge if active
-    if (locked) {
-        const auto lockRect = juce::Rectangle<float>(stage.getRight() - 78.0f, stage.getY() + 4.0f, 64.0f, 16.0f);
-        g.setColour(theme::kAccentAmber.withAlpha(0.25f));
-        g.fillRoundedRectangle(lockRect, 3.0f);
-        g.setColour(theme::kAccentAmber);
-        g.drawRoundedRectangle(lockRect, 3.0f, 1.0f);
-        g.drawText("LOCKED", lockRect, juce::Justification::centred, true);
-    }
 }
 
 // ============================================================================
@@ -269,13 +258,8 @@ ClapSynthPanel::ClapSynthPanel(OpenClapperProcessor& processor)
       preLevel_(processor.parameters, openclapper::params::kPreLevel, "Level", theme::kAccentCyan),
 
       toneMode_(processor.parameters, openclapper::params::kToneMode, "Mode", theme::kAccentAmber),
-      toneNote_(processor.parameters, openclapper::params::kToneNote, "Note", theme::kAccentAmber),
-      toneOctave_(processor.parameters, openclapper::params::kToneOctave, "Octave", theme::kAccentAmber),
-      toneFine_(processor.parameters, openclapper::params::kToneFine, "Fine", theme::kAccentAmber),
-      lockPitchBtn_(processor.parameters, openclapper::params::kLockPitch, "LOCK PITCH", theme::kAccentAmber),
       toneQ_(processor.parameters, openclapper::params::kToneQ, "Res / Q", theme::kAccentAmber),
       toneDecay_(processor.parameters, openclapper::params::kToneDecay, "Decay", theme::kAccentAmber),
-      tonePitchEnv_(processor.parameters, openclapper::params::kTonePitchEnv, "Pitch Drop", theme::kAccentAmber),
       toneLevel_(processor.parameters, openclapper::params::kToneLevel, "Level", theme::kAccentAmber),
 
       noiseType_(processor.parameters, openclapper::params::kNoiseType, "Type", theme::kAccentViolet),
@@ -298,13 +282,8 @@ ClapSynthPanel::ClapSynthPanel(OpenClapperProcessor& processor)
     addAndMakeVisible(clickFreq_);
 
     addAndMakeVisible(toneMode_);
-    addAndMakeVisible(toneNote_);
-    addAndMakeVisible(toneOctave_);
-    addAndMakeVisible(toneFine_);
-    addAndMakeVisible(lockPitchBtn_);
     addAndMakeVisible(toneQ_);
     addAndMakeVisible(toneDecay_);
-    addAndMakeVisible(tonePitchEnv_);
     addAndMakeVisible(toneLevel_);
 
     addAndMakeVisible(noiseType_);
@@ -321,10 +300,7 @@ void ClapSynthPanel::setAdvancedMode(bool advanced) {
     advancedMode_ = advanced;
     flamSpread_.setVisible(advanced);
     preLevel_.setVisible(advanced);
-    toneFine_.setVisible(advanced);
     toneQ_.setVisible(advanced);
-    tonePitchEnv_.setVisible(advanced);
-    toneLevel_.setVisible(advanced);
     noiseDecay_.setVisible(advanced);
     noiseHPF_.setVisible(advanced);
     noiseLPF_.setVisible(advanced);
@@ -336,11 +312,11 @@ void ClapSynthPanel::setAdvancedMode(bool advanced) {
 
 void ClapSynthPanel::paint(juce::Graphics& g) {
     const juce::String title = advancedMode_
-        ? "Clap Architecture & Tunable Tail (Advanced View)"
-        : "Clap Architecture & Tunable Tail (Simple Mode)";
+        ? "MIDI-Tuned Clap Body & Architecture (Advanced View)"
+        : "MIDI-Tuned Clap Body & Architecture (Simple Mode)";
     drawPanel(g, getLocalBounds(), title, theme::kAccentCyan);
 
-    // Emphasized Tunable Tail Section
+    // Emphasized MIDI-tuned body section
     if (!tailSectionBounds_.isEmpty()) {
         const auto tailRect = tailSectionBounds_.toFloat().reduced(1.0f);
         drawGlow(g, tailRect, theme::kAccentAmber.withAlpha(0.12f));
@@ -352,7 +328,7 @@ void ClapSynthPanel::paint(juce::Graphics& g) {
         const auto badge = juce::Rectangle<float>(tailRect.getX() + 8.0f, tailRect.getY() + 3.0f, 240.0f, 14.0f);
         g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
         g.setColour(theme::kAccentAmber);
-        g.drawText("★ TUNABLE TAIL & HARMONIC BODY", badge, juce::Justification::centredLeft);
+        g.drawText("★ MIDI-TUNED BODY & HARMONICS", badge, juce::Justification::centredLeft);
     }
 
     if (!attackSectionBounds_.isEmpty()) {
@@ -380,7 +356,7 @@ void ClapSynthPanel::resized() {
 
         tailSectionBounds_ = area.reduced(0, 2);
         auto row2Controls = tailSectionBounds_.withTrimmedTop(16);
-        layoutRow(row2Controls, { &toneNote_, &toneOctave_, &toneMode_, &lockPitchBtn_, &toneDecay_ });
+        layoutRow(row2Controls, { &toneMode_, &toneDecay_, &toneLevel_ });
         return;
     }
 
@@ -393,10 +369,10 @@ void ClapSynthPanel::resized() {
     layoutRow(flamArea, { &preBursts_, &preSpread_, &flamSpread_, &preLevel_ });
     layoutRow(row1, { &clickType_, &clickLevel_, &clickFreq_ });
 
-    // Row 2: TUNABLE TAIL (Note, Octave, Fine, Mode, Lock Pitch, Q, Decay, Pitch Drop, Level)
+    // Row 2: MIDI-tuned tonal body
     tailSectionBounds_ = area.removeFromTop(rowHeight).reduced(0, 2);
     auto row2 = tailSectionBounds_.withTrimmedTop(16);
-    layoutRow(row2, { &toneNote_, &toneOctave_, &toneFine_, &toneMode_, &lockPitchBtn_, &toneQ_, &toneDecay_, &tonePitchEnv_, &toneLevel_ });
+    layoutRow(row2, { &toneMode_, &toneQ_, &toneDecay_, &toneLevel_ });
 
     // Row 3: Noise & Sizzle (Type, Decay, HPF, LPF, Width, Level)
     noiseSectionBounds_ = area.reduced(0, 2);
@@ -428,8 +404,8 @@ EffectsPanel::EffectsPanel(OpenClapperProcessor& processor)
 
       reverseMode_(processor.parameters, openclapper::params::kReverseMode, "Rev Sync", theme::kAccentCyan),
       reverseMix_(processor.parameters, openclapper::params::kReverseMix, "Rev Mix", theme::kAccentCyan),
-      midiMode_(processor.parameters, openclapper::params::kMidiMode, "MIDI Mode", theme::kTextDim),
-      lockInBtn_(processor.parameters, openclapper::params::kLockIn, "LOCK WAV", theme::kAccentAmber),
+      slapbackDivision_(processor.parameters, openclapper::params::kSlapbackDivision, "Slap Sync", theme::kAccentCyan),
+      slapbackMix_(processor.parameters, openclapper::params::kSlapbackMix, "Slap Mix", theme::kAccentCyan),
       masterWidth_(processor.parameters, openclapper::params::kStereoWidth, "Width", theme::kAccentCyan),
       outputGain_(processor.parameters, openclapper::params::kOutputGain, "Output", theme::kAccentAmber) {
     addAndMakeVisible(distType_);
@@ -452,8 +428,8 @@ EffectsPanel::EffectsPanel(OpenClapperProcessor& processor)
 
     addAndMakeVisible(reverseMode_);
     addAndMakeVisible(reverseMix_);
-    addAndMakeVisible(midiMode_);
-    addAndMakeVisible(lockInBtn_);
+    addAndMakeVisible(slapbackDivision_);
+    addAndMakeVisible(slapbackMix_);
     addAndMakeVisible(masterWidth_);
     addAndMakeVisible(outputGain_);
 
@@ -471,7 +447,6 @@ void EffectsPanel::setAdvancedMode(bool advanced) {
     reverbDecay_.setVisible(advanced);
     reverseMode_.setVisible(advanced);
     reverseMix_.setVisible(advanced);
-    midiMode_.setVisible(advanced);
     resized();
     repaint();
 }
@@ -490,8 +465,8 @@ void EffectsPanel::resized() {
         // Simple Mode: 2 clean rows with essential impact and space knobs
         const int rowHeight = area.getHeight() / 2;
         auto row1 = area.removeFromTop(rowHeight);
-        layoutRow(row1, { &distDrive_, &distMix_, &compMix_, &limiterEnabled_ });
-        layoutRow(area, { &reverbSize_, &reverbMix_, &reverbGate_, &masterWidth_, &outputGain_, &lockInBtn_ });
+        layoutRow(row1, { &distDrive_, &distMix_, &compMix_, &limiterEnabled_, &slapbackDivision_, &slapbackMix_ });
+        layoutRow(area, { &reverbSize_, &reverbMix_, &reverbGate_, &masterWidth_, &outputGain_ });
         return;
     }
 
@@ -503,10 +478,10 @@ void EffectsPanel::resized() {
     layoutRow(distArea, { &distType_, &distDrive_, &distTone_, &distMix_ });
     layoutRow(row1, { &compThresh_, &compRatio_, &compMakeup_, &compMix_, &limiterCeiling_, &limiterEnabled_ });
 
-    // Row 2: Reverb (left ~40%) & Master/Sync/Lock (right ~60%)
+    // Row 2: Reverb (left ~40%) & sync/master controls (right ~60%)
     auto revArea = area.removeFromLeft(static_cast<int>(static_cast<float>(area.getWidth()) * 0.40f));
     layoutRow(revArea, { &reverbSize_, &reverbDecay_, &reverbGate_, &reverbMix_ });
-    layoutRow(area, { &reverseMode_, &reverseMix_, &midiMode_, &masterWidth_, &outputGain_, &lockInBtn_ });
+    layoutRow(area, { &reverseMode_, &reverseMix_, &slapbackDivision_, &slapbackMix_, &masterWidth_, &outputGain_ });
 }
 
 } // namespace openclapper::ui

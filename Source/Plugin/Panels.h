@@ -50,13 +50,8 @@ private:
 
     // Resonant Body / Tone
     Choice toneMode_;
-    Choice toneNote_;
-    Knob toneOctave_;
-    Knob toneFine_;
-    Toggle lockPitchBtn_;
     Knob toneQ_;
     Knob toneDecay_;
-    Knob tonePitchEnv_;
     Knob toneLevel_;
 
     // Noise & Sizzle
@@ -113,8 +108,8 @@ private:
     // Reverse & Master
     Choice reverseMode_;
     Knob reverseMix_;
-    Choice midiMode_;
-    Toggle lockInBtn_;
+    Choice slapbackDivision_;
+    Knob slapbackMix_;
     Knob masterWidth_;
     Knob outputGain_;
 };

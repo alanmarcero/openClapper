@@ -117,17 +117,18 @@
 - Modify: `Source/Plugin/Panels.h`
 - Modify: `Source/Plugin/Panels.cpp`
 - Modify: `Source/Plugin/PluginProcessor.cpp`
+- Modify: `Source/Plugin/PluginProcessor.h`, `Source/Plugin/Presets.h`, and `Source/Plugin/Presets.cpp` to remove lock telemetry and pitch preservation
 - Modify: `Tests/PluginTests.cpp` only to retire cases for removed pitch-lock and octave controls
 
 **Interfaces:**
 - Produces: APVTS `slapback_division` choice with six entries and `slapback_mix` float in `[0, 1]`.
 - Consumes: engine slapback settings from Task 2.
 
-- [ ] Remove `tone_note`, `tone_octave`, `tone_fine`, `tone_freq`, `midi_mode`, `lock_pitch`, and `lock_in` parameters and their attachments. `tone_freq` is currently unused by the audio path.
-- [ ] Add division and mix parameters and map them to `EngineSettings`.
-- [ ] Place the division selector and mix control in the existing effects panel without changing the overall window size or visual style.
-- [ ] Remove preset pitch preservation from `OpenClapperProcessor::setCurrentProgram` and update existing plugin tests only for the retired controls.
-- [ ] Build all configured targets: `cmake --build build --config Release --parallel`.
+- [x] Remove `tone_note`, `tone_octave`, `tone_fine`, `tone_freq`, `midi_mode`, `lock_pitch`, and `lock_in` parameters and their attachments. `tone_freq` is currently unused by the audio path.
+- [x] Add division and mix parameters and map them to `EngineSettings`.
+- [x] Place the division selector and mix control in the existing effects panel without changing the overall window size or visual style.
+- [x] Remove preset pitch preservation from `OpenClapperProcessor::setCurrentProgram` and update existing plugin tests only for the retired controls.
+- [x] Build all configured targets: `cmake --build build --config Release --parallel`.
 - [ ] Commit the parameter and panel changes with the personal git identity.
 
 ### Task 5: Rebuild all presets and update v3 documentation/versioning

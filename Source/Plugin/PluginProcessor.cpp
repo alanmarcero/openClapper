@@ -119,9 +119,7 @@ void OpenClapperProcessor::setCurrentProgram(int index) {
     const auto& presets = openclapper::presets::factoryPresets();
     if (index >= 0 && index < static_cast<int>(presets.size())) {
         currentProgram_ = index;
-        const bool preservePitch = parameters.getRawParameterValue(openclapper::params::kLockPitch) != nullptr
-            && *parameters.getRawParameterValue(openclapper::params::kLockPitch) > 0.5f;
-        openclapper::presets::apply(presets[static_cast<size_t>(index)], parameters, preservePitch);
+        openclapper::presets::apply(presets[static_cast<size_t>(index)], parameters);
         if (auto* param = parameters.getParameter(openclapper::params::kPreset)) {
             param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(index)));
         }

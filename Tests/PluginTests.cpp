@@ -14,7 +14,6 @@ TEST_CASE("OpenClapperProcessor instantiates with valid parameters", "[plugin]")
     REQUIRE(processor.parameters.getParameter(openclapper::params::kPreBursts) != nullptr);
     REQUIRE(processor.parameters.getParameter(openclapper::params::kFlamSpread) != nullptr);
     REQUIRE(processor.parameters.getParameter(openclapper::params::kToneMode) != nullptr);
-    REQUIRE(processor.parameters.getParameter(openclapper::params::kToneFreq) != nullptr);
     REQUIRE(processor.parameters.getParameter(openclapper::params::kClickType) != nullptr);
     REQUIRE(processor.parameters.getParameter(openclapper::params::kNoiseType) != nullptr);
     REQUIRE(processor.parameters.getParameter(openclapper::params::kDistDrive) != nullptr);
@@ -106,60 +105,4 @@ TEST_CASE("OpenClapperEditor instantiates with correct dimensions", "[plugin][gu
     REQUIRE(tempFile.existsAsFile());
     REQUIRE(tempFile.getSize() > 0);
     tempFile.deleteFile();
-}
-
-TEST_CASE("Lock Pitch preserves note, octave, and fine pitch across preset changes", "[plugin][pitch_lock]") {
-    OpenClapperProcessor processor;
-    processor.prepareToPlay(48000.0, 512);
-
-    auto* lockParam = processor.parameters.getParameter(openclapper::params::kLockPitch);
-    REQUIRE(lockParam != nullptr);
-
-    auto* octaveParam = processor.parameters.getParameter(openclapper::params::kToneOctave);
-    auto* freqParam = processor.parameters.getParameter(openclapper::params::kToneFreq);
-    auto* noteParam = processor.parameters.getParameter(openclapper::params::kToneNote);
-    auto* fineParam = processor.parameters.getParameter(openclapper::params::kToneFine);
-    REQUIRE(octaveParam != nullptr);
-    REQUIRE(freqParam != nullptr);
-    REQUIRE(noteParam != nullptr);
-    REQUIRE(fineParam != nullptr);
-
-    // Set custom high octave 7, frequency, note 4 (E), and fine cents 15
-    octaveParam->setValueNotifyingHost(octaveParam->convertTo0to1(7.0f));
-    freqParam->setValueNotifyingHost(freqParam->convertTo0to1(2800.0f));
-    noteParam->setValueNotifyingHost(noteParam->convertTo0to1(4.0f));
-    fineParam->setValueNotifyingHost(fineParam->convertTo0to1(15.0f));
-
-    // Engage pitch lock
-    lockParam->setValueNotifyingHost(1.0f);
-
-    // Switch presets: octave, frequency, note, and fine cents must be preserved!
-    processor.setCurrentProgram(1);
-    REQUIRE(std::abs(processor.parameters.getRawParameterValue(openclapper::params::kToneOctave)->load() - 7.0f) < 0.05f);
-    REQUIRE(std::abs(processor.parameters.getRawParameterValue(openclapper::params::kToneFreq)->load() - 2800.0f) < 2.0f);
-    REQUIRE(std::abs(processor.parameters.getRawParameterValue(openclapper::params::kToneNote)->load() - 4.0f) < 0.05f);
-    REQUIRE(std::abs(processor.parameters.getRawParameterValue(openclapper::params::kToneFine)->load() - 15.0f) < 0.5f);
-
-    processor.setCurrentProgram(3); // Preset 4 has octave 2 default
-    REQUIRE(std::abs(processor.parameters.getRawParameterValue(openclapper::params::kToneOctave)->load() - 7.0f) < 0.05f);
-    REQUIRE(std::abs(processor.parameters.getRawParameterValue(openclapper::params::kToneFreq)->load() - 2800.0f) < 2.0f);
-    REQUIRE(std::abs(processor.parameters.getRawParameterValue(openclapper::params::kToneNote)->load() - 4.0f) < 0.05f);
-    REQUIRE(std::abs(processor.parameters.getRawParameterValue(openclapper::params::kToneFine)->load() - 15.0f) < 0.5f);
-
-    // Disengage pitch lock: presets load their own pitch
-    lockParam->setValueNotifyingHost(0.0f);
-    processor.setCurrentProgram(3);
-    REQUIRE(std::abs(processor.parameters.getRawParameterValue(openclapper::params::kToneOctave)->load() - 2.0f) < 0.05f);
-}
-
-TEST_CASE("Tone Octave supports high octaves up to 8", "[plugin][octave]") {
-    OpenClapperProcessor processor;
-    auto* octaveParam = processor.parameters.getParameter(openclapper::params::kToneOctave);
-    REQUIRE(octaveParam != nullptr);
-
-    octaveParam->setValueNotifyingHost(octaveParam->convertTo0to1(8.0f));
-    REQUIRE(std::abs(processor.parameters.getRawParameterValue(openclapper::params::kToneOctave)->load() - 8.0f) < 0.05f);
-
-    octaveParam->setValueNotifyingHost(octaveParam->convertTo0to1(6.0f));
-    REQUIRE(std::abs(processor.parameters.getRawParameterValue(openclapper::params::kToneOctave)->load() - 6.0f) < 0.05f);
 }
