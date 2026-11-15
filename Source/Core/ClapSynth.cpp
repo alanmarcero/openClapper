@@ -7,7 +7,6 @@ namespace openclapper::core {
 
 namespace {
 
-constexpr std::array<float, 8> kBandpassPartials = { 1.0f, 0.34f, 0.18f, 0.10f, 0.06f, 0.03f, 0.015f, 0.008f };
 constexpr std::array<float, 8> kSubThumpPartials = { 1.0f, 0.08f, 0.02f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
 constexpr std::array<float, 8> kSaturatedTriPartials = { 1.0f, 0.0f, 0.16f, 0.0f, 0.07f, 0.0f, 0.035f, 0.0f };
 constexpr std::array<float, 8> kCyberSquarePartials = { 1.0f, 0.42f, 0.26f, 0.18f, 0.12f, 0.08f, 0.05f, 0.03f };
@@ -52,6 +51,21 @@ void computeLowpassCoeffs(float freqHz, double sampleRate, float& b0, float& b1,
     b0 = ((1.0f - cosW0) * 0.5f) / a0;
     b1 = (1.0f - cosW0) / a0;
     b2 = ((1.0f - cosW0) * 0.5f) / a0;
+    a1 = (-2.0f * cosW0) / a0;
+    a2 = (1.0f - alpha) / a0;
+}
+
+void computeBandpassCoeffs(float freqHz, float q, double sampleRate, float& b0, float& b1, float& b2, float& a1, float& a2) noexcept {
+    const float nyquist = static_cast<float>(sampleRate) * 0.5f;
+    const float clampedFreq = std::clamp(freqHz, 20.0f, nyquist * 0.95f);
+    const float clampedQ = std::clamp(q, 0.1f, 30.0f);
+    const float w0 = 2.0f * pi() * clampedFreq / static_cast<float>(sampleRate);
+    const float alpha = std::sin(w0) / (2.0f * clampedQ);
+    const float cosW0 = std::cos(w0);
+    const float a0 = 1.0f + alpha;
+    b0 = alpha / a0;
+    b1 = 0.0f;
+    b2 = -alpha / a0;
     a1 = (-2.0f * cosW0) / a0;
     a2 = (1.0f - alpha) / a0;
 }
@@ -256,6 +270,9 @@ void ClapSynth::reset() noexcept {
     burstCount_ = 0;
     partialFrequencies_.fill(0.0f);
     partialPhases_.fill(0.0f);
+    toneFilterL_.reset();
+    lastToneFrequency_ = -1.0f;
+    lastToneQ_ = -1.0f;
     lastHPF_ = -1.0f;
     lastLPF_ = -1.0f;
     noiseHPF_L_.reset();
@@ -453,32 +470,45 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
 
     float toneSample = 0.0f;
     if (mainAge >= 0.0f && settings.toneLevel > 0.001f) {
-        const std::array<float, 8>* weights = &kBandpassPartials;
-        switch (settings.toneMode) {
-            case ToneMode::Bandpass: weights = &kBandpassPartials; break;
-            case ToneMode::SubThump: weights = &kSubThumpPartials; break;
-            case ToneMode::SaturatedTri: weights = &kSaturatedTriPartials; break;
-            case ToneMode::CyberSquare: weights = &kCyberSquarePartials; break;
-        }
-
-        const float resonance = std::clamp(settings.toneQ / 6.0f, 0.1f, 2.0f);
-        float weightSum = 0.0f;
-        for (size_t i = 0; i < partialFrequencies_.size(); ++i) {
-            const float frequency = partialFrequencies_[i];
-            if (frequency <= 0.0f) {
-                continue;
+        if (settings.toneMode == ToneMode::Bandpass) {
+            const float fundamental = std::clamp(midiNoteToHz(midiNote_), 20.0f, static_cast<float>(sampleRate_) * 0.48f);
+            if (std::abs(fundamental - lastToneFrequency_) > 0.01f || std::abs(settings.toneQ - lastToneQ_) > 0.01f) {
+                lastToneFrequency_ = fundamental;
+                lastToneQ_ = settings.toneQ;
+                computeBandpassCoeffs(lastToneFrequency_, lastToneQ_, sampleRate_, b0_t_, b1_t_, b2_t_, a1_t_, a2_t_);
+            }
+            const float impulse = mainAge < 4.0f ? 1.0f : 0.0f;
+            const float exciter = impulse + rawNoiseL * 0.35f;
+            toneSample = processBiquad(exciter * toneEnv, toneFilterL_, b0_t_, b1_t_, b2_t_, a1_t_, a2_t_) * 2.2f;
+        } else {
+            const std::array<float, 8>* weights = &kSubThumpPartials;
+            switch (settings.toneMode) {
+                case ToneMode::Bandpass: break;
+                case ToneMode::SubThump: weights = &kSubThumpPartials; break;
+                case ToneMode::SaturatedTri: weights = &kSaturatedTriPartials; break;
+                case ToneMode::CyberSquare: weights = &kCyberSquarePartials; break;
             }
 
-            partialPhases_[i] += 2.0f * pi() * frequency / static_cast<float>(sampleRate_);
-            if (partialPhases_[i] >= 2.0f * pi()) {
-                partialPhases_[i] -= 2.0f * pi();
+            const float resonance = std::clamp(settings.toneQ / 6.0f, 0.1f, 2.0f);
+            float weightSum = 0.0f;
+            for (size_t i = 0; i < partialFrequencies_.size(); ++i) {
+                const float frequency = partialFrequencies_[i];
+                if (frequency <= 0.0f) {
+                    continue;
+                }
+
+                partialPhases_[i] += 2.0f * pi() * frequency / static_cast<float>(sampleRate_);
+                if (partialPhases_[i] >= 2.0f * pi()) {
+                    partialPhases_[i] -= 2.0f * pi();
+                }
+                const float highPartial = static_cast<float>(i) / static_cast<float>(partialFrequencies_.size() - 1);
+                const float weight = (*weights)[i] * (1.0f + (resonance - 1.0f) * highPartial);
+                toneSample += std::sin(partialPhases_[i]) * weight;
+                weightSum += weight;
             }
-            const float highPartial = static_cast<float>(i) / static_cast<float>(partialFrequencies_.size() - 1);
-            const float weight = (*weights)[i] * (1.0f + (resonance - 1.0f) * highPartial);
-            toneSample += std::sin(partialPhases_[i]) * weight;
-            weightSum += weight;
+            toneSample /= std::max(1.0f, weightSum);
         }
-        toneSample = toneSample / std::max(1.0f, weightSum) * toneEnv * settings.toneLevel * velocity_;
+        toneSample *= toneEnv * settings.toneLevel * velocity_;
     }
 
     if (settings.noiseStereoWidth != 1.0f) {
