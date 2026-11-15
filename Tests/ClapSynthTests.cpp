@@ -12,6 +12,34 @@ TEST_CASE("midiNoteToHz maps MIDI pitch accurately", "[core][synth]") {
     REQUIRE(std::abs(a4 / a3 - 2.0f) < 0.001f);
 }
 
+TEST_CASE("ClapSynth Bandpass body follows its selected noise type", "[core][synth]") {
+    ClapSynth whiteSynth;
+    ClapSynth pinkSynth;
+    whiteSynth.prepare(48000.0);
+    pinkSynth.prepare(48000.0);
+
+    ClapSynthSettings whiteSettings;
+    whiteSettings.preClapCount = 0;
+    whiteSettings.noiseLevel = 0.0f;
+    whiteSettings.clickLevel = 0.0f;
+    whiteSettings.toneLevel = 0.8f;
+    whiteSettings.toneMode = ToneMode::Bandpass;
+
+    auto pinkSettings = whiteSettings;
+    pinkSettings.noiseType = NoiseType::Pink;
+
+    std::vector<float> whiteLeft, whiteRight;
+    std::vector<float> pinkLeft, pinkRight;
+    whiteSynth.renderBlock(whiteLeft, whiteRight, whiteSettings, 1.0f, 69);
+    pinkSynth.renderBlock(pinkLeft, pinkRight, pinkSettings, 1.0f, 69);
+
+    float difference = 0.0f;
+    for (size_t i = 0; i < std::min(whiteLeft.size(), pinkLeft.size()); ++i)
+        difference += std::abs(whiteLeft[i] - pinkLeft[i]);
+
+    REQUIRE(difference > 1.0f);
+}
+
 TEST_CASE("ClapSynth produces valid audio block without NaNs", "[core][synth]") {
     ClapSynth synth;
     synth.prepare(48000.0);

@@ -2,8 +2,10 @@
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
 #include "Presets.h"
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
+#include <vector>
 
 TEST_CASE("OpenClapperProcessor instantiates with valid parameters", "[plugin]") {
     OpenClapperProcessor processor;
@@ -31,6 +33,58 @@ TEST_CASE("OpenClapperProcessor provides exactly 44 factory presets", "[plugin]"
         REQUIRE(processor.getCurrentProgram() == i);
         REQUIRE(processor.getProgramName(i).isNotEmpty());
     }
+}
+
+TEST_CASE("All factory presets render and Bandpass patches use tuned noise", "[plugin][presets]") {
+    OpenClapperProcessor processor;
+    processor.prepareToPlay(48000.0, 8192);
+    juce::AudioBuffer<float> buffer(2, 8192);
+    bool foundBandpass = false;
+
+    for (int index = 0; index < processor.getNumPrograms(); ++index) {
+        processor.setCurrentProgram(index);
+        buffer.clear();
+        juce::MidiBuffer midi;
+        midi.addEvent(juce::MidiMessage::noteOn(1, 69, static_cast<juce::uint8>(100)), 0);
+        processor.processBlock(buffer, midi);
+
+        float peak = 0.0f;
+        for (int channel = 0; channel < buffer.getNumChannels(); ++channel) {
+            for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
+                const float value = buffer.getSample(channel, sample);
+                REQUIRE(std::isfinite(value));
+                peak = std::max(peak, std::abs(value));
+            }
+        }
+        REQUIRE(peak > 0.00001f);
+
+        auto settings = openclapper::params::readSettings(processor.parameters).synth;
+        if (settings.toneMode != openclapper::core::ToneMode::Bandpass)
+            continue;
+
+        foundBandpass = true;
+        settings.preClapCount = 0;
+        settings.noiseLevel = 0.0f;
+        settings.clickLevel = 0.0f;
+        auto alternate = settings;
+        alternate.noiseType = settings.noiseType == openclapper::core::NoiseType::White
+            ? openclapper::core::NoiseType::Pink
+            : openclapper::core::NoiseType::White;
+
+        openclapper::core::ClapSynth originalSynth;
+        openclapper::core::ClapSynth alternateSynth;
+        originalSynth.prepare(48000.0);
+        alternateSynth.prepare(48000.0);
+        std::vector<float> originalLeft, originalRight, alternateLeft, alternateRight;
+        originalSynth.renderBlock(originalLeft, originalRight, settings, 1.0f, 69);
+        alternateSynth.renderBlock(alternateLeft, alternateRight, alternate, 1.0f, 69);
+        float difference = 0.0f;
+        for (size_t sample = 0; sample < std::min(originalLeft.size(), alternateLeft.size()); ++sample)
+            difference += std::abs(originalLeft[sample] - alternateLeft[sample]);
+        REQUIRE(difference > 0.01f);
+    }
+
+    REQUIRE(foundBandpass);
 }
 
 TEST_CASE("OpenClapperProcessor renders audio upon MIDI note-on", "[plugin]") {

@@ -188,6 +188,11 @@ private:
     std::array<float, 8> partialFrequencies_{};
     std::array<float, 8> partialPhases_{};
 
+    BiquadState toneFilterL_{};
+    float lastToneFrequency_ = -1.0f;
+    float lastToneQ_ = -1.0f;
+    float b0_t_ = 0.0f, b1_t_ = 0.0f, b2_t_ = 0.0f, a1_t_ = 0.0f, a2_t_ = 0.0f;
+
     BiquadState noiseHPF_L_{};
     BiquadState noiseHPF_R_{};
     BiquadState noiseLPF_L_{};

@@ -4,7 +4,7 @@
 
 Clap on. Clap off.
 
-openClapper is a trance-focused clap synthesizer for VST3, AU, LV2, and Standalone on macOS, Windows, and Linux. Version 3 replaces pitch selection and sample lock-in with direct MIDI tuning: each incoming note sets the clap's tonal fundamental. MIDI note 69 is A4 at 440 Hz, so playing A4 produces an A-tuned clap; every semitone and octave follows equal temperament.
+openClapper is a trance-focused clap synthesizer for VST3, AU, LV2, and Standalone on macOS, Windows, and Linux. Version 3.1 restores the Bandpass resonant body as MIDI-tuned noise: each incoming note sets its filter center, and the selected white, pink, velvet, or lo-fi noise shapes its tone. MIDI note 69 is A4 at 440 Hz, so playing A4 produces an A-tuned clap; every semitone and octave follows equal temperament.
 
 The synthesis engine builds each hit from a tuned resonant body, layered noise, a transient click, and up to five pre-clap bursts. Eight voices can overlap. Shared effects add host-tempo slapback, gated stereo reverb, distortion, compression, limiting, and stereo width.
 
