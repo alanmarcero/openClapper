@@ -277,8 +277,12 @@ void ClapSynth::reset() noexcept {
     partialFrequencies_.fill(0.0f);
     partialPhases_.fill(0.0f);
     toneFilterL_.reset();
+    toneHPF_.reset();
+    toneLPF_.reset();
     lastToneFrequency_ = -1.0f;
     lastToneQ_ = -1.0f;
+    lastToneHPF_ = -1.0f;
+    lastToneLPF_ = -1.0f;
     lastHPF_ = -1.0f;
     lastLPF_ = -1.0f;
     noiseHPF_L_.reset();
@@ -328,7 +332,9 @@ void ClapSynth::trigger(const ClapSynthSettings& settings, int midiNote, float v
         ? mainStartMs + settings.preClapDecayMs * 4.0f
         : 0.0f;
     const float noiseTailMs = settings.noiseAttackMs + settings.noiseHoldMs + settings.noiseDecayMs * 4.0f;
-    const float mainTailMs = mainStartMs + std::max({ noiseTailMs, settings.toneDecayMs * 6.0f, 20.0f });
+    const float clickScale = settings.clickType == ClickType::Thump ? 2.5f : 1.0f;
+    const float clickTailMs = std::clamp(settings.clickDecayMs, 0.2f, 20.0f) * clickScale * 6.0f;
+    const float mainTailMs = mainStartMs + std::max({ noiseTailMs, settings.toneDecayMs * 6.0f, clickTailMs, 20.0f });
     const float totalTimeMs = std::max(burstTailMs, mainTailMs);
     totalDurationSamples_ = static_cast<int>(totalTimeMs * 0.001f * static_cast<float>(sampleRate_));
 }
@@ -473,10 +479,13 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
     const float toneDecaySamples = std::max(1.0f, settings.toneDecayMs * 0.001f * static_cast<float>(sampleRate_));
     const float toneEnv = ampEnabled_ ? 1.0f : std::exp(-std::max(0.0f, mainAge) / toneDecaySamples);
     float clickSample = 0.0f;
-    if (mainAge >= 0.0f && mainAge < sampleRate_ * 0.005f) {
+    const float clickScale = settings.clickType == ClickType::Thump ? 2.5f : 1.0f;
+    const float clickDecaySamples = std::max(1.0f, std::clamp(settings.clickDecayMs, 0.2f, 20.0f)
+        * clickScale * 0.001f * static_cast<float>(sampleRate_));
+    if (mainAge >= 0.0f && mainAge < clickDecaySamples * 6.0f) {
         const float clickT = mainAge / static_cast<float>(sampleRate_);
         const float clickHz = std::min(settings.clickFreqHz, static_cast<float>(sampleRate_) * 0.45f);
-        const float envFast = std::exp(-mainAge / (0.0008f * static_cast<float>(sampleRate_)));
+        const float envFast = std::exp(-mainAge / clickDecaySamples);
         switch (settings.clickType) {
             case ClickType::Needle: {
                 clickSample = std::sin(2.0f * pi() * clickHz * clickT) * envFast * settings.clickLevel;
@@ -518,9 +527,14 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
 
     float toneSample = 0.0f;
     if (mainAge >= 0.0f && settings.toneLevel > 0.001f) {
+        const float pitchDecaySamples = std::max(1.0f, std::clamp(settings.tonePitchDecayMs, 3.0f, 600.0f)
+            * 0.001f * static_cast<float>(sampleRate_));
+        const float pitchSemitones = std::clamp(settings.tonePitchEnv, -24.0f, 24.0f)
+            * std::exp(-std::max(0.0f, mainAge) / pitchDecaySamples);
+        const float pitchRatio = std::exp2(pitchSemitones / 12.0f);
         if (settings.toneMode == ToneMode::Bandpass) {
-            const float fundamental = std::clamp(midiNoteToHz(midiNote_), 20.0f, static_cast<float>(sampleRate_) * 0.48f);
-            if (std::abs(fundamental - lastToneFrequency_) > 0.01f || std::abs(settings.toneQ - lastToneQ_) > 0.01f) {
+            const float fundamental = std::clamp(midiNoteToHz(midiNote_) * pitchRatio, 20.0f, static_cast<float>(sampleRate_) * 0.48f);
+            if (std::abs(fundamental - lastToneFrequency_) > 2.0f || std::abs(settings.toneQ - lastToneQ_) > 0.01f) {
                 lastToneFrequency_ = fundamental;
                 lastToneQ_ = settings.toneQ;
                 computeBandpassCoeffs(lastToneFrequency_, lastToneQ_, sampleRate_, b0_t_, b1_t_, b2_t_, a1_t_, a2_t_);
@@ -540,10 +554,11 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
             const float resonance = std::clamp(settings.toneQ / 6.0f, 0.1f, 2.0f);
             float weightSum = 0.0f;
             for (size_t i = 0; i < partialFrequencies_.size(); ++i) {
-                const float frequency = partialFrequencies_[i];
+                const float frequency = partialFrequencies_[i] * pitchRatio;
                 if (frequency <= 0.0f) {
                     continue;
                 }
+                if (frequency >= static_cast<float>(sampleRate_) * 0.48f) continue;
 
                 partialPhases_[i] += 2.0f * pi() * frequency / static_cast<float>(sampleRate_);
                 if (partialPhases_[i] >= 2.0f * pi()) {
@@ -556,6 +571,16 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
             }
             toneSample /= std::max(1.0f, weightSum);
         }
+        if (std::abs(settings.toneHPF - lastToneHPF_) > 0.5f || lastToneHPF_ < 0.0f) {
+            lastToneHPF_ = settings.toneHPF;
+            computeHighpassCoeffs(lastToneHPF_, sampleRate_, b0_th_, b1_th_, b2_th_, a1_th_, a2_th_);
+        }
+        if (std::abs(settings.toneLPF - lastToneLPF_) > 0.5f || lastToneLPF_ < 0.0f) {
+            lastToneLPF_ = settings.toneLPF;
+            computeLowpassCoeffs(lastToneLPF_, sampleRate_, b0_tl_, b1_tl_, b2_tl_, a1_tl_, a2_tl_);
+        }
+        toneSample = processBiquad(toneSample, toneHPF_, b0_th_, b1_th_, b2_th_, a1_th_, a2_th_);
+        toneSample = processBiquad(toneSample, toneLPF_, b0_tl_, b1_tl_, b2_tl_, a1_tl_, a2_tl_);
         toneSample *= toneEnv * settings.toneLevel;
     }
 

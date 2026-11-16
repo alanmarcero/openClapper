@@ -17,6 +17,10 @@ inline constexpr const char* kPreLevel = "pre_level";
 inline constexpr const char* kToneMode = "tone_mode";
 inline constexpr const char* kToneQ = "tone_q";
 inline constexpr const char* kToneDecay = "tone_decay";
+inline constexpr const char* kTonePitchEnv = "tone_pitch_env";
+inline constexpr const char* kTonePitchDecay = "tone_pitch_decay";
+inline constexpr const char* kToneHPF = "tone_hpf";
+inline constexpr const char* kToneLPF = "tone_lpf";
 inline constexpr const char* kToneLevel = "tone_level";
 
 // Noise & Sizzle
@@ -34,6 +38,7 @@ inline constexpr const char* kNoiseLevel = "noise_level";
 inline constexpr const char* kClickType = "click_type";
 inline constexpr const char* kClickLevel = "click_level";
 inline constexpr const char* kClickFreq = "click_freq";
+inline constexpr const char* kClickDecay = "click_decay";
 
 // Impact Distortion
 inline constexpr const char* kDistType = "dist_type";

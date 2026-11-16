@@ -32,6 +32,18 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
         juce::ParameterID{ kToneDecay, 1 }, "Tone Decay", juce::NormalisableRange<float>(15.0f, 600.0f, 1.0f, 0.35f), 120.0f,
         juce::AudioParameterFloatAttributes().withLabel("ms")));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ kTonePitchEnv, 1 }, "Body Pitch Sweep", juce::NormalisableRange<float>(-24.0f, 24.0f, 0.1f), 0.0f,
+        juce::AudioParameterFloatAttributes().withLabel("st")));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ kTonePitchDecay, 1 }, "Body Pitch Time", juce::NormalisableRange<float>(3.0f, 600.0f, 0.1f, 0.35f), 28.0f,
+        juce::AudioParameterFloatAttributes().withLabel("ms")));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ kToneHPF, 1 }, "Body HPF", juce::NormalisableRange<float>(20.0f, 12000.0f, 1.0f, 0.35f), 20.0f,
+        juce::AudioParameterFloatAttributes().withLabel("Hz")));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ kToneLPF, 1 }, "Body LPF", juce::NormalisableRange<float>(100.0f, 20000.0f, 1.0f, 0.35f), 20000.0f,
+        juce::AudioParameterFloatAttributes().withLabel("Hz")));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kToneLevel, 1 }, "Tone Level", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.75f));
 
     // Noise & Sizzle
@@ -69,6 +81,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kClickFreq, 1 }, "Click Freq", juce::NormalisableRange<float>(1000.0f, 12000.0f, 10.0f, 0.35f), 4500.0f,
         juce::AudioParameterFloatAttributes().withLabel("Hz")));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ kClickDecay, 1 }, "Click Decay", juce::NormalisableRange<float>(0.2f, 20.0f, 0.1f, 0.35f), 0.8f,
+        juce::AudioParameterFloatAttributes().withLabel("ms")));
 
     // Impact Distortion
     juce::StringArray distTypes{ "Tape", "Tube", "Hard Clip", "Wavefold" };
@@ -196,6 +211,10 @@ openclapper::core::EngineSettings readSettings(const juce::AudioProcessorValueTr
     }
     s.synth.toneQ = *apvts.getRawParameterValue(kToneQ);
     s.synth.toneDecayMs = *apvts.getRawParameterValue(kToneDecay);
+    s.synth.tonePitchEnv = *apvts.getRawParameterValue(kTonePitchEnv);
+    s.synth.tonePitchDecayMs = *apvts.getRawParameterValue(kTonePitchDecay);
+    s.synth.toneHPF = *apvts.getRawParameterValue(kToneHPF);
+    s.synth.toneLPF = *apvts.getRawParameterValue(kToneLPF);
     s.synth.toneLevel = *apvts.getRawParameterValue(kToneLevel);
 
     // Noise & Sizzle
@@ -215,6 +234,7 @@ openclapper::core::EngineSettings readSettings(const juce::AudioProcessorValueTr
     }
     s.synth.clickLevel = *apvts.getRawParameterValue(kClickLevel);
     s.synth.clickFreqHz = *apvts.getRawParameterValue(kClickFreq);
+    s.synth.clickDecayMs = *apvts.getRawParameterValue(kClickDecay);
 
     // Effects
     s.effects.distType = static_cast<openclapper::core::DistortionType>(static_cast<int>(*apvts.getRawParameterValue(kDistType)));
