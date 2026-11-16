@@ -143,11 +143,6 @@ TEST_CASE("OpenClapperEditor instantiates with correct dimensions", "[plugin][gu
     REQUIRE(editor->getWidth() == 1100);
     REQUIRE(editor->getHeight() == 740);
 
-    juce::Image snapshot = editor->createComponentSnapshot(editor->getLocalBounds());
-    REQUIRE(snapshot.isValid());
-    REQUIRE(snapshot.getWidth() == 1100);
-    REQUIRE(snapshot.getHeight() == 740);
-
     juce::TextButton* performanceButton = nullptr;
     for (auto* child : editor->getChildren()) {
         auto* button = dynamic_cast<juce::TextButton*>(child);
@@ -163,11 +158,15 @@ TEST_CASE("OpenClapperEditor instantiates with correct dimensions", "[plugin][gu
     REQUIRE(processor.getSelectedPresetIndex() == 44);
     REQUIRE(processor.getCurrentProgram() == 0);
     REQUIRE(processor.parameters.getRawParameterValue("amp_release")->load() == Catch::Approx(20000.0f));
+    juce::Image snapshot = editor->createComponentSnapshot(editor->getLocalBounds());
+    REQUIRE(snapshot.isValid());
+    REQUIRE(snapshot.getWidth() == 1100);
+    REQUIRE(snapshot.getHeight() == 740);
     performanceButton->setToggleState(true, juce::dontSendNotification);
     performanceButton->onClick();
     auto performanceSnapshot = editor->createComponentSnapshot(editor->getLocalBounds());
-    auto performanceFile = juce::File::getSpecialLocation(juce::File::tempDirectory)
-        .getChildFile("openclapper-performance.png");
+    auto performanceFile = juce::File::getCurrentWorkingDirectory()
+        .getChildFile("assets/openClapper-performance.png");
     performanceFile.deleteFile();
     juce::FileOutputStream performanceImage(performanceFile);
     REQUIRE(performanceImage.openedOk());
