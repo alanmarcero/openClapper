@@ -15,8 +15,8 @@ EdmLookAndFeel::EdmLookAndFeel() {
     setColour(juce::ResizableWindow::backgroundColourId, theme::kBackground);
     setColour(juce::Label::textColourId, theme::kText);
     setColour(juce::Slider::textBoxTextColourId, theme::kText);
-    setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0xff1e2b3c));
-    setColour(juce::Slider::textBoxBackgroundColourId, juce::Colour(0xff090f17));
+    setColour(juce::Slider::textBoxOutlineColourId, theme::kPanelEdge);
+    setColour(juce::Slider::textBoxBackgroundColourId, theme::kKnobBody);
     setColour(juce::Slider::textBoxHighlightColourId, theme::kTrack);
     setColour(juce::ComboBox::backgroundColourId, theme::kKnobBody);
     setColour(juce::ComboBox::textColourId, theme::kText);
@@ -83,8 +83,8 @@ void EdmLookAndFeel::drawRotarySlider(
     g.fillEllipse(body.translated(0.0f, 2.5f));
 
     g.setGradientFill(juce::ColourGradient(
-        juce::Colour(0xff223244), centre.x, body.getY(),
-        juce::Colour(0xff0c131c), centre.x, body.getBottom(), false));
+        theme::kPanel.brighter(0.10f), centre.x, body.getY(),
+        theme::kBackground.darker(0.08f), centre.x, body.getBottom(), false));
     g.fillEllipse(body);
     g.setColour(theme::kPanelEdge.brighter(0.3f));
     g.drawEllipse(body, 1.0f);
@@ -93,10 +93,10 @@ void EdmLookAndFeel::drawRotarySlider(
     const float capRadius = bodyRadius * 0.45f;
     const auto cap = juce::Rectangle<float>(capRadius * 2.0f, capRadius * 2.0f).withCentre(centre);
     g.setGradientFill(juce::ColourGradient(
-        juce::Colour(0xff16202c), centre.x, cap.getY(),
-        juce::Colour(0xff080d13), centre.x, cap.getBottom(), false));
+        theme::kPanel.brighter(0.06f), centre.x, cap.getY(),
+        theme::kBackground.darker(0.06f), centre.x, cap.getBottom(), false));
     g.fillEllipse(cap);
-    g.setColour(juce::Colour(0xff2b3d54));
+    g.setColour(theme::kPanelEdge.brighter(0.1f));
     g.drawEllipse(cap, 0.8f);
 
     // Illuminated pointer needle
@@ -190,8 +190,8 @@ juce::Label* EdmLookAndFeel::createSliderTextBox(juce::Slider& slider) {
     auto* l = LookAndFeel_V4::createSliderTextBox(slider);
     l->setFont(juce::FontOptions(11.0f, juce::Font::bold));
     l->setJustificationType(juce::Justification::centred);
-    l->setColour(juce::Label::backgroundColourId, juce::Colour(0xff090f17));
-    l->setColour(juce::Label::outlineColourId, juce::Colour(0xff1e2b3c));
+    l->setColour(juce::Label::backgroundColourId, theme::kKnobBody);
+    l->setColour(juce::Label::outlineColourId, theme::kPanelEdge);
     return l;
 }
 
