@@ -73,6 +73,7 @@ inline constexpr const char* kReverseMix = "reverse_mix";
 inline constexpr const char* kStereoWidth = "stereo_width";
 inline constexpr const char* kOutputGain = "output_gain";
 inline constexpr const char* kPreset = "preset";
+inline constexpr int kHostProgramCount = 44;
 
 inline constexpr std::array<const char*, 4> kLayerNames{"Body", "Noise", "Transient", "Pre-clap"};
 inline constexpr std::array<const char*, 4> kLayerMute{"body_mute", "noise_mute", "click_mute", "pre_mute"};

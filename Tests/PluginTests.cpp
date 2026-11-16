@@ -25,11 +25,12 @@ TEST_CASE("OpenClapperProcessor instantiates with valid parameters", "[plugin]")
     REQUIRE(processor.parameters.getParameter(openclapper::params::kReverbMix) != nullptr);
 }
 
-TEST_CASE("OpenClapperProcessor provides 45 factory presets", "[plugin]") {
+TEST_CASE("OpenClapperProcessor retains 44 host programs and offers 45 editor presets", "[plugin]") {
     OpenClapperProcessor processor;
-    REQUIRE(processor.getNumPrograms() == 45);
+    REQUIRE(processor.getNumPrograms() == 44);
+    REQUIRE(openclapper::presets::factoryPresets().size() == 45);
 
-    for (int i = 0; i < 45; ++i) {
+    for (int i = 0; i < 44; ++i) {
         processor.setCurrentProgram(i);
         REQUIRE(processor.getCurrentProgram() == i);
         REQUIRE(processor.getProgramName(i).isNotEmpty());
@@ -153,6 +154,15 @@ TEST_CASE("OpenClapperEditor instantiates with correct dimensions", "[plugin][gu
         if (button != nullptr && button->getButtonText() == "PERFORMANCE") performanceButton = button;
     }
     REQUIRE(performanceButton != nullptr);
+    juce::ComboBox* editorPresets = nullptr;
+    for (auto* child : editor->getChildren())
+        if (auto* box = dynamic_cast<juce::ComboBox*>(child)) editorPresets = box;
+    REQUIRE(editorPresets != nullptr);
+    REQUIRE(editorPresets->getNumItems() == 45);
+    editorPresets->setSelectedId(45, juce::sendNotificationSync);
+    REQUIRE(processor.getSelectedPresetIndex() == 44);
+    REQUIRE(processor.getCurrentProgram() == 0);
+    REQUIRE(processor.parameters.getRawParameterValue("amp_release")->load() == Catch::Approx(20000.0f));
     performanceButton->setToggleState(true, juce::dontSendNotification);
     performanceButton->onClick();
     auto performanceSnapshot = editor->createComponentSnapshot(editor->getLocalBounds());
@@ -318,10 +328,11 @@ TEST_CASE("Choke groups stop previous voices on a new accepted note", "[plugin][
 TEST_CASE("Impact Clap factory preset sustains a prominent twenty second noise release", "[plugin][performance]") {
     OpenClapperProcessor processor;
     int impact = -1;
-    for (int index = 0; index < processor.getNumPrograms(); ++index)
-        if (processor.getProgramName(index).contains("Impact Clap")) impact = index;
+    const auto& bank = openclapper::presets::factoryPresets();
+    for (size_t index = 0; index < bank.size(); ++index)
+        if (juce::String(bank[index].name).contains("Impact Clap")) impact = static_cast<int>(index);
     REQUIRE(impact >= 0);
-    processor.setCurrentProgram(impact);
+    processor.selectPreset(impact);
     REQUIRE(processor.parameters.getRawParameterValue("amp_release")->load() == Catch::Approx(20000.0f));
     REQUIRE(processor.parameters.getRawParameterValue(openclapper::params::kNoiseLevel)->load() >= 0.9f);
     processor.prepareToPlay(48000, 48000);
@@ -377,4 +388,34 @@ TEST_CASE("Audition releases a full ADSR patch automatically", "[plugin][perform
     processor.processBlock(audio, midi);
     REQUIRE(audio.getMagnitude(0, 12000) > 0.001f);
     REQUIRE(audio.getMagnitude(36000, 12000) < 0.0000001f);
+}
+
+TEST_CASE("Legacy preset automation preserves all original normalized program values", "[plugin][performance]") {
+    OpenClapperProcessor processor, restored;
+    auto* selector = processor.parameters.getParameter(openclapper::params::kPreset);
+    for (int program = 0; program < 44; ++program) {
+        INFO(program);
+        const float legacyAutomation = static_cast<float>(program) / 43.0f;
+        selector->setValueNotifyingHost(legacyAutomation);
+        REQUIRE(processor.parameters.getRawParameterValue(openclapper::params::kPreset)->load()
+            == Catch::Approx(static_cast<float>(program)));
+        juce::MemoryBlock state;
+        processor.getStateInformation(state);
+        restored.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+        REQUIRE(restored.parameters.getParameter(openclapper::params::kPreset)->getValue()
+            == Catch::Approx(legacyAutomation));
+    }
+    processor.setCurrentProgram(43);
+    processor.selectPreset(44);
+    REQUIRE(processor.getCurrentProgram() == 43);
+    REQUIRE(processor.getSelectedPresetIndex() == 44);
+    REQUIRE(processor.getProgramName(44).contains("Impact Clap"));
+    REQUIRE(selector->getValue() == Catch::Approx(1.0f));
+    REQUIRE(processor.parameters.getRawParameterValue(openclapper::params::kPreset)->load() == Catch::Approx(43.0f));
+    juce::MemoryBlock impactState;
+    processor.getStateInformation(impactState);
+    restored.setStateInformation(impactState.getData(), static_cast<int>(impactState.getSize()));
+    REQUIRE(restored.getCurrentProgram() == 43);
+    REQUIRE(restored.getSelectedPresetIndex() == 44);
+    REQUIRE(restored.parameters.getRawParameterValue("amp_release")->load() == Catch::Approx(20000.0f));
 }
