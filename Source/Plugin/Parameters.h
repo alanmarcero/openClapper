@@ -74,6 +74,25 @@ inline constexpr const char* kStereoWidth = "stereo_width";
 inline constexpr const char* kOutputGain = "output_gain";
 inline constexpr const char* kPreset = "preset";
 
+inline constexpr std::array<const char*, 4> kLayerNames{"Body", "Noise", "Transient", "Pre-clap"};
+inline constexpr std::array<const char*, 4> kLayerMute{"body_mute", "noise_mute", "click_mute", "pre_mute"};
+inline constexpr std::array<const char*, 4> kLayerSolo{"body_solo", "noise_solo", "click_solo", "pre_solo"};
+inline constexpr std::array<const char*, 3> kLayerVelocity{"body_velocity", "noise_velocity", "click_velocity"};
+
+struct PerformanceParameter {
+    const char* id;
+    const char* name;
+    float minimum, maximum, initial;
+};
+inline constexpr std::array<PerformanceParameter, 11> kPerformanceParameters{{
+    {"key_low", "MIDI Key Low", 0, 127, 0}, {"key_high", "MIDI Key High", 0, 127, 127},
+    {"velocity_low", "Velocity Low", 1, 127, 1}, {"velocity_high", "Velocity High", 1, 127, 127},
+    {"choke_group", "Choke Group (0 Off)", 0, 16, 0}, {"roll_hits", "Roll / Fill Hits", 1, 32, 4},
+    {"amp_attack", "Amp Attack (ms)", 0, 10000, 0}, {"amp_decay", "Amp Decay (ms)", 0, 10000, 100},
+    {"amp_sustain", "Amp Sustain", 0, 1, 0.8f}, {"amp_release", "Amp Release (ms)", 0, 20000, 200},
+    {"amp_enabled", "Full ADSR", 0, 1, 0}
+}};
+
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 openclapper::core::EngineSettings readSettings(const juce::AudioProcessorValueTreeState& apvts);
 

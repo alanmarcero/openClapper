@@ -193,3 +193,41 @@ TEST_CASE("ClapSynth tone pitch follows MIDI notes", "[core][synth]") {
     }
     REQUIRE(diffSum > 1.0f);
 }
+
+TEST_CASE("Full ADSR follows attack decay sustain and a complete twenty second release", "[performance]") {
+    ClapSynth envelope, reference;
+    envelope.prepare(1000);
+    reference.prepare(1000);
+    ClapSynthSettings settings;
+    settings.preClapCount = 0;
+    settings.toneMode = ToneMode::SubThump;
+    settings.layers[0].solo = true;
+    settings.ampEnabled = true;
+    settings.ampAttackMs = 100;
+    settings.ampDecayMs = 100;
+    settings.ampSustain = 0.25f;
+    settings.ampReleaseMs = 20000;
+    auto unity = settings;
+    unity.ampAttackMs = unity.ampDecayMs = 0;
+    unity.ampSustain = 1;
+    envelope.trigger(settings, 43);
+    reference.trigger(unity, 43);
+    for (int sample = 0; sample < 250; ++sample) {
+        const float actual = envelope.processSample(settings).left;
+        const float raw = reference.processSample(unity).left;
+        float gain = 0.25f;
+        if (sample < 100) gain = static_cast<float>(sample) / 100.0f;
+        else if (sample < 200) gain = 1.0f - 0.75f * static_cast<float>(sample - 100) / 100.0f;
+        REQUIRE(std::abs(actual - raw * gain) < 0.00001f);
+    }
+    envelope.noteOff(settings);
+    for (int sample = 0; sample < 20000; ++sample) {
+        const float actual = envelope.processSample(settings).left;
+        const float raw = reference.processSample(unity).left;
+        const float gain = 0.25f * (1.0f - static_cast<float>(sample) / 20000.0f);
+        REQUIRE(std::abs(actual - raw * gain) < 0.00001f);
+        REQUIRE(envelope.isPlaying());
+    }
+    REQUIRE(std::abs(envelope.processSample(settings).left) < 0.00001f);
+    REQUIRE_FALSE(envelope.isPlaying());
+}

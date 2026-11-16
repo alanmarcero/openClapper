@@ -66,6 +66,48 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& processorToEdit)
     addAndMakeVisible(synthPanel_);
     addAndMakeVisible(effectsPanel_);
 
+    const auto addControl = [this](std::unique_ptr<juce::Component> control) {
+        performancePanel_.addAndMakeVisible(*control);
+        performanceControls_.push_back(std::move(control));
+    };
+    using namespace openclapper::params;
+    for (size_t layer = 0; layer < kLayerNames.size(); ++layer) {
+        addControl(std::make_unique<openclapper::ui::Toggle>(processor_.parameters, kLayerMute[layer],
+            juce::String(kLayerNames[layer]) + " Mute", openclapper::theme::kAccentAmber));
+        addControl(std::make_unique<openclapper::ui::Toggle>(processor_.parameters, kLayerSolo[layer],
+            juce::String(kLayerNames[layer]) + " Solo", openclapper::theme::kAccentCyan));
+        if (layer < kLayerVelocity.size()) {
+            auto knob = std::make_unique<openclapper::ui::Knob>(processor_.parameters, kLayerVelocity[layer],
+                juce::String(kLayerNames[layer]) + " Velocity", openclapper::theme::kAccentCyan);
+            knob->setTooltip("0 ignores velocity, 1 follows velocity, 2 gives a stronger velocity response.");
+            addControl(std::move(knob));
+        }
+    }
+    for (const auto& parameter : kPerformanceParameters) {
+        if (juce::String(parameter.id) == "amp_enabled") {
+            addControl(std::make_unique<openclapper::ui::Toggle>(processor_.parameters, parameter.id, parameter.name,
+                openclapper::theme::kAccentAmber));
+            continue;
+        }
+        addControl(std::make_unique<openclapper::ui::Knob>(processor_.parameters, parameter.id, parameter.name,
+            openclapper::theme::kAccentCyan));
+    }
+    addControl(std::make_unique<openclapper::ui::Choice>(processor_.parameters, "roll_division", "Roll Division",
+        openclapper::theme::kAccentCyan));
+    addChildComponent(performancePanel_);
+    performanceButton_.setColour(juce::TextButton::textColourOffId, openclapper::theme::kAccentCyan);
+    performanceButton_.setColour(juce::TextButton::textColourOnId, openclapper::theme::kAccentAmber);
+    performanceButton_.setClickingTogglesState(true);
+    performanceButton_.onClick = [this] {
+        const bool visible = performanceButton_.getToggleState();
+        performancePanel_.setVisible(visible);
+        stagePanel_.setVisible(!visible);
+        synthPanel_.setVisible(!visible);
+        effectsPanel_.setVisible(!visible);
+        viewToggleBtn_.setEnabled(!visible);
+        resized();
+    };
+    addAndMakeVisible(performanceButton_);
     setSize(1100, 740);
     setResizable(false, false);
     startTimerHz(20);
@@ -136,6 +178,14 @@ void OpenClapperEditor::resized() {
     presetBox_.setBounds(presetArea.withHeight(26).translated(0, 4));
     nextPresetBtn_.setBounds(presetArea.getRight() + 4, presetArea.getY() + 4, 24, 26);
     viewToggleBtn_.setBounds(nextPresetBtn_.getRight() + 12, presetArea.getY() + 4, 86, 26);
+
+    performanceButton_.setBounds(prevPresetBtn_.getX() - 106, presetArea.getY() + 4, 100, 26);
+    performancePanel_.setBounds(area);
+    const int cellWidth = area.getWidth() / 6;
+    const int cellHeight = area.getHeight() / 4;
+    for (size_t index = 0; index < performanceControls_.size(); ++index)
+        performanceControls_[index]->setBounds(static_cast<int>(index % 6) * cellWidth + 8,
+            static_cast<int>(index / 6) * cellHeight + 8, cellWidth - 16, cellHeight - 16);
 
     // Main Layout:
     // Left side: ClappyStagePanel (approx 340 px width)

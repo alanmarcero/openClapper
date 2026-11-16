@@ -143,8 +143,37 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
         juce::ParameterID{ kOutputGain, 1 }, "Output Gain", juce::NormalisableRange<float>(-36.0f, 12.0f, 0.5f), 0.0f,
         juce::AudioParameterFloatAttributes().withLabel("dB")));
     params.push_back(std::make_unique<juce::AudioParameterInt>(
-        juce::ParameterID{ kPreset, 1 }, "Preset Index", 0, 43, 0));
+        juce::ParameterID{ kPreset, 1 }, "Preset Index", 0, 44, 0));
 
+    for (size_t layer = 0; layer < kLayerNames.size(); ++layer) {
+        params.push_back(std::make_unique<juce::AudioParameterBool>(
+            juce::ParameterID{kLayerMute[layer], 1}, juce::String(kLayerNames[layer]) + " Mute", false));
+        params.push_back(std::make_unique<juce::AudioParameterBool>(
+            juce::ParameterID{kLayerSolo[layer], 1}, juce::String(kLayerNames[layer]) + " Solo", false));
+        if (layer < kLayerVelocity.size())
+            params.push_back(std::make_unique<juce::AudioParameterFloat>(
+                juce::ParameterID{kLayerVelocity[layer], 1}, juce::String(kLayerNames[layer]) + " Velocity Response",
+                juce::NormalisableRange<float>(0, 2, 0.01f), 1.0f));
+    }
+    for (const auto& parameter : kPerformanceParameters) {
+        if (juce::String(parameter.id) == "amp_enabled") {
+            params.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{parameter.id, 1}, parameter.name, false));
+            continue;
+        }
+        const bool continuous = juce::String(parameter.id).startsWith("amp_");
+        const float step = juce::String(parameter.id) == "amp_sustain" ? 0.01f : 1.0f;
+        if (continuous) {
+            params.push_back(std::make_unique<juce::AudioParameterFloat>(
+                juce::ParameterID{parameter.id, 1}, parameter.name,
+                juce::NormalisableRange<float>(parameter.minimum, parameter.maximum, step, parameter.maximum > 1 ? 0.35f : 1.0f), parameter.initial));
+            continue;
+        }
+        params.push_back(std::make_unique<juce::AudioParameterInt>(
+            juce::ParameterID{parameter.id, 1}, parameter.name, static_cast<int>(parameter.minimum),
+            static_cast<int>(parameter.maximum), static_cast<int>(parameter.initial)));
+    }
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"roll_division", 1}, "Roll Division",
+        juce::StringArray{"Off", "1/8", "1/16", "1/32", "1/16 Triplet"}, 0));
     return { params.begin(), params.end() };
 }
 
@@ -220,6 +249,24 @@ openclapper::core::EngineSettings readSettings(const juce::AudioProcessorValueTr
     s.effects.stereoWidth = *apvts.getRawParameterValue(kStereoWidth);
     s.effects.outputGainDb = *apvts.getRawParameterValue(kOutputGain);
 
+    for (size_t layer = 0; layer < kLayerNames.size(); ++layer) {
+        s.synth.layers[layer].mute = *apvts.getRawParameterValue(kLayerMute[layer]) > 0.5f;
+        s.synth.layers[layer].solo = *apvts.getRawParameterValue(kLayerSolo[layer]) > 0.5f;
+        if (layer < kLayerVelocity.size())
+            s.synth.layers[layer].velocityResponse = *apvts.getRawParameterValue(kLayerVelocity[layer]);
+    }
+    s.keyLow = static_cast<int>(*apvts.getRawParameterValue("key_low"));
+    s.keyHigh = static_cast<int>(*apvts.getRawParameterValue("key_high"));
+    s.velocityLow = static_cast<int>(*apvts.getRawParameterValue("velocity_low"));
+    s.velocityHigh = static_cast<int>(*apvts.getRawParameterValue("velocity_high"));
+    s.chokeGroup = static_cast<int>(*apvts.getRawParameterValue("choke_group"));
+    s.rollDivision = static_cast<int>(*apvts.getRawParameterValue("roll_division"));
+    s.rollHits = static_cast<int>(*apvts.getRawParameterValue("roll_hits"));
+    s.synth.ampEnabled = *apvts.getRawParameterValue("amp_enabled") > 0.5f;
+    s.synth.ampAttackMs = *apvts.getRawParameterValue("amp_attack");
+    s.synth.ampDecayMs = *apvts.getRawParameterValue("amp_decay");
+    s.synth.ampSustain = *apvts.getRawParameterValue("amp_sustain");
+    s.synth.ampReleaseMs = *apvts.getRawParameterValue("amp_release");
     return s;
 }
 
