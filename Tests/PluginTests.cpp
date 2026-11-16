@@ -8,6 +8,21 @@
 #include <cmath>
 #include <vector>
 
+namespace {
+juce::File findRepositoryRoot() {
+    auto directory = juce::File::getCurrentWorkingDirectory();
+    while (directory.exists()) {
+        if (directory.getChildFile("assets").isDirectory())
+            return directory;
+        const auto parent = directory.getParentDirectory();
+        if (parent == directory)
+            break;
+        directory = parent;
+    }
+    return juce::File::getCurrentWorkingDirectory();
+}
+}
+
 TEST_CASE("OpenClapperProcessor instantiates with valid parameters", "[plugin]") {
     OpenClapperProcessor processor;
     REQUIRE(processor.getName() == "openClapper");
@@ -165,15 +180,14 @@ TEST_CASE("OpenClapperEditor instantiates with correct dimensions", "[plugin][gu
     performanceButton->setToggleState(true, juce::dontSendNotification);
     performanceButton->onClick();
     auto performanceSnapshot = editor->createComponentSnapshot(editor->getLocalBounds());
-    auto performanceFile = juce::File::getCurrentWorkingDirectory()
-        .getChildFile("assets/openClapper-performance.png");
+    auto performanceFile = findRepositoryRoot().getChildFile("assets/openClapper-performance.png");
     performanceFile.deleteFile();
     juce::FileOutputStream performanceImage(performanceFile);
     REQUIRE(performanceImage.openedOk());
     juce::PNGImageFormat performancePng;
     REQUIRE(performancePng.writeImageToStream(performanceSnapshot, performanceImage));
 
-    juce::File repoScreenshot = juce::File::getCurrentWorkingDirectory().getChildFile("assets/openClapper-screenshot.png");
+    juce::File repoScreenshot = findRepositoryRoot().getChildFile("assets/openClapper-screenshot.png");
     if (repoScreenshot.getParentDirectory().exists()) {
         repoScreenshot.deleteFile();
         juce::FileOutputStream stream(repoScreenshot);
