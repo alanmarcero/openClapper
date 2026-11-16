@@ -57,6 +57,10 @@ struct ClapSynthSettings {
     ToneMode toneMode = ToneMode::Bandpass;
     float toneQ = 3.2f;           // 0.5..12.0 resonance
     float toneDecayMs = 120.0f;   // 15..600 ms tone decay
+    float tonePitchEnv = 0.0f;    // -24..+24 semitones, decays to the MIDI note
+    float tonePitchDecayMs = 28.0f; // 3..600 ms pitch sweep time
+    float toneHPF = 20.0f;        // 20..12000 Hz body high-pass
+    float toneLPF = 20000.0f;     // 100..20000 Hz body low-pass
     float toneLevel = 0.75f;      // 0..1 level of tone core
 
     // Noise & Sizzle
@@ -74,6 +78,7 @@ struct ClapSynthSettings {
     ClickType clickType = ClickType::Needle;
     float clickLevel = 0.4f;      // 0..1
     float clickFreqHz = 4500.0f;  // 1000..12000 Hz
+    float clickDecayMs = 0.8f;    // 0.2..20 ms transient time constant
 
     bool operator==(const ClapSynthSettings&) const noexcept = default;
 };
@@ -211,9 +216,14 @@ private:
     std::array<float, 8> partialPhases_{};
 
     BiquadState toneFilterL_{};
+    BiquadState toneHPF_{};
+    BiquadState toneLPF_{};
     float lastToneFrequency_ = -1.0f;
     float lastToneQ_ = -1.0f;
     float b0_t_ = 0.0f, b1_t_ = 0.0f, b2_t_ = 0.0f, a1_t_ = 0.0f, a2_t_ = 0.0f;
+    float lastToneHPF_ = -1.0f, lastToneLPF_ = -1.0f;
+    float b0_th_ = 0.0f, b1_th_ = 0.0f, b2_th_ = 0.0f, a1_th_ = 0.0f, a2_th_ = 0.0f;
+    float b0_tl_ = 1.0f, b1_tl_ = 0.0f, b2_tl_ = 0.0f, a1_tl_ = 0.0f, a2_tl_ = 0.0f;
 
     BiquadState preHPF_L_{}, preHPF_R_{}, preLPF_L_{}, preLPF_R_{};
     BiquadState noiseHPF_L_{};

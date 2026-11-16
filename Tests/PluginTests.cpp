@@ -6,10 +6,16 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 #include <cmath>
+#include <utility>
 #include <vector>
 
 namespace {
 juce::File findRepositoryRoot() {
+#if defined(OPENCLAPPER_SOURCE_DIR)
+    const juce::File configuredRoot(OPENCLAPPER_SOURCE_DIR);
+    if (configuredRoot.getChildFile("assets").isDirectory())
+        return configuredRoot;
+#endif
     auto directory = juce::File::getCurrentWorkingDirectory();
     while (directory.exists()) {
         if (directory.getChildFile("assets").isDirectory())
@@ -38,6 +44,17 @@ TEST_CASE("OpenClapperProcessor instantiates with valid parameters", "[plugin]")
     REQUIRE(processor.parameters.getParameter(openclapper::params::kCompThresh) != nullptr);
     REQUIRE(processor.parameters.getParameter(openclapper::params::kLimiterCeiling) != nullptr);
     REQUIRE(processor.parameters.getParameter(openclapper::params::kReverbMix) != nullptr);
+}
+
+TEST_CASE("OpenClapper exposes automatable body sweep, body filters, and transient decay", "[plugin][parameters]") {
+    OpenClapperProcessor processor;
+    for (const auto* id : { openclapper::params::kTonePitchEnv, openclapper::params::kTonePitchDecay,
+                            openclapper::params::kToneHPF, openclapper::params::kToneLPF,
+                            openclapper::params::kClickDecay }) {
+        auto* parameter = processor.parameters.getParameter(id);
+        REQUIRE(parameter != nullptr);
+        CHECK(parameter->isAutomatable());
+    }
 }
 
 TEST_CASE("OpenClapperProcessor retains 44 host programs and offers 45 editor presets", "[plugin]") {
@@ -129,6 +146,18 @@ TEST_CASE("OpenClapperProcessor renders audio upon MIDI note-on", "[plugin]") {
 TEST_CASE("OpenClapperProcessor saves and restores state information", "[plugin]") {
     OpenClapperProcessor proc1;
     proc1.setCurrentProgram(5); // Dutch Hardstyle Smacker
+    const std::array<std::pair<const char*, float>, 5> featureValues {{
+        { openclapper::params::kTonePitchEnv, -8.5f },
+        { openclapper::params::kTonePitchDecay, 110.0f },
+        { openclapper::params::kToneHPF, 650.0f },
+        { openclapper::params::kToneLPF, 7200.0f },
+        { openclapper::params::kClickDecay, 3.2f }
+    }};
+    for (const auto& [id, value] : featureValues) {
+        auto* parameter = proc1.parameters.getParameter(id);
+        REQUIRE(parameter != nullptr);
+        parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
+    }
     for (const auto& parameter : openclapper::params::kPerformanceParameters) {
         auto* value = proc1.parameters.getParameter(parameter.id);
         value->setValueNotifyingHost(0.7f);
@@ -147,6 +176,8 @@ TEST_CASE("OpenClapperProcessor saves and restores state information", "[plugin]
     for (const auto& parameter : openclapper::params::kPerformanceParameters)
         REQUIRE(std::abs(proc1.parameters.getRawParameterValue(parameter.id)->load()
             - proc2.parameters.getRawParameterValue(parameter.id)->load()) < 0.001f);
+    for (const auto& [id, value] : featureValues)
+        REQUIRE(std::abs(proc2.parameters.getRawParameterValue(id)->load() - value) < 0.11f);
 }
 
 TEST_CASE("OpenClapperEditor instantiates with correct dimensions", "[plugin][gui]") {
@@ -177,6 +208,22 @@ TEST_CASE("OpenClapperEditor instantiates with correct dimensions", "[plugin][gu
     REQUIRE(snapshot.isValid());
     REQUIRE(snapshot.getWidth() == 1100);
     REQUIRE(snapshot.getHeight() == 740);
+    juce::TextButton* viewButton = nullptr;
+    for (auto* child : editor->getChildren()) {
+        auto* button = dynamic_cast<juce::TextButton*>(child);
+        if (button != nullptr && button->getButtonText() == "SIMPLE") viewButton = button;
+    }
+    REQUIRE(viewButton != nullptr);
+    viewButton->onClick();
+    const auto advancedSnapshot = editor->createComponentSnapshot(editor->getLocalBounds());
+    REQUIRE(advancedSnapshot.isValid());
+    const auto advancedFile = findRepositoryRoot().getChildFile("assets/openClapper-screenshot-advanced.png");
+    advancedFile.deleteFile();
+    juce::FileOutputStream advancedImage(advancedFile);
+    REQUIRE(advancedImage.openedOk());
+    juce::PNGImageFormat advancedPng;
+    REQUIRE(advancedPng.writeImageToStream(advancedSnapshot, advancedImage));
+    viewButton->onClick();
     performanceButton->setToggleState(true, juce::dontSendNotification);
     performanceButton->onClick();
     auto performanceSnapshot = editor->createComponentSnapshot(editor->getLocalBounds());

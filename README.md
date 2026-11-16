@@ -4,7 +4,7 @@
 
 Clap on. Clap off.
 
-openClapper is a trance-focused clap synthesizer for VST3, AU, LV2, and Standalone on macOS, Windows, and Linux. Version 3.1 restores the Bandpass resonant body as MIDI-tuned noise: each incoming note sets its filter center, and the selected white, pink, velvet, or lo-fi noise shapes its tone. MIDI note 69 is A4 at 440 Hz, so playing A4 produces an A-tuned clap; every semitone and octave follows equal temperament.
+openClapper is a trance-focused clap synthesizer for VST3, AU, LV2, and Standalone on macOS, Windows, and Linux. Version 3.2 adds body pitch sweeps, independent body high/low-pass filters, and adjustable transient decay. Version 3.1 restores the Bandpass resonant body as MIDI-tuned noise: each incoming note sets its filter center, and the selected white, pink, velvet, or lo-fi noise shapes its tone. MIDI note 69 is A4 at 440 Hz, so playing A4 produces an A-tuned clap; every semitone and octave follows equal temperament.
 
 The synthesis engine builds each hit from a tuned resonant body, layered noise, a transient click, and up to five pre-clap bursts. Eight voices can overlap. Shared effects add host-tempo slapback, gated stereo reverb, distortion, compression, limiting, and stereo width.
 
@@ -13,6 +13,8 @@ The synthesis engine builds each hit from a tuned resonant body, layered noise, 
 The editor screenshots show the Impact Clap preset in the sound controls and performance pages.
 
 ![openClapper Impact Clap sound controls](assets/openClapper-screenshot.png)
+
+![openClapper Impact Clap advanced sound controls](assets/openClapper-screenshot-advanced.png)
 
 ![openClapper Impact Clap performance controls](assets/openClapper-performance.png)
 
@@ -31,9 +33,9 @@ For example, notes 57, 69, and 81 produce A3 at 220 Hz, A4 at 440 Hz, and A5 at 
 | Section | Controls | What they shape |
 |---|---|---|
 | Pre-clap flam | Bursts, spread, decay, humanize, pan, level | Micro-bursts and stereo movement before the main hit |
-| Resonant body | Mode, Q, decay, level | MIDI-tuned body character and sustain |
+| Resonant body | Mode, Q, decay, pitch sweep depth/time, HPF, LPF, level | MIDI-tuned body character, pitch movement, and spectral focus |
 | Noise | Type, attack, hold, decay, curve, HPF, LPF, width, level | The clap's broadband texture and stereo spread |
-| Transient click | Type, level, frequency | The initial needle, crack, or thump |
+| Transient click | Type, level, frequency, decay | The initial needle, crack, or thump and its tail |
 | Distortion | Type, drive, tone, mix | Tape, tube, hard-clip, or wavefold color |
 | Compressor | Threshold, ratio, attack, release, makeup, mix | Transient density and loudness |
 | Limiter | Ceiling, release, enabled | Output peak control |

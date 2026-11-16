@@ -52,6 +52,10 @@ private:
     Choice toneMode_;
     Knob toneQ_;
     Knob toneDecay_;
+    Knob tonePitchEnv_;
+    Knob tonePitchDecay_;
+    Knob toneHPF_;
+    Knob toneLPF_;
     Knob toneLevel_;
 
     // Noise & Sizzle
@@ -66,6 +70,7 @@ private:
     Choice clickType_;
     Knob clickLevel_;
     Knob clickFreq_;
+    Knob clickDecay_;
 
     juce::Rectangle<int> attackSectionBounds_;
     juce::Rectangle<int> tailSectionBounds_;

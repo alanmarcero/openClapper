@@ -194,6 +194,85 @@ TEST_CASE("ClapSynth tone pitch follows MIDI notes", "[core][synth]") {
     REQUIRE(diffSum > 1.0f);
 }
 
+TEST_CASE("ClapSynth tone pitch sweep changes the body at note onset", "[core][synth][pitch]") {
+    const auto renderSweep = [](float pitchEnv) {
+        ClapSynth synth;
+        synth.prepare(48000.0);
+        ClapSynthSettings settings;
+        settings.preClapCount = 0;
+        settings.toneLevel = 1.0f;
+        settings.tonePitchEnv = pitchEnv;
+        settings.tonePitchDecayMs = 28.0f;
+        settings.noiseLevel = 0.0f;
+        settings.clickLevel = 0.0f;
+        settings.ampEnabled = false;
+        std::vector<float> left, right;
+        synth.renderBlock(left, right, settings, 1.0f, 57);
+        return left;
+    };
+
+    const auto flat = renderSweep(0.0f);
+    const auto swept = renderSweep(18.0f);
+    REQUIRE(flat.size() == swept.size());
+    float difference = 0.0f;
+    for (size_t i = 0; i < std::min<size_t>(flat.size(), 2048); ++i)
+        difference += std::abs(flat[i] - swept[i]);
+    REQUIRE(difference > 1.0f);
+}
+
+TEST_CASE("ClapSynth body filters isolate low and high content independently", "[core][synth][filter]") {
+    const auto renderBody = [](float highpass, float lowpass) {
+        ClapSynth synth;
+        synth.prepare(48000.0);
+        ClapSynthSettings settings;
+        settings.preClapCount = 0;
+        settings.toneMode = ToneMode::CyberSquare;
+        settings.toneLevel = 1.0f;
+        settings.toneHPF = highpass;
+        settings.toneLPF = lowpass;
+        settings.toneDecayMs = 600.0f;
+        settings.noiseLevel = 0.0f;
+        settings.clickLevel = 0.0f;
+        std::vector<float> left, right;
+        synth.renderBlock(left, right, settings, 1.0f, 81);
+        float energy = 0.0f;
+        for (size_t i = 0; i < std::min<size_t>(left.size(), 12000); ++i)
+            energy += left[i] * left[i];
+        return energy;
+    };
+
+    const float fullBand = renderBody(20.0f, 20000.0f);
+    const float highPassed = renderBody(4000.0f, 20000.0f);
+    const float lowPassed = renderBody(20.0f, 250.0f);
+    REQUIRE(fullBand > 0.1f);
+    REQUIRE(highPassed < fullBand * 0.45f);
+    REQUIRE(lowPassed < fullBand * 0.45f);
+}
+
+TEST_CASE("ClapSynth transient decay controls the crack tail", "[core][synth][transient]") {
+    const auto renderTail = [](float decayMs) {
+        ClapSynth synth;
+        synth.prepare(48000.0);
+        ClapSynthSettings settings;
+        settings.preClapCount = 0;
+        settings.toneLevel = 0.0f;
+        settings.noiseLevel = 0.0f;
+        settings.clickType = ClickType::Crack;
+        settings.clickLevel = 1.0f;
+        settings.clickDecayMs = decayMs;
+        std::vector<float> left, right;
+        synth.renderBlock(left, right, settings, 1.0f, 69);
+        float energy = 0.0f;
+        const size_t start = 500;
+        const size_t end = std::min(left.size(), size_t{1500});
+        for (size_t i = start; i < end; ++i)
+            energy += left[i] * left[i];
+        return energy;
+    };
+
+    REQUIRE(renderTail(0.5f) < renderTail(8.0f) * 0.02f);
+}
+
 TEST_CASE("Full ADSR follows attack decay sustain and a complete twenty second release", "[performance]") {
     ClapSynth envelope, reference;
     envelope.prepare(1000);

@@ -20,10 +20,11 @@ constexpr float presetChoice(Choice choice) noexcept {
 std::vector<std::pair<juce::String, float>> defaultValues() {
     auto values = std::vector<std::pair<juce::String, float>>{
         { kPreBursts, 3.0f }, { kPreSpread, 12.0f }, { kPreDecay, 8.0f }, { kPreJitter, 0.15f }, { kFlamSpread, 0.45f }, { kPreLevel, 0.85f },
-        { kToneMode, presetChoice(ToneMode::Bandpass) }, { kToneQ, 3.2f }, { kToneDecay, 120.0f }, { kToneLevel, 0.75f },
+        { kToneMode, presetChoice(ToneMode::Bandpass) }, { kToneQ, 3.2f }, { kToneDecay, 120.0f },
+        { kTonePitchEnv, 0.0f }, { kTonePitchDecay, 28.0f }, { kToneHPF, 20.0f }, { kToneLPF, 20000.0f }, { kToneLevel, 0.75f },
         { kNoiseType, presetChoice(NoiseType::White) }, { kNoiseAttack, 0.0f }, { kNoiseHold, 2.0f }, { kNoiseDecay, 180.0f },
         { kNoiseCurve, -0.3f }, { kNoiseHPF, 350.0f }, { kNoiseLPF, 9500.0f }, { kNoiseStereoWidth, 1.0f }, { kNoiseLevel, 0.85f },
-        { kClickType, presetChoice(ClickType::Needle) }, { kClickLevel, 0.4f }, { kClickFreq, 4500.0f },
+        { kClickType, presetChoice(ClickType::Needle) }, { kClickLevel, 0.4f }, { kClickFreq, 4500.0f }, { kClickDecay, 0.8f },
         { kDistType, presetChoice(DistortionType::Tape) }, { kDistDrive, 0.12f }, { kDistTone, 0.0f }, { kDistMix, 0.2f },
         { kCompThresh, -14.0f }, { kCompRatio, 4.0f }, { kCompAttack, 5.0f }, { kCompRelease, 80.0f }, { kCompMakeup, 3.0f }, { kCompMix, 1.0f },
         { kLimiterCeiling, -0.3f }, { kLimiterRelease, 20.0f }, { kLimiterEnabled, 1.0f },
