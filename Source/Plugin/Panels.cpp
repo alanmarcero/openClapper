@@ -328,7 +328,7 @@ void ClapSynthPanel::paint(juce::Graphics& g) {
         const auto badge = juce::Rectangle<float>(tailRect.getX() + 8.0f, tailRect.getY() + 3.0f, 240.0f, 14.0f);
         g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
         g.setColour(theme::kAccentAmber);
-        g.drawText("★ MIDI-TUNED BODY & HARMONICS", badge, juce::Justification::centredLeft);
+        g.drawText("MIDI-TUNED BODY & HARMONICS", badge, juce::Justification::centredLeft);
     }
 
     if (!attackSectionBounds_.isEmpty()) {

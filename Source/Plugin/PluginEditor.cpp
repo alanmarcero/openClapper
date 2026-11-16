@@ -135,7 +135,7 @@ void OpenClapperEditor::paint(juce::Graphics& g) {
     // 2. Chassis texture in margins (high-tech carbon & cyber trace styling)
     if (faceplate_.isValid()) {
         const juce::Graphics::ScopedSaveState state(g);
-        g.setOpacity(0.40f);
+        g.setOpacity(0.22f);
         g.drawImageWithin(faceplate_, 0, 0, getWidth(), getHeight(),
                           juce::RectanglePlacement::stretchToFit);
     }
@@ -143,8 +143,8 @@ void OpenClapperEditor::paint(juce::Graphics& g) {
     // 3. Solid top header bar with border and cyan accent strip
     const auto headerArea = getLocalBounds().removeFromTop(44);
     g.setGradientFill(juce::ColourGradient(
-        juce::Colour(0xff111822), 0.0f, 0.0f,
-        juce::Colour(0xff090e15), 0.0f, static_cast<float>(headerArea.getHeight()), false));
+        openclapper::theme::kPanel, 0.0f, 0.0f,
+        openclapper::theme::kBackground, 0.0f, static_cast<float>(headerArea.getHeight()), false));
     g.fillRect(headerArea);
     g.setColour(openclapper::theme::kPanelEdge);
     g.drawHorizontalLine(headerArea.getBottom() - 1, 0.0f, static_cast<float>(getWidth()));
