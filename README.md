@@ -8,6 +8,14 @@ openClapper is a trance-focused clap synthesizer for VST3, AU, LV2, and Standalo
 
 The synthesis engine builds each hit from a tuned resonant body, layered noise, a transient click, and up to five pre-clap bursts. Eight voices can overlap. Shared effects add host-tempo slapback, gated stereo reverb, distortion, compression, limiting, and stereo width.
 
+## Interface
+
+The editor screenshots show the Impact Clap preset in the sound controls and performance pages.
+
+![openClapper Impact Clap sound controls](assets/openClapper-screenshot.png)
+
+![openClapper Impact Clap performance controls](assets/openClapper-performance.png)
+
 ## MIDI tuning
 
 Incoming MIDI note-ons trigger the corresponding pitch directly, on any MIDI channel. The tonal body follows the standard MIDI frequency mapping:
