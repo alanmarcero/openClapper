@@ -49,7 +49,7 @@ Open **PERFORMANCE** in the header to adjust these controls. The existing Simple
 - **Roll Division / Roll / Fill Hits:** Off, 1/8, 1/16, 1/32, or 1/16 triplet, with 1–32 total hits per note. Hold the note for the fill; note-off, transport stop, or a seek cancels pending repeats. Timing follows host tempo, with 138 BPM as fallback.
 - **Full ADSR:** opt in to a MIDI-gated amplitude envelope. Attack and Decay range from 0–10 seconds, Sustain from 0–1, and Release from 0–20 seconds. Body and noise continue through sustain and release; clicks and pre-claps retain their short shapes. MIDI note-off releases matching notes on the same channel. With Full ADSR off, existing one-shot sounds remain unchanged.
 
-Preset **45 Impact Clap** enables Full ADSR, a prominent pink-noise layer, a 1.8-second decay, and a 20-second release. Play a short MIDI note to hear its long impact tail. The audition button automatically releases Full ADSR patches after a 150 ms gate.
+Editor preset **45 Impact Clap** enables Full ADSR, a prominent pink-noise layer, a 1.8-second decay, and a 20-second release. Play a short MIDI note to hear its long impact tail. The audition button automatically releases Full ADSR patches after a 150 ms gate.
 
 ### Separate component outputs
 
@@ -57,7 +57,7 @@ The main stereo output includes all components and shared effects. Hosts can ena
 
 ## Factory presets
 
-The 45 factory presets are redesigned for trance, from tight gated impacts to wide euphoric and psytrance textures. Each preset recalls the full sound and effect settings, including slapback Off when that preset does not use a repeat.
+The editor offers 45 factory presets, with the original 44 host programs retained to preserve program automation. Impact Clap is selected from the plugin’s own preset menu and saved with plugin state. The presets are designed for trance, from tight gated impacts to wide euphoric and psytrance textures. Each preset recalls the full sound and effect settings, including slapback Off when that preset does not use a repeat.
 
 | # | Preset | # | Preset |
 |---:|---|---:|---|

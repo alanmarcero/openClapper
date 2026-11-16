@@ -24,6 +24,8 @@ public:
     int getNumPrograms() override;
     int getCurrentProgram() override { return currentProgram_; }
     void setCurrentProgram(int index) override;
+    void selectPreset(int index);
+    [[nodiscard]] int getSelectedPresetIndex() const noexcept { return selectedPreset_; }
     const juce::String getProgramName(int index) override;
     void changeProgramName(int, const juce::String&) override {}
 
@@ -46,4 +48,5 @@ private:
     openclapper::core::ClapEngine engine_;
     std::atomic<bool> auditionPending_{ false };
     int currentProgram_ = 0;
+    int selectedPreset_ = 0;
 };

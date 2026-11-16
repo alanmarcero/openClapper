@@ -172,7 +172,7 @@ juce::AudioProcessorEditor* OpenClapperProcessor::createEditor() {
 }
 
 int OpenClapperProcessor::getNumPrograms() {
-    return static_cast<int>(openclapper::presets::factoryPresets().size());
+    return openclapper::params::kHostProgramCount;
 }
 
 const juce::String OpenClapperProcessor::getProgramName(int index) {
@@ -184,18 +184,25 @@ const juce::String OpenClapperProcessor::getProgramName(int index) {
 }
 
 void OpenClapperProcessor::setCurrentProgram(int index) {
+    if (index >= 0 && index < getNumPrograms()) selectPreset(index);
+}
+
+void OpenClapperProcessor::selectPreset(int index) {
     const auto& presets = openclapper::presets::factoryPresets();
-    if (index >= 0 && index < static_cast<int>(presets.size())) {
-        currentProgram_ = index;
-        openclapper::presets::apply(presets[static_cast<size_t>(index)], parameters);
-        if (auto* param = parameters.getParameter(openclapper::params::kPreset)) {
-            param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(index)));
-        }
-    }
+    if (index < 0 || index >= static_cast<int>(presets.size())) return;
+    selectedPreset_ = index;
+    openclapper::presets::apply(presets[static_cast<size_t>(index)], parameters);
+
+    // Additional editor presets must not shift either JUCE's host program automation or the legacy selector.
+    if (index >= getNumPrograms()) return;
+    currentProgram_ = index;
+    if (auto* parameter = parameters.getParameter(openclapper::params::kPreset))
+        parameter->setValueNotifyingHost(parameter->convertTo0to1(static_cast<float>(index)));
 }
 
 void OpenClapperProcessor::getStateInformation(juce::MemoryBlock& destData) {
     auto state = parameters.copyState();
+    state.setProperty("selected_preset", selectedPreset_, nullptr);
     std::unique_ptr<juce::XmlElement> xml(state.createXml());
     copyXmlToBinary(*xml, destData);
 }
@@ -206,6 +213,10 @@ void OpenClapperProcessor::setStateInformation(const void* data, int sizeInBytes
         auto state = juce::ValueTree::fromXml(*xmlState);
         state.removeProperty("locked_wav", nullptr);
         parameters.replaceState(state);
+        currentProgram_ = std::clamp(static_cast<int>(parameters.getRawParameterValue(openclapper::params::kPreset)->load()),
+            0, getNumPrograms() - 1);
+        selectedPreset_ = std::clamp(static_cast<int>(state.getProperty("selected_preset", currentProgram_)),
+            0, static_cast<int>(openclapper::presets::factoryPresets().size()) - 1);
     }
 }
 

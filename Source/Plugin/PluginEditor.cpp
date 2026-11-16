@@ -23,25 +23,25 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& processorToEdit)
     }
     presetBox_.onChange = [this]() {
         const int selected = presetBox_.getSelectedId() - 1;
-        if (selected >= 0 && selected < processor_.getNumPrograms()) {
-            processor_.setCurrentProgram(selected);
+        if (selected >= 0 && selected < static_cast<int>(openclapper::presets::factoryPresets().size())) {
+            processor_.selectPreset(selected);
         }
     };
     syncPresetBox();
     addAndMakeVisible(presetBox_);
 
     prevPresetBtn_.onClick = [this]() {
-        const int current = processor_.getCurrentProgram();
-        const int prev = (current - 1 + processor_.getNumPrograms()) % processor_.getNumPrograms();
-        processor_.setCurrentProgram(prev);
+        const int current = processor_.getSelectedPresetIndex();
+        const int prev = (current - 1 + static_cast<int>(openclapper::presets::factoryPresets().size())) % static_cast<int>(openclapper::presets::factoryPresets().size());
+        processor_.selectPreset(prev);
         syncPresetBox();
     };
     addAndMakeVisible(prevPresetBtn_);
 
     nextPresetBtn_.onClick = [this]() {
-        const int current = processor_.getCurrentProgram();
-        const int next = (current + 1) % processor_.getNumPrograms();
-        processor_.setCurrentProgram(next);
+        const int current = processor_.getSelectedPresetIndex();
+        const int next = (current + 1) % static_cast<int>(openclapper::presets::factoryPresets().size());
+        processor_.selectPreset(next);
         syncPresetBox();
     };
     addAndMakeVisible(nextPresetBtn_);
@@ -119,11 +119,11 @@ OpenClapperEditor::~OpenClapperEditor() {
 }
 
 void OpenClapperEditor::syncPresetBox() {
-    presetBox_.setSelectedId(processor_.getCurrentProgram() + 1, juce::dontSendNotification);
+    presetBox_.setSelectedId(processor_.getSelectedPresetIndex() + 1, juce::dontSendNotification);
 }
 
 void OpenClapperEditor::timerCallback() {
-    if (presetBox_.getSelectedId() != processor_.getCurrentProgram() + 1) {
+    if (presetBox_.getSelectedId() != processor_.getSelectedPresetIndex() + 1) {
         syncPresetBox();
     }
 }
