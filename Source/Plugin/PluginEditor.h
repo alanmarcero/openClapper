@@ -30,6 +30,9 @@ private:
     openclapper::ui::ClapSynthPanel synthPanel_;
     openclapper::ui::EffectsPanel effectsPanel_;
     juce::TooltipWindow tooltipWindow_;
+    juce::TextButton performanceButton_{"PERFORMANCE"};
+    juce::Component performancePanel_;
+    std::vector<std::unique_ptr<juce::Component>> performanceControls_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(OpenClapperEditor)
 };

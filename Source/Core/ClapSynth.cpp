@@ -264,6 +264,12 @@ void ClapSynth::prepare(double sampleRate) {
 
 void ClapSynth::reset() noexcept {
     isPlaying_ = false;
+    amplitude_ = 0.0f;
+    releaseAge_ = -1;
+    preHPF_L_.reset();
+    preHPF_R_.reset();
+    preLPF_L_.reset();
+    preLPF_R_.reset();
     totalSamplesPlayed_ = 0;
     totalDurationSamples_ = 0;
     mainStartSamples_ = 0;
@@ -287,6 +293,7 @@ void ClapSynth::reset() noexcept {
 void ClapSynth::trigger(const ClapSynthSettings& settings, int midiNote, float velocity) noexcept {
     reset();
     isPlaying_ = true;
+    ampEnabled_ = settings.ampEnabled;
     velocity_ = std::clamp(velocity, 0.0f, 1.0f);
     midiNote_ = std::clamp(midiNote, 0, 127);
     ++triggerCount_;
@@ -365,7 +372,17 @@ float ClapSynth::getEnvelopeProgress() const noexcept {
     return std::clamp(static_cast<float>(totalSamplesPlayed_) / static_cast<float>(totalDurationSamples_), 0.0f, 1.0f);
 }
 
-StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* mainHitStarted) noexcept {
+void ClapSynth::noteOff(const ClapSynthSettings& settings) noexcept {
+    if (!ampEnabled_ || releaseAge_ >= 0) return;
+    releaseStart_ = amplitude_;
+    releaseSamples_ = static_cast<int>(std::clamp(settings.ampReleaseMs, 0.0f, 20000.0f) * 0.001 * sampleRate_);
+    releaseAge_ = 0;
+}
+
+StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* mainHitStarted,
+                                     std::array<StereoFrame, 4>* components) noexcept {
+    if (components != nullptr) *components = {};
+
     if (mainHitStarted != nullptr) {
         *mainHitStarted = false;
     }
@@ -374,20 +391,49 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
         return { 0.0f, 0.0f };
     }
 
-    const int currentSample = totalSamplesPlayed_++;
+    const auto currentSample = totalSamplesPlayed_++;
     if (mainHitStarted != nullptr && currentSample == mainStartSamples_) {
         *mainHitStarted = true;
     }
-    if (currentSample >= totalDurationSamples_) {
+    if (!ampEnabled_ && currentSample >= totalDurationSamples_) {
         isPlaying_ = false;
         return { 0.0f, 0.0f };
+    }
+
+    if (ampEnabled_) {
+        const double attack = std::max(0.0f, settings.ampAttackMs) * 0.001 * sampleRate_;
+        const double decay = std::max(0.0f, settings.ampDecayMs) * 0.001 * sampleRate_;
+        const float sustain = std::clamp(settings.ampSustain, 0.0f, 1.0f);
+        if (releaseAge_ >= 0) {
+            if (releaseAge_ >= releaseSamples_) {
+                isPlaying_ = false;
+                return {};
+            }
+            amplitude_ = releaseStart_ * (1.0f - static_cast<float>(releaseAge_++) / static_cast<float>(releaseSamples_));
+        } else if (currentSample < attack) {
+            amplitude_ = static_cast<float>(currentSample / attack);
+        } else if (currentSample < attack + decay) {
+            amplitude_ = 1.0f - (1.0f - sustain) * static_cast<float>((currentSample - attack) / decay);
+        } else {
+            amplitude_ = sustain;
+        }
+    } else {
+        amplitude_ = 1.0f;
+    }
+
+    std::array<float, 4> layerGains{};
+    const bool anySolo = std::any_of(settings.layers.begin(), settings.layers.end(), [](const auto& layer) { return layer.solo; });
+    for (size_t layer = 0; layer < layerGains.size(); ++layer) {
+        const auto& control = settings.layers[layer];
+        if (!control.mute && (!anySolo || control.solo))
+            layerGains[layer] = amplitude_ * std::pow(velocity_, std::clamp(control.velocityResponse, 0.0f, 2.0f));
     }
 
     float burstGainL = 0.0f;
     float burstGainR = 0.0f;
     const float burstDecaySamples = std::max(1.0f, settings.preClapDecayMs * 0.001f * static_cast<float>(sampleRate_));
     for (int i = 0; i < burstCount_; ++i) {
-        const int age = currentSample - burstStartSamples_[i];
+        const auto age = currentSample - burstStartSamples_[i];
         if (age < 0 || static_cast<float>(age) >= burstDecaySamples * 4.0f) {
             continue;
         }
@@ -422,8 +468,10 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
         }
     }
 
+    if (ampEnabled_ && mainAge >= 0.0f) noiseEnv = 1.0f;
+
     const float toneDecaySamples = std::max(1.0f, settings.toneDecayMs * 0.001f * static_cast<float>(sampleRate_));
-    const float toneEnv = std::exp(-std::max(0.0f, mainAge) / toneDecaySamples);
+    const float toneEnv = ampEnabled_ ? 1.0f : std::exp(-std::max(0.0f, mainAge) / toneDecaySamples);
     float clickSample = 0.0f;
     if (mainAge >= 0.0f && mainAge < sampleRate_ * 0.005f) {
         const float clickT = mainAge / static_cast<float>(sampleRate_);
@@ -451,8 +499,8 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
 
     const float rawNoiseL = generateNoiseSample(settings.noiseType);
     const float rawNoiseR = generateNoiseSample(settings.noiseType);
-    const float totalNoiseL = (rawNoiseL * burstGainL + rawNoiseL * noiseEnv * settings.noiseLevel) * velocity_;
-    const float totalNoiseR = (rawNoiseR * burstGainR + rawNoiseR * noiseEnv * settings.noiseLevel) * velocity_;
+    const float totalNoiseL = rawNoiseL * noiseEnv * settings.noiseLevel;
+    const float totalNoiseR = rawNoiseR * noiseEnv * settings.noiseLevel;
 
     if (std::abs(settings.noiseHPF - lastHPF_) > 0.1f) {
         lastHPF_ = settings.noiseHPF;
@@ -508,7 +556,7 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
             }
             toneSample /= std::max(1.0f, weightSum);
         }
-        toneSample *= toneEnv * settings.toneLevel * velocity_;
+        toneSample *= toneEnv * settings.toneLevel;
     }
 
     if (settings.noiseStereoWidth != 1.0f) {
@@ -518,8 +566,28 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
         filteredNoiseR = mid - side;
     }
 
-    const float click = clickSample * velocity_;
-    return { filteredNoiseL + toneSample + click, filteredNoiseR + toneSample + click };
+    const float preHighL = processBiquad(rawNoiseL * burstGainL, preHPF_L_, b0_h_, b1_h_, b2_h_, a1_h_, a2_h_);
+    const float preHighR = processBiquad(rawNoiseR * burstGainR, preHPF_R_, b0_h_, b1_h_, b2_h_, a1_h_, a2_h_);
+    float preLeft = processBiquad(preHighL, preLPF_L_, b0_l_, b1_l_, b2_l_, a1_l_, a2_l_);
+    float preRight = processBiquad(preHighR, preLPF_R_, b0_l_, b1_l_, b2_l_, a1_l_, a2_l_);
+    const float preMid = (preLeft + preRight) * 0.5f;
+    const float preSide = (preLeft - preRight) * 0.5f * settings.noiseStereoWidth;
+    preLeft = preMid + preSide;
+    preRight = preMid - preSide;
+
+    const std::array<StereoFrame, 4> layers{{
+        {toneSample * layerGains[0], toneSample * layerGains[0]},
+        {filteredNoiseL * layerGains[1], filteredNoiseR * layerGains[1]},
+        {clickSample * layerGains[2], clickSample * layerGains[2]},
+        {preLeft * layerGains[3], preRight * layerGains[3]}
+    }};
+    if (components != nullptr) *components = layers;
+    StereoFrame mix;
+    for (const auto& layer : layers) {
+        mix.left += layer.left;
+        mix.right += layer.right;
+    }
+    return mix;
 }
 
 void ClapSynth::renderBlock(

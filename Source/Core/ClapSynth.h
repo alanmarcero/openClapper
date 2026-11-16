@@ -29,7 +29,22 @@ enum class ClickType {
     Thump = 2
 };
 
+struct LayerSettings {
+    float velocityResponse = 1.0f;
+    bool mute = false;
+    bool solo = false;
+    bool operator==(const LayerSettings&) const noexcept = default;
+};
+
 struct ClapSynthSettings {
+    // Body, noise, transient, pre-clap; these indices also define auxiliary output order.
+    std::array<LayerSettings, 4> layers{};
+    bool ampEnabled = false;
+    float ampAttackMs = 0.0f;
+    float ampDecayMs = 100.0f;
+    float ampSustain = 0.8f;
+    float ampReleaseMs = 200.0f;
+
     // Pre-Clap Flam (Micro-bursts)
     int preClapCount = 3;         // 1..5 micro-bursts before main slap
     float preClapSpreadMs = 12.0f;// 2..45 ms spacing between bursts
@@ -155,7 +170,9 @@ public:
     void prepare(double sampleRate);
     void reset() noexcept;
     void trigger(const ClapSynthSettings& settings, int midiNote, float velocity = 1.0f) noexcept;
-    [[nodiscard]] StereoFrame processSample(const ClapSynthSettings& settings, bool* mainHitStarted = nullptr) noexcept;
+    void noteOff(const ClapSynthSettings& settings) noexcept;
+    [[nodiscard]] StereoFrame processSample(const ClapSynthSettings& settings, bool* mainHitStarted = nullptr,
+                                            std::array<StereoFrame, 4>* components = nullptr) noexcept;
     [[nodiscard]] bool isPlaying() const noexcept { return isPlaying_; }
     [[nodiscard]] float getEnvelopeProgress() const noexcept;
 
@@ -176,7 +193,12 @@ private:
     int midiNote_ = 69;
     uint32_t triggerCount_ = 0;
 
-    int totalSamplesPlayed_ = 0;
+    int64_t totalSamplesPlayed_ = 0;
+    bool ampEnabled_ = false;
+    float amplitude_ = 0.0f;
+    float releaseStart_ = 0.0f;
+    int releaseSamples_ = 0;
+    int releaseAge_ = -1;
     int totalDurationSamples_ = 0;
     int mainStartSamples_ = 0;
 
@@ -193,6 +215,7 @@ private:
     float lastToneQ_ = -1.0f;
     float b0_t_ = 0.0f, b1_t_ = 0.0f, b2_t_ = 0.0f, a1_t_ = 0.0f, a2_t_ = 0.0f;
 
+    BiquadState preHPF_L_{}, preHPF_R_{}, preLPF_L_{}, preLPF_R_{};
     BiquadState noiseHPF_L_{};
     BiquadState noiseHPF_R_{};
     BiquadState noiseLPF_L_{};

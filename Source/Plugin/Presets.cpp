@@ -18,7 +18,7 @@ constexpr float presetChoice(Choice choice) noexcept {
 }
 
 std::vector<std::pair<juce::String, float>> defaultValues() {
-    return {
+    auto values = std::vector<std::pair<juce::String, float>>{
         { kPreBursts, 3.0f }, { kPreSpread, 12.0f }, { kPreDecay, 8.0f }, { kPreJitter, 0.15f }, { kFlamSpread, 0.45f }, { kPreLevel, 0.85f },
         { kToneMode, presetChoice(ToneMode::Bandpass) }, { kToneQ, 3.2f }, { kToneDecay, 120.0f }, { kToneLevel, 0.75f },
         { kNoiseType, presetChoice(NoiseType::White) }, { kNoiseAttack, 0.0f }, { kNoiseHold, 2.0f }, { kNoiseDecay, 180.0f },
@@ -31,6 +31,15 @@ std::vector<std::pair<juce::String, float>> defaultValues() {
         { kSlapbackDivision, presetChoice(SlapbackDivision::Off) }, { kSlapbackMix, 0.0f },
         { kReverseMode, presetChoice(ReverseSyncMode::Off) }, { kReverseMix, 0.5f }, { kStereoWidth, 1.0f }, { kOutputGain, 0.0f }
     };
+    for (const auto& parameter : kPerformanceParameters)
+        values.emplace_back(parameter.id, parameter.initial);
+    values.emplace_back("roll_division", 0.0f);
+    for (size_t layer = 0; layer < kLayerNames.size(); ++layer) {
+        values.emplace_back(kLayerMute[layer], 0.0f);
+        values.emplace_back(kLayerSolo[layer], 0.0f);
+        if (layer < kLayerVelocity.size()) values.emplace_back(kLayerVelocity[layer], 1.0f);
+    }
+    return values;
 }
 
 FactoryPreset makePreset(const char* name, std::initializer_list<Override> overrides) {
@@ -483,6 +492,16 @@ const std::vector<FactoryPreset>& factoryPresets() {
             { kCompThresh, -14.0f }, { kCompRatio, 3.8f }, { kCompAttack, 5.0f }, { kCompRelease, 90.0f }, { kCompMakeup, 3.0f },
             { kLimiterCeiling, -0.2f }, { kReverbSize, 0.80f }, { kReverbDecay, 720.0f }, { kReverbDamp, 0.35f }, { kReverbGate, 215.0f }, { kReverbMix, 0.40f },
             { kSlapbackDivision, presetChoice(SlapbackDivision::DottedEighth) }, { kSlapbackMix, 0.19f }, { kStereoWidth, 1.44f }
+        }),
+        makePreset("45 Impact Clap", {
+            { kPreBursts, 3.0f }, { kPreSpread, 16.0f }, { kPreLevel, 0.7f },
+            { kNoiseType, presetChoice(NoiseType::Pink) }, { kNoiseLevel, 1.0f },
+            { kNoiseHPF, 180.0f }, { kNoiseLPF, 14000.0f }, { kNoiseStereoWidth, 1.5f },
+            { kToneLevel, 0.4f }, { kClickLevel, 0.7f },
+            { "amp_enabled", 1.0f }, { "amp_attack", 0.0f }, { "amp_decay", 1800.0f },
+            { "amp_sustain", 0.7f }, { "amp_release", 20000.0f },
+            { kReverbGate, 0.0f }, { kReverbDecay, 1800.0f }, { kReverbMix, 0.35f },
+            { kCompMakeup, 0.0f }, { kOutputGain, -6.0f }
         })
     };
     return presets;

@@ -16,7 +16,7 @@ Incoming MIDI note-ons trigger the corresponding pitch directly, on any MIDI cha
 frequency = 440 × 2^((MIDI note - 69) / 12)
 ```
 
-For example, notes 57, 69, and 81 produce A3 at 220 Hz, A4 at 440 Hz, and A5 at 880 Hz. Velocity scales the voice level. The on-screen audition button triggers A4.
+For example, notes 57, 69, and 81 produce A3 at 220 Hz, A4 at 440 Hz, and A5 at 880 Hz. Velocity scales each component using its own response control. The on-screen audition button triggers A4.
 
 ## Sound controls
 
@@ -38,9 +38,26 @@ For example, notes 57, 69, and 81 produce A3 at 220 Hz, A4 at 440 Hz, and A5 at 
 
 Slapback uses the tempo reported by the host and keeps its delay tail between hits. Choose Off, 1/16, dotted 1/16, 1/8, dotted 1/8, or 1/4. The delay makes one repeat without feedback, and each repeat opens the shared reverb gate when it arrives. If the host has no usable tempo, the engine uses 138 BPM.
 
+## Performance
+
+Open **PERFORMANCE** in the header to adjust these controls. The existing Simple and Advanced pages retain their sound controls.
+
+- **Body, Noise, Transient Velocity:** response 0 ignores velocity, 1 follows it, and 2 squares it. Pre-claps follow velocity.
+- **Mute / Solo:** independent switches for body, noise, transient, and pre-claps. Multiple solos combine; mute takes priority.
+- **MIDI Key / Velocity Low / High:** inclusive input zones. Inverted bounds reject all notes. Audition bypasses these zones.
+- **Choke Group:** 0 allows overlaps; 1–16 stops earlier voices assigned to the same group when a new accepted note arrives. It acts within this plugin instance.
+- **Roll Division / Roll / Fill Hits:** Off, 1/8, 1/16, 1/32, or 1/16 triplet, with 1–32 total hits per note. Hold the note for the fill; note-off, transport stop, or a seek cancels pending repeats. Timing follows host tempo, with 138 BPM as fallback.
+- **Full ADSR:** opt in to a MIDI-gated amplitude envelope. Attack and Decay range from 0–10 seconds, Sustain from 0–1, and Release from 0–20 seconds. Body and noise continue through sustain and release; clicks and pre-claps retain their short shapes. MIDI note-off releases matching notes on the same channel. With Full ADSR off, existing one-shot sounds remain unchanged.
+
+Preset **45 Impact Clap** enables Full ADSR, a prominent pink-noise layer, a 1.8-second decay, and a 20-second release. Play a short MIDI note to hear its long impact tail. The audition button automatically releases Full ADSR patches after a 150 ms gate.
+
+### Separate component outputs
+
+The main stereo output includes all components and shared effects. Hosts can enable four additional stereo buses: **Body**, **Noise**, **Transient**, and **Pre-clap**. These carry dry components after amplitude, velocity, mute/solo, and master gain, before shared effects and master stereo width. Disabled buses do not change the main mix. Enable and route these outputs in your host's instrument-output settings.
+
 ## Factory presets
 
-The 44 factory presets are redesigned for trance, from tight gated impacts to wide euphoric and psytrance textures. Each preset recalls the full sound and effect settings, including slapback Off when that preset does not use a repeat.
+The 45 factory presets are redesigned for trance, from tight gated impacts to wide euphoric and psytrance textures. Each preset recalls the full sound and effect settings, including slapback Off when that preset does not use a repeat.
 
 | # | Preset | # | Preset |
 |---:|---|---:|---|
@@ -66,6 +83,7 @@ The 44 factory presets are redesigned for trance, from tight gated impacts to wi
 | 20 | Offbeat Goa | 42 | Quarter Note Bloom |
 | 21 | Spiral Acid Bite | 43 | MIDI Reference Clap |
 | 22 | Cosmic Ping 1/4 | 44 | Euphoric Trance Lift |
+| 45 | Impact Clap | | |
 
 ## MIDI controllers
 

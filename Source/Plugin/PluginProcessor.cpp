@@ -5,7 +5,11 @@
 #include <algorithm>
 
 OpenClapperProcessor::OpenClapperProcessor()
-    : AudioProcessor(BusesProperties().withOutput("Output", juce::AudioChannelSet::stereo(), true)),
+    : AudioProcessor(BusesProperties().withOutput("Output", juce::AudioChannelSet::stereo(), true)
+        .withOutput("Body", juce::AudioChannelSet::stereo(), false)
+        .withOutput("Noise", juce::AudioChannelSet::stereo(), false)
+        .withOutput("Transient", juce::AudioChannelSet::stereo(), false)
+        .withOutput("Pre-clap", juce::AudioChannelSet::stereo(), false)),
       parameters(*this, nullptr, "PARAMETERS", openclapper::params::createParameterLayout()) {
 }
 
@@ -33,7 +37,9 @@ double OpenClapperProcessor::getTailLengthSeconds() const {
         value(openclapper::params::kToneDecay) * 6.0,
         20.0
     });
-    const double voiceTail = std::max(burstTailMs, mainTailMs) / 1000.0;
+    const double adsrTail = value("amp_enabled") > 0.5f
+        ? (value("amp_attack") + value("amp_decay") + value("amp_release")) / 1000.0 : 0.0;
+    const double voiceTail = std::max(std::max(burstTailMs, mainTailMs) / 1000.0, adsrTail);
 
     const bool usesSlapback = value(openclapper::params::kSlapbackDivision) > 0.0f
         && value(openclapper::params::kSlapbackMix) > 0.0f;
@@ -42,7 +48,11 @@ double OpenClapperProcessor::getTailLengthSeconds() const {
         && value(openclapper::params::kReverseMix) > 0.0f
         ? 2.0
         : 0.0;
-    const double effectInputTail = std::max(voiceTail, reverseTail) + delayTail;
+    const int division = std::clamp(static_cast<int>(value("roll_division")), 0, 4);
+    const double reportedBpm = displayBpm.load(std::memory_order_relaxed);
+    const double bpm = std::isfinite(reportedBpm) && reportedBpm > 0.0 ? reportedBpm : 138.0;
+    const double fillTail = std::max(0.0f, value("roll_hits") - 1.0f) * openclapper::core::kRollDivisionBeats[static_cast<size_t>(division)] * 60.0 / bpm;
+    const double effectInputTail = fillTail + std::max(voiceTail, reverseTail) + delayTail;
 
     if (value(openclapper::params::kReverbMix) <= 0.0f) {
         return effectInputTail;
@@ -50,7 +60,7 @@ double OpenClapperProcessor::getTailLengthSeconds() const {
 
     const double gateMs = value(openclapper::params::kReverbGate);
     if (gateMs > 0.0) {
-        return std::max(effectInputTail, delayTail + (gateMs + 18.0) / 1000.0);
+        return std::max(effectInputTail, fillTail + delayTail + (gateMs + 18.0) / 1000.0);
     }
 
     return effectInputTail + value(openclapper::params::kReverbDecay) / 1000.0;
@@ -60,7 +70,12 @@ bool OpenClapperProcessor::isBusesLayoutSupported(const BusesLayout& layouts) co
     if (layouts.getMainInputChannelSet() != juce::AudioChannelSet::disabled()) {
         return false;
     }
-    return layouts.getMainOutputChannelSet() == juce::AudioChannelSet::stereo();
+    if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo()) return false;
+    for (int bus = 1; bus < layouts.outputBuses.size(); ++bus) {
+        const auto set = layouts.outputBuses[bus];
+        if (set != juce::AudioChannelSet::disabled() && set != juce::AudioChannelSet::stereo()) return false;
+    }
+    return true;
 }
 
 void OpenClapperProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) {
@@ -96,48 +111,57 @@ void OpenClapperProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
         }
     }
 
-    // Parse MIDI triggers & CCs
-    std::vector<openclapper::core::MidiTrigger> triggers;
-    std::vector<openclapper::core::MidiCcEvent> ccEvents;
-
-    for (const auto meta : midi) {
-        const auto msg = meta.getMessage();
-        if (msg.isNoteOn()) {
-            const float vel = msg.getFloatVelocity();
-            displayVelocity.store(vel, std::memory_order_relaxed);
-            triggers.push_back({
-                .sampleOffset = meta.samplePosition,
-                .noteNumber = msg.getNoteNumber(),
-                .velocity = vel,
-                .audition = false
-            });
-        } else if (msg.isController()) {
-            ccEvents.push_back({
-                .sampleOffset = meta.samplePosition,
-                .controller = msg.getControllerNumber(),
-                .value = msg.getControllerValue()
-            });
+    const auto settings = openclapper::params::readSettings(parameters);
+    if (!std::isfinite(transport.bpm) || transport.bpm <= 0.0) transport.bpm = 138.0;
+    const double beatsPerSample = transport.bpm / (60.0 * getSampleRate());
+    const auto eventTransport = [&](int offset) {
+        auto position = transport;
+        if (position.ppqPosition) *position.ppqPosition += offset * beatsPerSample;
+        return position;
+    };
+    float blockPeak = 0.0f;
+    const auto render = [&](int start, int end) {
+        if (end <= start) return;
+        std::array<float*, 2> main{buffer.getWritePointer(0, start), buffer.getWritePointer(1, start)};
+        std::array<float*, 8> components{};
+        for (int bus = 1; bus < getBusCount(false); ++bus) {
+            if (!getBus(false, bus)->isEnabled()) continue;
+            for (int channel = 0; channel < 2; ++channel)
+                components[static_cast<size_t>((bus - 1) * 2 + channel)] = buffer.getWritePointer(
+                    getChannelIndexInProcessBlockBuffer(false, bus, channel), start);
         }
-    }
+        engine_.process(settings, eventTransport(start), {}, main.data(), 2, end - start, {}, components);
+        blockPeak = std::max(blockPeak, engine_.currentPeak());
+    };
 
     if (auditionPending_.exchange(false)) {
         displayVelocity.store(1.0f, std::memory_order_relaxed);
-        triggers.push_back({
-            .sampleOffset = 0,
-            .noteNumber = 69, // A4
-            .velocity = 1.0f,
-            .audition = true
-        });
+        engine_.handleMidi(settings, eventTransport(0), {.noteNumber = 69, .velocity = 1.0f, .audition = true});
     }
-
-    // Process through ClapEngine
-    const auto settings = openclapper::params::readSettings(parameters);
-    float* channelPointers[2] = { buffer.getWritePointer(0), buffer.getWritePointer(1) };
-
-    engine_.process(settings, transport, triggers, channelPointers, 2, numSamples, ccEvents);
+    // Render between events so arbitrary MIDI density needs no audio-thread container growth.
+    int cursor = 0;
+    for (const auto meta : midi) {
+        const int offset = std::clamp(meta.samplePosition, cursor, numSamples);
+        render(cursor, offset);
+        cursor = offset;
+        if (meta.numBytes > 3) continue;
+        const auto message = meta.getMessage();
+        if (message.isNoteOnOrOff()) {
+            const float velocity = message.getFloatVelocity();
+            if (message.isNoteOn()) displayVelocity.store(velocity, std::memory_order_relaxed);
+            engine_.handleMidi(settings, eventTransport(offset), {
+                .noteNumber = message.getNoteNumber(), .velocity = velocity,
+                .noteOff = message.isNoteOff(), .channel = message.getChannel()});
+        } else if (message.isController()) {
+            const openclapper::core::MidiCcEvent cc{0, message.getControllerNumber(), message.getControllerValue()};
+            std::array<float*, 2> main{buffer.getWritePointer(0), buffer.getWritePointer(1)};
+            engine_.process(settings, eventTransport(offset), {}, main.data(), 2, 0, std::span(&cc, 1));
+        }
+    }
+    render(cursor, numSamples);
 
     // Update GUI telemetry
-    displayPeak.store(engine_.currentPeak());
+    displayPeak.store(blockPeak);
     displayBeatPhase.store(engine_.currentBeatPhase());
     displayClapProgress.store(engine_.currentClapProgress());
     displayTriggerCount.store(engine_.triggerSerial());

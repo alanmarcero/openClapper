@@ -50,3 +50,93 @@ TEST_CASE("ClapEngine responds to MIDI CC 74 brightness sweep", "[core][engine]"
     engine.process(settings, transport, triggers, channelsDark, 2, 1024, ccEvents);
     REQUIRE(engine.currentPeak() > 0.0f);
 }
+
+TEST_CASE("Rolls cancel on transport seeks rather than playing stale fills", "[performance]") {
+    ClapEngine engine;
+    engine.prepare(48000);
+    EngineSettings settings;
+    settings.rollDivision = 2;
+    settings.rollHits = 4;
+    Transport transport;
+    transport.bpm = 120;
+    transport.ppqPosition = 0.0;
+    std::array<float, 64> left{}, right{};
+    float* channels[]{left.data(), right.data()};
+    const MidiTrigger trigger{};
+    engine.process(settings, transport, std::span(&trigger, 1), channels, 2, 64);
+    transport.ppqPosition = 16.0;
+    engine.process(settings, transport, {}, channels, 2, 64);
+    REQUIRE(engine.triggerSerial() == 1);
+}
+
+TEST_CASE("A new note at a seek starts a fresh roll", "[performance]") {
+    ClapEngine engine;
+    engine.prepare(48000);
+    EngineSettings settings;
+    settings.rollDivision = 2;
+    settings.rollHits = 4;
+    Transport transport;
+    transport.bpm = 120;
+    transport.ppqPosition = 0.0;
+    std::vector<float> left(7000), right(7000);
+    float* channels[]{left.data(), right.data()};
+    engine.process(settings, transport, {}, channels, 2, 64);
+    transport.ppqPosition = 16.0;
+    engine.handleMidi(settings, transport, MidiTrigger{});
+    engine.process(settings, transport, {}, channels, 2, 7000);
+    REQUIRE(engine.triggerSerial() == 2);
+}
+
+TEST_CASE("Independent notes retain simultaneous rolls inside one MIDI block", "[performance]") {
+    ClapEngine engine;
+    engine.prepare(48000);
+    EngineSettings settings;
+    settings.rollDivision = 2;
+    settings.rollHits = 2;
+    Transport transport;
+    transport.bpm = 120;
+    std::array<MidiTrigger, 2> triggers{{{0, 60, 1.0f}, {1000, 69, 1.0f}}};
+    std::vector<float> left(8000), right(8000);
+    float* channels[]{left.data(), right.data()};
+    engine.process(settings, transport, triggers, channels, 2, 8000);
+    REQUIRE(engine.triggerSerial() == 4);
+}
+
+TEST_CASE("Streaming MIDI preserves delayed pre-clap effect timing", "[performance]") {
+    ClapEngine streamed, buffered;
+    streamed.prepare(48000);
+    buffered.prepare(48000);
+    EngineSettings settings;
+    settings.effects.slapbackDivision = SlapbackDivision::Sixteenth;
+    settings.effects.reverbGateMs = 20;
+    settings.effects.reverbMix = 1;
+    Transport transport;
+    transport.bpm = 120;
+    std::vector<float> leftA(12000), rightA(12000), leftB(12000), rightB(12000);
+    float* channelsA[]{leftA.data(), rightA.data()};
+    float* channelsB[]{leftB.data(), rightB.data()};
+    const MidiTrigger trigger{};
+    streamed.handleMidi(settings, transport, trigger);
+    streamed.process(settings, transport, {}, channelsA, 2, 12000);
+    buffered.process(settings, transport, std::span(&trigger, 1), channelsB, 2, 12000);
+    float difference = 0;
+    for (size_t sample = 0; sample < leftA.size(); ++sample)
+        difference = std::max(difference, std::abs(leftA[sample] - leftB[sample]));
+    REQUIRE(difference < 0.000001f);
+}
+
+TEST_CASE("Switching rolls Off cancels a pending fill", "[performance]") {
+    ClapEngine engine;
+    engine.prepare(48000);
+    EngineSettings settings;
+    settings.rollDivision = 2;
+    settings.rollHits = 4;
+    Transport transport;
+    std::vector<float> left(24000), right(24000);
+    float* channels[]{left.data(), right.data()};
+    const MidiTrigger trigger{};
+    engine.process(settings, transport, std::span(&trigger, 1), channels, 2, 64);
+    settings.rollDivision = 0;
+    engine.process(settings, transport, {}, channels, 2, 24000);
+    REQUIRE(engine.triggerSerial() == 1);
+}

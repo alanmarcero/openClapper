@@ -4,6 +4,7 @@
 #include "Presets.h"
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 #include <cmath>
 #include <vector>
 
@@ -24,11 +25,11 @@ TEST_CASE("OpenClapperProcessor instantiates with valid parameters", "[plugin]")
     REQUIRE(processor.parameters.getParameter(openclapper::params::kReverbMix) != nullptr);
 }
 
-TEST_CASE("OpenClapperProcessor provides exactly 44 factory presets", "[plugin]") {
+TEST_CASE("OpenClapperProcessor provides 45 factory presets", "[plugin]") {
     OpenClapperProcessor processor;
-    REQUIRE(processor.getNumPrograms() == 44);
+    REQUIRE(processor.getNumPrograms() == 45);
 
-    for (int i = 0; i < 44; ++i) {
+    for (int i = 0; i < 45; ++i) {
         processor.setCurrentProgram(i);
         REQUIRE(processor.getCurrentProgram() == i);
         REQUIRE(processor.getProgramName(i).isNotEmpty());
@@ -112,6 +113,10 @@ TEST_CASE("OpenClapperProcessor renders audio upon MIDI note-on", "[plugin]") {
 TEST_CASE("OpenClapperProcessor saves and restores state information", "[plugin]") {
     OpenClapperProcessor proc1;
     proc1.setCurrentProgram(5); // Dutch Hardstyle Smacker
+    for (const auto& parameter : openclapper::params::kPerformanceParameters) {
+        auto* value = proc1.parameters.getParameter(parameter.id);
+        value->setValueNotifyingHost(0.7f);
+    }
 
     juce::MemoryBlock block;
     proc1.getStateInformation(block);
@@ -123,6 +128,9 @@ TEST_CASE("OpenClapperProcessor saves and restores state information", "[plugin]
     const float p1 = proc1.parameters.getRawParameterValue(openclapper::params::kDistDrive)->load();
     const float p2 = proc2.parameters.getRawParameterValue(openclapper::params::kDistDrive)->load();
     REQUIRE(std::abs(p1 - p2) < 0.001f);
+    for (const auto& parameter : openclapper::params::kPerformanceParameters)
+        REQUIRE(std::abs(proc1.parameters.getRawParameterValue(parameter.id)->load()
+            - proc2.parameters.getRawParameterValue(parameter.id)->load()) < 0.001f);
 }
 
 TEST_CASE("OpenClapperEditor instantiates with correct dimensions", "[plugin][gui]") {
@@ -138,6 +146,23 @@ TEST_CASE("OpenClapperEditor instantiates with correct dimensions", "[plugin][gu
     REQUIRE(snapshot.isValid());
     REQUIRE(snapshot.getWidth() == 1100);
     REQUIRE(snapshot.getHeight() == 740);
+
+    juce::TextButton* performanceButton = nullptr;
+    for (auto* child : editor->getChildren()) {
+        auto* button = dynamic_cast<juce::TextButton*>(child);
+        if (button != nullptr && button->getButtonText() == "PERFORMANCE") performanceButton = button;
+    }
+    REQUIRE(performanceButton != nullptr);
+    performanceButton->setToggleState(true, juce::dontSendNotification);
+    performanceButton->onClick();
+    auto performanceSnapshot = editor->createComponentSnapshot(editor->getLocalBounds());
+    auto performanceFile = juce::File::getSpecialLocation(juce::File::tempDirectory)
+        .getChildFile("openclapper-performance.png");
+    performanceFile.deleteFile();
+    juce::FileOutputStream performanceImage(performanceFile);
+    REQUIRE(performanceImage.openedOk());
+    juce::PNGImageFormat performancePng;
+    REQUIRE(performancePng.writeImageToStream(performanceSnapshot, performanceImage));
 
     juce::File repoScreenshot = juce::File::getCurrentWorkingDirectory().getChildFile("assets/openClapper-screenshot.png");
     if (repoScreenshot.getParentDirectory().exists()) {
@@ -159,4 +184,197 @@ TEST_CASE("OpenClapperEditor instantiates with correct dimensions", "[plugin][gu
     REQUIRE(tempFile.existsAsFile());
     REQUIRE(tempFile.getSize() > 0);
     tempFile.deleteFile();
+}
+
+TEST_CASE("Performance controls expose all approved clap features", "[plugin][performance]") {
+    OpenClapperProcessor processor;
+    for (const auto* id : {"body_velocity", "noise_velocity", "click_velocity", "body_mute", "body_solo",
+                           "noise_mute", "noise_solo", "click_mute", "click_solo", "pre_mute", "pre_solo",
+                           "key_low", "key_high", "velocity_low", "velocity_high", "choke_group",
+                           "roll_division", "roll_hits", "amp_enabled", "amp_attack", "amp_decay", "amp_sustain", "amp_release"}) {
+        INFO(id);
+        REQUIRE(processor.parameters.getParameter(id) != nullptr);
+    }
+    REQUIRE(processor.getBusCount(false) == 5);
+}
+
+namespace {
+void performanceValue(OpenClapperProcessor& processor, const char* id, float value) {
+    auto* parameter = processor.parameters.getParameter(id);
+    REQUIRE(parameter != nullptr);
+    parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
+}
+float performanceRender(OpenClapperProcessor& processor, int note = 69, float velocity = 1.0f) {
+    processor.prepareToPlay(48000, 4096);
+    juce::AudioBuffer<float> audio(2, 4096);
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, note, velocity), 0);
+    processor.processBlock(audio, midi);
+    return audio.getMagnitude(0, audio.getNumSamples());
+}
+}
+
+TEST_CASE("MIDI zones reject notes and velocities outside inclusive bounds", "[plugin][performance]") {
+    OpenClapperProcessor processor;
+    performanceValue(processor, "key_low", 60);
+    performanceValue(processor, "key_high", 72);
+    performanceValue(processor, "velocity_low", 64);
+    REQUIRE(performanceRender(processor, 59) <= 0.0000001f);
+    REQUIRE(performanceRender(processor, 69, 0.25f) <= 0.0000001f);
+    REQUIRE(performanceRender(processor, 60) > 0.0f);
+    REQUIRE(performanceRender(processor, 72) > 0.0f);
+}
+
+TEST_CASE("Muting all components silences synthesis and solo selects a component", "[plugin][performance]") {
+    OpenClapperProcessor processor;
+    for (const auto* id : {"body_mute", "noise_mute", "click_mute", "pre_mute"})
+        performanceValue(processor, id, 1);
+    REQUIRE(performanceRender(processor) <= 0.0000001f);
+    performanceValue(processor, "body_mute", 0);
+    performanceValue(processor, "body_solo", 1);
+    REQUIRE(performanceRender(processor) > 0.0f);
+}
+
+TEST_CASE("Rolls count finite host tempo retriggers", "[plugin][performance]") {
+    OpenClapperProcessor processor;
+    performanceValue(processor, "roll_division", 3);
+    performanceValue(processor, "roll_hits", 4);
+    processor.prepareToPlay(48000, 48000);
+    juce::AudioBuffer<float> audio(2, 48000);
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 69, 1.0f), 0);
+    processor.processBlock(audio, midi);
+    REQUIRE(processor.displayTriggerCount.load() == 4);
+}
+
+TEST_CASE("ADSR release accepts twenty seconds and survives note off", "[plugin][performance]") {
+    OpenClapperProcessor processor;
+    performanceValue(processor, "amp_enabled", 1);
+    performanceValue(processor, "amp_release", 20000);
+    REQUIRE(processor.parameters.getRawParameterValue("amp_release")->load() == Catch::Approx(20000.0f));
+    REQUIRE(processor.getTailLengthSeconds() >= 20.0);
+    processor.prepareToPlay(48000, 48000);
+    juce::AudioBuffer<float> audio(2, 48000);
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 69, 1.0f), 0);
+    midi.addEvent(juce::MidiMessage::noteOff(1, 69), 24000);
+    processor.processBlock(audio, midi);
+    REQUIRE(audio.getMagnitude(36000, 12000) > 0.001f);
+}
+
+TEST_CASE("Body velocity response can ignore velocity independently", "[plugin][performance]") {
+    OpenClapperProcessor quiet, loud;
+    for (auto* processor : {&quiet, &loud}) {
+        performanceValue(*processor, "body_solo", 1);
+        performanceValue(*processor, "body_velocity", 0);
+    }
+    REQUIRE(std::abs(performanceRender(quiet, 69, 0.25f) - performanceRender(loud)) < 0.00001f);
+}
+
+TEST_CASE("Component buses deliver independent body noise click and pre-claps", "[plugin][performance]") {
+    OpenClapperProcessor processor;
+    REQUIRE(processor.getBusCount(false) == 5);
+    auto layout = processor.getBusesLayout();
+    for (int bus = 1; bus < 5; ++bus)
+        layout.outputBuses.set(bus, juce::AudioChannelSet::stereo());
+    REQUIRE(processor.setBusesLayout(layout));
+    processor.prepareToPlay(48000, 4096);
+    juce::AudioBuffer<float> audio(10, 4096);
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 69, 1.0f), 0);
+    processor.processBlock(audio, midi);
+    for (int bus = 1; bus < 5; ++bus) {
+        INFO(bus);
+        REQUIRE(audio.getMagnitude(bus * 2, 0, 4096) > 0.00001f);
+    }
+}
+
+TEST_CASE("Choke groups stop previous voices on a new accepted note", "[plugin][performance]") {
+    OpenClapperProcessor processor;
+    performanceValue(processor, "amp_enabled", 1);
+    performanceValue(processor, "body_solo", 1);
+    performanceValue(processor, "choke_group", 1);
+    processor.prepareToPlay(48000, 1024);
+    juce::AudioBuffer<float> audio(2, 1024);
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 60, 1.0f), 0);
+    processor.processBlock(audio, midi);
+    midi.clear();
+    midi.addEvent(juce::MidiMessage::noteOn(1, 69, 1.0f), 0);
+    midi.addEvent(juce::MidiMessage::noteOff(1, 69), 1);
+    performanceValue(processor, "amp_release", 0);
+    processor.processBlock(audio, midi);
+    midi.clear();
+    processor.processBlock(audio, midi);
+    processor.processBlock(audio, midi);
+    // Shared effects are disabled so a held old voice cannot hide in an effects tail.
+    performanceValue(processor, "reverb_mix", 0);
+    performanceValue(processor, "dist_mix", 0);
+    performanceValue(processor, "comp_mix", 0);
+    processor.processBlock(audio, midi);
+    REQUIRE(audio.getMagnitude(0, 1024) <= 0.0000001f);
+}
+
+TEST_CASE("Impact Clap factory preset sustains a prominent twenty second noise release", "[plugin][performance]") {
+    OpenClapperProcessor processor;
+    int impact = -1;
+    for (int index = 0; index < processor.getNumPrograms(); ++index)
+        if (processor.getProgramName(index).contains("Impact Clap")) impact = index;
+    REQUIRE(impact >= 0);
+    processor.setCurrentProgram(impact);
+    REQUIRE(processor.parameters.getRawParameterValue("amp_release")->load() == Catch::Approx(20000.0f));
+    REQUIRE(processor.parameters.getRawParameterValue(openclapper::params::kNoiseLevel)->load() >= 0.9f);
+    processor.prepareToPlay(48000, 48000);
+    juce::AudioBuffer<float> audio(2, 48000);
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 69, 1.0f), 0);
+    midi.addEvent(juce::MidiMessage::noteOff(1, 69), 12000);
+    processor.processBlock(audio, midi);
+    midi.clear();
+    for (int second = 0; second < 10; ++second)
+        processor.processBlock(audio, midi);
+    REQUIRE(audio.getMagnitude(0, 48000) > 0.001f);
+}
+
+TEST_CASE("Loading an old state resets absent performance controls to compatibility defaults", "[plugin][performance]") {
+    OpenClapperProcessor processor;
+    auto oldState = processor.parameters.copyState();
+    for (int child = oldState.getNumChildren(); --child >= 0;) {
+        const auto id = oldState.getChild(child).getProperty("id").toString();
+        if (id == "amp_enabled" || id == "body_mute" || id == "roll_division")
+            oldState.removeChild(child, nullptr);
+    }
+    performanceValue(processor, "amp_enabled", 1);
+    performanceValue(processor, "body_mute", 1);
+    performanceValue(processor, "roll_division", 3);
+    juce::MemoryBlock state;
+    auto xml = oldState.createXml();
+    juce::AudioProcessor::copyXmlToBinary(*xml, state);
+    processor.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+    REQUIRE(processor.parameters.getRawParameterValue("amp_enabled")->load() <= 0.0000001f);
+    REQUIRE(processor.parameters.getRawParameterValue("body_mute")->load() <= 0.0000001f);
+    REQUIRE(processor.parameters.getRawParameterValue("roll_division")->load() <= 0.0000001f);
+}
+
+TEST_CASE("Host tail includes the last hit of a finite fill", "[plugin][performance]") {
+    OpenClapperProcessor processor;
+    performanceValue(processor, "roll_division", 1);
+    performanceValue(processor, "roll_hits", 32);
+    REQUIRE(processor.getTailLengthSeconds() > 6.7);
+}
+
+TEST_CASE("Audition releases a full ADSR patch automatically", "[plugin][performance]") {
+    OpenClapperProcessor processor;
+    performanceValue(processor, "amp_enabled", 1);
+    performanceValue(processor, "amp_release", 200);
+    performanceValue(processor, openclapper::params::kReverbMix, 0);
+    performanceValue(processor, openclapper::params::kDistMix, 0);
+    performanceValue(processor, openclapper::params::kCompMix, 0);
+    processor.prepareToPlay(48000, 48000);
+    processor.triggerAudition();
+    juce::AudioBuffer<float> audio(2, 48000);
+    juce::MidiBuffer midi;
+    processor.processBlock(audio, midi);
+    REQUIRE(audio.getMagnitude(0, 12000) > 0.001f);
+    REQUIRE(audio.getMagnitude(36000, 12000) < 0.0000001f);
 }

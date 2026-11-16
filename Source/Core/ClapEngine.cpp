@@ -21,6 +21,7 @@ void ClapEngine::prepare(double sampleRate) {
     for (auto& voice : voices_) {
         voice.synth.prepare(sampleRate);
     }
+    reverseSynth_.prepare(sampleRate);
     slapback_.prepare(sampleRate);
     reverb_.prepare(sampleRate);
     distL_.reset();
@@ -39,6 +40,10 @@ void ClapEngine::reset() noexcept {
         voice.synth.reset();
         voice.triggerOrder = 0;
     }
+    rolls_ = {};
+    fallbackPpq_ = 0.0;
+    hasTransportPosition_ = false;
+    pendingTrigger_ = false;
     voiceOrderCounter_ = 0;
     lastTriggeredVoice_ = 0;
     slapback_.reset();
@@ -65,10 +70,15 @@ void ClapEngine::triggerClap(
     float velocity,
     int midiNote,
     bool reverseCue) noexcept {
+    pendingTrigger_ = true;
     triggerSerial_++;
     currentClapProgress_ = 0.0f;
     reverb_.triggerGate();
 
+    if (settings.chokeGroup > 0) {
+        for (auto& active : voices_)
+            if (active.chokeGroup == settings.chokeGroup) active.synth.reset();
+    }
     const std::size_t voiceIndex = allocateVoice();
     auto& voice = voices_[voiceIndex];
 
@@ -78,28 +88,32 @@ void ClapEngine::triggerClap(
         reverseDuration_ = computeSyncedReverseSamples(settings.effects.reverseMode, samplePpq, bpm, beatsPerBar, sampleRate_);
         reverseDuration_ = std::min(reverseDuration_, static_cast<int>(reverseBufferL_.size()));
 
-        // Pre-render a brief clap hit into reverse buffer
-        std::vector<float> forwardL, forwardR;
-        voice.synth.renderBlock(forwardL, forwardR, settings.synth, velocity, midiNote);
-
-        const int copyCount = std::min(reverseDuration_, static_cast<int>(forwardL.size()));
+        // Buffers and the preview voice are prepared before audio processing.
+        auto preview = settings.synth;
+        preview.ampEnabled = false;
+        reverseSynth_.trigger(preview, midiNote, velocity);
+        int copyCount = 0;
+        while (copyCount < reverseDuration_ && reverseSynth_.isPlaying()) {
+            const auto frame = reverseSynth_.processSample(preview);
+            if (!reverseSynth_.isPlaying()) break;
+            reverseBufferL_[copyCount] = frame.left;
+            reverseBufferR_[copyCount++] = frame.right;
+        }
+        std::reverse(reverseBufferL_.begin(), reverseBufferL_.begin() + copyCount);
+        std::reverse(reverseBufferR_.begin(), reverseBufferR_.begin() + copyCount);
         for (int i = 0; i < reverseDuration_; ++i) {
-            if (i < copyCount) {
-                // Reverse envelope swell
-                const int srcIdx = copyCount - 1 - i;
-                const float ramp = static_cast<float>(i) / static_cast<float>(reverseDuration_);
-                reverseBufferL_[i] = forwardL[srcIdx] * ramp * settings.effects.reverseMix;
-                reverseBufferR_[i] = forwardR[srcIdx] * ramp * settings.effects.reverseMix;
-            } else {
-                reverseBufferL_[i] = 0.0f;
-                reverseBufferR_[i] = 0.0f;
-            }
+            const float gain = static_cast<float>(i) / static_cast<float>(reverseDuration_) * settings.effects.reverseMix;
+            reverseBufferL_[i] = i < copyCount ? reverseBufferL_[i] * gain : 0.0f;
+            reverseBufferR_[i] = i < copyCount ? reverseBufferR_[i] * gain : 0.0f;
         }
         reversePlayHead_ = 0;
         isReversing_ = true;
     }
 
     voice.synth.trigger(settings.synth, midiNote, velocity);
+    voice.auditionSamples = reverseCue ? static_cast<int>(sampleRate_ * 0.15) : 0;
+    voice.note = midiNote;
+    voice.chokeGroup = settings.chokeGroup;
     voice.triggerOrder = ++voiceOrderCounter_;
     lastTriggeredVoice_ = voiceIndex;
 }
@@ -120,6 +134,44 @@ std::size_t ClapEngine::allocateVoice() const noexcept {
     return oldestVoice;
 }
 
+void ClapEngine::handleMidi(const EngineSettings& settings, const Transport& transport, const MidiTrigger& trigger) noexcept {
+    if (transport.ppqPosition && hasTransportPosition_
+        && std::abs(*transport.ppqPosition - fallbackPpq_) > 2.0 / sampleRate_)
+        rolls_ = {};
+    if (transport.ppqPosition) fallbackPpq_ = *transport.ppqPosition;
+    hasTransportPosition_ = transport.ppqPosition.has_value();
+    if (trigger.noteOff) {
+        for (auto& voice : voices_)
+            if (voice.note == trigger.noteNumber && voice.channel == trigger.channel)
+                voice.synth.noteOff(settings.synth);
+        for (auto& roll : rolls_)
+            if (roll.trigger.noteNumber == trigger.noteNumber && roll.trigger.channel == trigger.channel)
+                roll.remaining = 0;
+        return;
+    }
+
+    const int velocity = std::clamp(static_cast<int>(std::lround(trigger.velocity * 127.0f)), 0, 127);
+    if (!trigger.audition && (trigger.noteNumber < settings.keyLow || trigger.noteNumber > settings.keyHigh
+        || velocity < settings.velocityLow || velocity > settings.velocityHigh)) return;
+
+    const double bpm = std::isfinite(transport.bpm) && transport.bpm > 0.0 ? transport.bpm : 138.0;
+    const double ppq = transport.ppqPosition.value_or(fallbackPpq_);
+    triggerClap(settings, ppq, bpm, transport.beatsPerBar, trigger.velocity, trigger.noteNumber, trigger.audition);
+    voices_[lastTriggeredVoice_].channel = trigger.channel;
+    for (auto& roll : rolls_) {
+        if ((settings.chokeGroup > 0 && roll.chokeGroup == settings.chokeGroup)
+            || (roll.trigger.noteNumber == trigger.noteNumber && roll.trigger.channel == trigger.channel))
+            roll.remaining = 0;
+    }
+    if (settings.rollDivision <= 0 || !transport.isPlaying) return;
+
+    auto* slot = &rolls_.front();
+    for (auto& roll : rolls_)
+        if (roll.remaining == 0) { slot = &roll; break; }
+    const double division = kRollDivisionBeats[static_cast<size_t>(std::clamp(settings.rollDivision, 1, 4))];
+    *slot = {trigger, ppq + division, division, std::clamp(settings.rollHits, 1, 32) - 1, settings.chokeGroup};
+}
+
 void ClapEngine::process(
     const EngineSettings& settings,
     const Transport& transport,
@@ -127,8 +179,9 @@ void ClapEngine::process(
     float* const* channels,
     int numChannels,
     int numSamples,
-    std::span<const MidiCcEvent> controlChanges) noexcept {
-    if (settings.bypass || numChannels < 2 || channels == nullptr || numSamples <= 0) {
+    std::span<const MidiCcEvent> controlChanges,
+    std::span<float* const> componentChannels) noexcept {
+    if (settings.bypass || numChannels < 2 || channels == nullptr || numSamples < 0) {
         return;
     }
 
@@ -143,6 +196,8 @@ void ClapEngine::process(
                 voice.synth.reset();
                 voice.triggerOrder = 0;
             }
+            rolls_ = {};
+            pendingTrigger_ = false;
             voiceOrderCounter_ = 0;
             reversePlayHead_ = -1;
             reverseDuration_ = 0;
@@ -159,9 +214,18 @@ void ClapEngine::process(
         }
     }
 
+    if (!transport.isPlaying || settings.rollDivision <= 0) rolls_ = {};
+
+    // A seek invalidates pending fills; do not emit their missed hits at the new position.
+    if (transport.ppqPosition && hasTransportPosition_
+        && std::abs(*transport.ppqPosition - fallbackPpq_) > 2.0 / sampleRate_)
+        rolls_ = {};
+    hasTransportPosition_ = transport.ppqPosition.has_value();
+
     // Transport position tracking
     double ppq = transport.ppqPosition.value_or(fallbackPpq_);
-    const double ppqPerSample = (transport.bpm / 60.0) / sampleRate_;
+    const double bpm = std::isfinite(transport.bpm) && transport.bpm > 0.0 ? transport.bpm : 138.0;
+    const double ppqPerSample = (bpm / 60.0) / sampleRate_;
     const double beatsPerBar = transport.beatsPerBar > 0.0 ? transport.beatsPerBar : 4.0;
 
     int triggerIdx = 0;
@@ -170,13 +234,28 @@ void ClapEngine::process(
 
     for (int sample = 0; sample < numSamples; ++sample) {
         // Trigger MIDI events occurring at this sample offset
-        bool triggerAtSample = false;
         while (triggerIdx < static_cast<int>(midiTriggers.size()) && midiTriggers[triggerIdx].sampleOffset <= sample) {
             const auto& trig = midiTriggers[triggerIdx++];
-            triggerClap(settings, ppq, transport.bpm, beatsPerBar, trig.velocity, trig.noteNumber, trig.audition);
-            triggerAtSample = true;
+            auto eventTransport = transport;
+            eventTransport.ppqPosition = ppq;
+            fallbackPpq_ = ppq;
+            handleMidi(settings, eventTransport, trig);
         }
 
+        for (auto& roll : rolls_) {
+            if (roll.remaining > 0 && ppq + ppqPerSample * 0.5 >= roll.nextPpq) {
+                triggerClap(settings, ppq, bpm, beatsPerBar, roll.trigger.velocity, roll.trigger.noteNumber, false);
+                voices_[lastTriggeredVoice_].channel = roll.trigger.channel;
+                if (roll.trigger.audition)
+                    voices_[lastTriggeredVoice_].auditionSamples = static_cast<int>(sampleRate_ * 0.15);
+                --roll.remaining;
+                roll.nextPpq += roll.divisionBeats;
+            }
+        }
+
+        const bool triggerAtSample = pendingTrigger_;
+        pendingTrigger_ = false;
+        std::array<StereoFrame, 4> components{};
         float sL = 0.0f;
         float sR = 0.0f;
         bool mainHitAtSample = false;
@@ -190,8 +269,15 @@ void ClapEngine::process(
             if (!voice.synth.isPlaying()) {
                 continue;
             }
+            if (voice.auditionSamples > 0 && --voice.auditionSamples == 0)
+                voice.synth.noteOff(activeSettings);
             bool voiceMainHitStarted = false;
-            const auto frame = voice.synth.processSample(activeSettings, &voiceMainHitStarted);
+            std::array<StereoFrame, 4> voiceComponents{};
+            const auto frame = voice.synth.processSample(activeSettings, &voiceMainHitStarted, &voiceComponents);
+            for (size_t layer = 0; layer < components.size(); ++layer) {
+                components[layer].left += voiceComponents[layer].left;
+                components[layer].right += voiceComponents[layer].right;
+            }
             sL += frame.left;
             sR += frame.right;
             mainHitAtSample = mainHitAtSample || voiceMainHitStarted;
@@ -221,7 +307,7 @@ void ClapEngine::process(
             sR,
             settings.effects.slapbackDivision,
             settings.effects.slapbackMix,
-            transport.bpm,
+            bpm,
             triggerAtSample || mainHitAtSample);
         if (delayedTrigger) {
             reverb_.triggerGate();
@@ -265,6 +351,11 @@ void ClapEngine::process(
         sL *= masterGain;
         sR *= masterGain;
 
+        for (size_t channel = 0; channel < componentChannels.size() && channel < 8; ++channel) {
+            if (componentChannels[channel] == nullptr) continue;
+            const auto& frame = components[channel / 2];
+            componentChannels[channel][sample] = (channel % 2 == 0 ? frame.left : frame.right) * masterGain;
+        }
         channels[0][sample] = sL;
         channels[1][sample] = sR;
 
