@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(OpenClapper VERSION 3.2.2 LANGUAGES C CXX)
+project(OpenClapper VERSION 3.3.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -29,8 +29,7 @@ if(OC_BUILD_PLUGIN)
         GIT_SHALLOW TRUE)
     FetchContent_MakeAvailable(juce)
 
-    juce_add_binary_data(ClapperAssets SOURCES
-        assets/openclapper-faceplate.png)
+    juce_add_binary_data(ClapperAssets SOURCES assets/clap-hand.svg)
     set_target_properties(ClapperAssets PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
     juce_add_plugin(OpenClapper
@@ -107,7 +106,7 @@ if(OC_BUILD_TESTS)
         target_compile_definitions(openclapper_plugin_tests PRIVATE
             OPENCLAPPER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
             $<TARGET_PROPERTY:OpenClapper,COMPILE_DEFINITIONS>)
-        target_link_libraries(openclapper_plugin_tests PRIVATE OpenClapper ClapperAssets juce::juce_audio_utils Catch2::Catch2WithMain)
+        target_link_libraries(openclapper_plugin_tests PRIVATE OpenClapper juce::juce_audio_utils Catch2::Catch2WithMain)
         catch_discover_tests(openclapper_plugin_tests)
     endif()
 endif()

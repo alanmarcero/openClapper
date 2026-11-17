@@ -4,35 +4,29 @@
 #include "Panels.h"
 #include "PluginProcessor.h"
 
-class OpenClapperEditor : public juce::AudioProcessorEditor,
-                          private juce::Timer {
+class OpenClapperEditor : public juce::AudioProcessorEditor, private juce::Timer {
 public:
-    explicit OpenClapperEditor(OpenClapperProcessor& processorToEdit);
+    explicit OpenClapperEditor(OpenClapperProcessor&);
     ~OpenClapperEditor() override;
-
-    void paint(juce::Graphics& g) override;
+    void paint(juce::Graphics&) override;
     void resized() override;
 
 private:
     void timerCallback() override;
-    void syncPresetBox();
+    void syncPreset();
+    void stepPreset(int delta);
+    void setPage(int index);
 
     OpenClapperProcessor& processor_;
-    openclapper::ui::EdmLookAndFeel lookAndFeel_;
-    juce::Image faceplate_;
-
-    juce::ComboBox presetBox_;
-    juce::TextButton prevPresetBtn_{ "PREVIOUS PRESET" };
-    juce::TextButton nextPresetBtn_{ "NEXT PRESET" };
-    juce::TextButton viewToggleBtn_{ "SIMPLE" };
-
-    openclapper::ui::ClappyStagePanel stagePanel_;
-    openclapper::ui::ClapSynthPanel synthPanel_;
-    openclapper::ui::EffectsPanel effectsPanel_;
-    juce::TooltipWindow tooltipWindow_;
-    juce::TextButton performanceButton_{"PERFORMANCE"};
-    juce::Component performancePanel_;
-    std::vector<std::unique_ptr<juce::Component>> performanceControls_;
+    openclapper::ui::EdmLookAndFeel look_;
+    juce::ComboBox presets_;
+    juce::TextButton previous_{ "Previous" }, next_{ "Next" }, audition_{ "Audition A4" };
+    std::array<juce::TextButton, 4> tabs_;
+    std::array<std::unique_ptr<openclapper::ui::ControlPage>, 4> pages_;
+    openclapper::ui::Waveform waveform_;
+    std::unique_ptr<juce::Drawable> hand_;
+    juce::TooltipWindow tooltips_{this, 500};
+    int page_ = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(OpenClapperEditor)
 };

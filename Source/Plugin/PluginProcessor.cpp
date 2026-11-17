@@ -11,6 +11,7 @@ OpenClapperProcessor::OpenClapperProcessor()
         .withOutput("Transient", juce::AudioChannelSet::stereo(), false)
         .withOutput("Pre-clap", juce::AudioChannelSet::stereo(), false)),
       parameters(*this, nullptr, "PARAMETERS", openclapper::params::createParameterLayout()) {
+    selectPreset(0);
 }
 
 void OpenClapperProcessor::prepareToPlay(double sampleRate, int) {
@@ -94,13 +95,12 @@ void OpenClapperProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
 
     // Transport acquisition
     openclapper::core::Transport transport;
-    if (auto* playHead = getPlayHead()) {
+    if (auto* playHead = getPlayHead(); playHead && wrapperType != wrapperType_Standalone) {
         if (auto posOpt = playHead->getPosition()) {
             if (posOpt->getBpm()) {
                 transport.bpm = *posOpt->getBpm();
-                displayBpm.store(static_cast<float>(transport.bpm));
             }
-            if (posOpt->getPpqPosition()) {
+            if (posOpt->getPpqPosition() && std::isfinite(*posOpt->getPpqPosition())) {
                 transport.ppqPosition = *posOpt->getPpqPosition();
             }
             if (posOpt->getTimeSignature()) {
@@ -113,6 +113,7 @@ void OpenClapperProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
 
     const auto settings = openclapper::params::readSettings(parameters);
     if (!std::isfinite(transport.bpm) || transport.bpm <= 0.0) transport.bpm = 138.0;
+    displayBpm.store(static_cast<float>(transport.bpm), std::memory_order_relaxed);
     const double beatsPerSample = transport.bpm / (60.0 * getSampleRate());
     const auto eventTransport = [&](int offset) {
         auto position = transport;
@@ -162,7 +163,8 @@ void OpenClapperProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
 
     // Update GUI telemetry
     displayPeak.store(blockPeak);
-    displayBeatPhase.store(engine_.currentBeatPhase());
+    const float phase = engine_.currentBeatPhase();
+    displayBeatPhase.store(transport.isPlaying ? phase - std::floor(phase) : -1.0f, std::memory_order_relaxed);
     displayClapProgress.store(engine_.currentClapProgress());
     displayTriggerCount.store(engine_.triggerSerial());
 }
@@ -202,7 +204,8 @@ void OpenClapperProcessor::selectPreset(int index) {
 
 void OpenClapperProcessor::getStateInformation(juce::MemoryBlock& destData) {
     auto state = parameters.copyState();
-    state.setProperty("selected_preset", selectedPreset_, nullptr);
+    state.setProperty("selected_preset", selectedPreset_.load(), nullptr);
+    state.setProperty("clap_bank", 1, nullptr);
     std::unique_ptr<juce::XmlElement> xml(state.createXml());
     copyXmlToBinary(*xml, destData);
 }
@@ -215,8 +218,10 @@ void OpenClapperProcessor::setStateInformation(const void* data, int sizeInBytes
         parameters.replaceState(state);
         currentProgram_ = std::clamp(static_cast<int>(parameters.getRawParameterValue(openclapper::params::kPreset)->load()),
             0, getNumPrograms() - 1);
-        selectedPreset_ = std::clamp(static_cast<int>(state.getProperty("selected_preset", currentProgram_)),
-            0, static_cast<int>(openclapper::presets::factoryPresets().size()) - 1);
+        selectedPreset_ = static_cast<int>(state.getProperty("clap_bank", 0)) == 1
+            ? std::clamp(static_cast<int>(state.getProperty("selected_preset", currentProgram_.load())),
+                         -1, static_cast<int>(openclapper::presets::factoryPresets().size()) - 1)
+            : -1;
     }
 }
 

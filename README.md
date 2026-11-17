@@ -1,46 +1,55 @@
-# openClapper v3.2.2
+# openClapper v3.3.0
 
 [Install with OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest)
 
-## Make pitched trance claps
+openClapper is a pitched, four-layer clap synthesizer. Play the resonant body from a MIDI keyboard, add a flam of up to five hands, and set how much noise follows the strike. **Audition A4** previews the current sound from any page.
 
-openClapper creates pitched, layered claps for trance and electronic music. Play from a MIDI keyboard or host. The resonant body follows each note; **AUDITION CLAP** plays A4. Save custom sounds with the project.
+![Clap editor with a rendered waveform marking the main strike, the preset browser, and controls for hand spacing, tuned body, noise tail and output](assets/openClapper-screenshot.png)
 
-## Shape the hit
+## Choose a clap
 
-- **Pre-clap:** Add up to five bursts before the main hit. Set their spread, decay, humanization, pan, and level.
-- **Body:** Choose a resonant mode and set its resonance, decay, pitch sweep, filters, and level.
-- **Noise:** Choose white, pink, velvet, or lo-fi noise. Set the envelope, filters, stereo width, and level.
-- **Transient:** Choose the click type, frequency, decay, and level.
-- **Effects:** Add distortion, compression, limiting, gated stereo reverb, host-synced slapback, or a reverse swell. Slapback offers 1/16, dotted 1/16, 1/8, dotted 1/8, and 1/4 notes. It makes one repeat without feedback. If the host does not report tempo, slapback uses 138 BPM.
-- **Simple and Advanced views:** Use the main controls in Simple View. Open Advanced View for detailed controls.
+The 45 factory sounds are arranged in five families of nine. **Previous** and **Next** step through the bank. All factory sounds play as one-shots.
 
-The default sound plays as a one-shot. Enable **Full ADSR** to hold a hit with a MIDI note and release it with the matching note and channel. Set attack and decay from 0 to 10 seconds, sustain from 0 to 1, and release from 0 to 20 seconds. The body and noise follow the full envelope. Clicks and pre-claps keep their short sounds.
+| Family | Try | Sound |
+| --- | --- | --- |
+| Close | Downbeat, Cupped Palm, Mono Print | Short, focused hands for the backbeat, including a fully mono clap. |
+| Flam | Two Hands, Pocket Drag, Five Across | Spaced strikes with different timing, pan, and amounts of humanization. |
+| Wide | Balcony, Palm Circle, Opposite Walls | Staggered hands and a wider noise layer for ensemble claps. |
+| Gate | Short Plate, Concrete, High Gallery | Early room reflections with 70–125 ms gates. |
+| Roll | Sixteenth, Ratchet, Ghost Palm | Compact hits for fast patterns and fills. |
 
-## Perform with MIDI
+The animated hands beside the page tabs meet on each host beat and follow tempo changes and seeks. They rest when playback stops. Standalone and hosts without transport timing use the internal 138 BPM clock.
 
-The Performance page includes independent velocity response, mute, and solo controls for the body, noise, transient, and pre-clap layers. Set MIDI note and velocity ranges for incoming hits. The ranges include their low and high values. Audition bypasses those ranges. Use choke groups to stop an earlier voice when a new hit arrives. Group 0 allows overlaps; groups 1 through 16 stop earlier voices in the same group.
+The **Clap** page shows a dry A4 preview. The peach section contains the pre-claps. The vertical marker shows when the main strike begins. Change **Bursts** or **Spacing** to see it move. **Body decay** and **Noise decay** shape the pitched body and noise tail separately.
 
-Set each velocity response to ignore velocity, follow velocity, or square the response. Pre-claps also follow MIDI velocity. Use Roll and Fill to repeat a note at a host-synced rate. Choose off, 1/8, 1/16, 1/32, or 1/16 triplet, and set 1 to 32 hits. The rolls follow host tempo and stop when the note ends, transport stops, or a seek occurs.
+## Shape the layers
 
-The editor can provide separate stereo outputs for the body, noise, transient, and pre-clap. These outputs include the layer controls and master gain, before shared effects and stereo width. Hosts can route them independently from the main mix.
+On **Layers**, set the timing, decay and stereo placement of the pre-claps. Choose a pitched body voice and adjust its pitch sweep and filters. Noise has its own attack, hold, decay, curve and stereo width. The transient has its own shape, frequency and decay.
 
-MIDI CC 7 controls the master level. CC 74 controls noise brightness. CC 120 stops sound and effect tails; CC 121 resets CC 7 and CC 74; CC 123 stops held notes.
+In v3.3, each flam contact takes 0.35 ms to rise, and successive contacts build toward the main strike. Pink noise uses independent left and right filters. Lo-fi noise samples the two channels independently on a shared 12 kHz clock, keeping its texture consistent across host sample rates.
 
-## Factory presets
+![Layers page showing the four sound sources and their individual envelopes and filters](assets/openClapper-screenshot-advanced.png)
 
-Choose from 45 factory presets for gated, wide, rolling, slap, and psytrance claps. Names include Mainstage Anthem Gate, Progressive Glass, Psy Fractal Snap, and Impact Clap. Impact Clap demonstrates the long Full ADSR sound. Programs 1–44 keep their existing host automation assignments.
+## Play as a synthesizer
 
-## Screenshots
+Open **MIDI & envelope** and select **Hold notes**. The body and noise sustain while the key is down and release when the matching note and channel send note-off. Set attack and decay up to 10 seconds, sustain from 0 to 1, and release up to 20 seconds. Switch to **One-shot** to use the individual layer decays again. The audition button automatically releases held sounds.
 
-![openClapper Impact Clap sound controls with larger labeled buttons](assets/openClapper-screenshot.png)
+Set the inclusive MIDI key and velocity ranges. Choke group 0 allows overlaps. Groups 1–16 stop older voices in the same group. Audition bypasses the key and velocity ranges. Solo or mute each layer independently. Body, noise, and transient have adjustable velocity response from 0 (constant) through 1 (linear) to 2 (squared). Pre-claps follow velocity.
 
-![openClapper Impact Clap advanced sound controls with larger labeled buttons](assets/openClapper-screenshot-advanced.png)
+**Roll & fill** repeats a held note at 1/8, 1/16, 1/32, or 1/16 triplet spacing. Set 1–32 hits. Rolls stop at note-off, transport stop, or seek.
 
-![openClapper Impact Clap performance controls with larger labeled buttons](assets/openClapper-performance.png)
+![MIDI and envelope page with Hold notes selected, an editable ADSR, trigger zones, roll controls and layer mute, solo and velocity settings](assets/openClapper-performance.png)
 
-## Formats and license
+## Add effects and route audio
 
-Available as VST3, AU for macOS, LV2, and Standalone on macOS, Windows, and Linux.
+On **Effects**, adjust drive, compression, gated stereo reverb, one-repeat slapback, reverse swell, limiting, stereo width, and output gain. Slapback follows host tempo and uses 138 BPM if the host supplies none. In hosts with multi-output support, route the body, noise, transient, and pre-clap to separate stereo buses. Each bus includes its layer controls and master gain, before shared effects and stereo width.
+
+![Effects page showing drive, compressor, gated room, echo, reverse, and output controls](assets/openClapper-effects.png)
+
+MIDI CC 7 adjusts master level and CC 74 controls noise brightness. CC 120 stops sound and effect tails, CC 121 resets the two controller overrides, and CC 123 releases held notes.
+
+## Formats and compatibility
+
+macOS includes AU, VST3, LV2, and Standalone. Windows and Linux include VST3, LV2, and Standalone. Older sessions restore their saved parameter values and appear as **Custom sound**. The original 44 host program positions and automation ranges are preserved. The editor offers all 45 sounds.
 
 MIT License. See [LICENSE](LICENSE).
