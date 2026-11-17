@@ -1,212 +1,153 @@
 #include "PluginEditor.h"
-#include "BinaryData.h"
-#include "Parameters.h"
 #include "Presets.h"
+#include "BinaryData.h"
 #include "Theme.h"
 
-OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& processorToEdit)
-    : AudioProcessorEditor(&processorToEdit),
-      processor_(processorToEdit),
-      stagePanel_(processorToEdit),
-      synthPanel_(processorToEdit),
-      effectsPanel_(processorToEdit),
-      tooltipWindow_(this, 500) {
-    juce::LookAndFeel::setDefaultLookAndFeel(&lookAndFeel_);
+using namespace openclapper;
 
-    faceplate_ = juce::ImageCache::getFromMemory(
-        BinaryData::openclapperfaceplate_png, BinaryData::openclapperfaceplate_pngSize);
-
-    // Preset selector
-    const auto& presets = openclapper::presets::factoryPresets();
-    for (size_t i = 0; i < presets.size(); ++i) {
-        presetBox_.addItem(presets[i].name, static_cast<int>(i + 1));
-    }
-    presetBox_.onChange = [this]() {
-        const int selected = presetBox_.getSelectedId() - 1;
-        if (selected >= 0 && selected < static_cast<int>(openclapper::presets::factoryPresets().size())) {
-            processor_.selectPreset(selected);
+OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& instrument)
+    : AudioProcessorEditor(&instrument), processor_(instrument), waveform_(instrument) {
+    hand_ = juce::Drawable::createFromImageData(BinaryData::claphand_svg, BinaryData::claphand_svgSize);
+    const auto& bank = presets::factoryPresets();
+    for (size_t i = 0; i < bank.size(); ++i) presets_.addItem(bank[i].name, static_cast<int>(i + 1));
+    presets_.setName("Factory preset");
+    presets_.setTooltip("Choose a factory clap by family and name.");
+    presets_.setTextWhenNothingSelected("Custom sound");
+    presets_.onChange = [this] {
+        if (presets_.getSelectedId() > 0) {
+            processor_.selectPreset(presets_.getSelectedId() - 1);
+            waveform_.refresh();
         }
     };
-    syncPresetBox();
-    addAndMakeVisible(presetBox_);
+    addAndMakeVisible(presets_);
+    previous_.setTooltip("Load the previous factory clap.");
+    next_.setTooltip("Load the next factory clap.");
+    audition_.setTooltip("Play the current sound at A4.");
+    previous_.onClick = [this] { stepPreset(-1); };
+    next_.onClick = [this] { stepPreset(1); };
+    audition_.onClick = [this] { processor_.triggerAudition(); };
+    audition_.setColour(juce::TextButton::buttonColourId, theme::apricot);
+    audition_.setColour(juce::TextButton::textColourOffId, theme::plot);
+    for (auto* button : { &previous_, &next_, &audition_ }) addAndMakeVisible(*button);
 
-    prevPresetBtn_.onClick = [this]() {
-        const int current = processor_.getSelectedPresetIndex();
-        const int prev = (current - 1 + static_cast<int>(openclapper::presets::factoryPresets().size())) % static_cast<int>(openclapper::presets::factoryPresets().size());
-        processor_.selectPreset(prev);
-        syncPresetBox();
-    };
-    addAndMakeVisible(prevPresetBtn_);
-
-    nextPresetBtn_.onClick = [this]() {
-        const int current = processor_.getSelectedPresetIndex();
-        const int next = (current + 1) % static_cast<int>(openclapper::presets::factoryPresets().size());
-        processor_.selectPreset(next);
-        syncPresetBox();
-    };
-    addAndMakeVisible(nextPresetBtn_);
-
-    // Mode toggle button (Simple vs Advanced)
-    viewToggleBtn_.setButtonText(synthPanel_.isAdvancedMode() ? "ADVANCED VIEW" : "SIMPLE VIEW");
-    viewToggleBtn_.setColour(juce::TextButton::buttonColourId, openclapper::theme::kKnobBody);
-    viewToggleBtn_.setColour(juce::TextButton::textColourOffId, openclapper::theme::kAccentCyan);
-    viewToggleBtn_.setTooltip("Toggle between clean Simple mode and deep Advanced tweak controls.");
-    viewToggleBtn_.onClick = [this]() {
-        const bool nextAdv = !synthPanel_.isAdvancedMode();
-        synthPanel_.setAdvancedMode(nextAdv);
-        effectsPanel_.setAdvancedMode(nextAdv);
-        viewToggleBtn_.setButtonText(nextAdv ? "ADVANCED VIEW" : "SIMPLE VIEW");
-        viewToggleBtn_.setColour(juce::TextButton::textColourOffId,
-            nextAdv ? openclapper::theme::kAccentAmber : openclapper::theme::kAccentCyan);
-        resized();
-    };
-    addAndMakeVisible(viewToggleBtn_);
-
-    addAndMakeVisible(stagePanel_);
-    addAndMakeVisible(synthPanel_);
-    addAndMakeVisible(effectsPanel_);
-
-    const auto addControl = [this](std::unique_ptr<juce::Component> control) {
-        performancePanel_.addAndMakeVisible(*control);
-        performanceControls_.push_back(std::move(control));
-    };
-    using namespace openclapper::params;
-    for (size_t layer = 0; layer < kLayerNames.size(); ++layer) {
-        addControl(std::make_unique<openclapper::ui::Toggle>(processor_.parameters, kLayerMute[layer],
-            juce::String(kLayerNames[layer]) + " Mute", openclapper::theme::kAccentAmber));
-        addControl(std::make_unique<openclapper::ui::Toggle>(processor_.parameters, kLayerSolo[layer],
-            juce::String(kLayerNames[layer]) + " Solo", openclapper::theme::kAccentCyan));
-        if (layer < kLayerVelocity.size()) {
-            auto knob = std::make_unique<openclapper::ui::Knob>(processor_.parameters, kLayerVelocity[layer],
-                juce::String(kLayerNames[layer]) + " Velocity", openclapper::theme::kAccentCyan);
-            knob->setTooltip("0 ignores velocity, 1 follows velocity, 2 gives a stronger velocity response.");
-            addControl(std::move(knob));
-        }
+    constexpr std::array names{ "Clap", "Layers", "Effects", "MIDI & envelope" };
+    for (size_t i = 0; i < tabs_.size(); ++i) {
+        pages_[i] = std::make_unique<ui::ControlPage>(processor_.parameters, static_cast<ui::Page>(i));
+        addChildComponent(*pages_[i]);
+        tabs_[i].setButtonText(names[i]);
+        tabs_[i].setTooltip("Open the " + juce::String(names[i]) + " page.");
+        tabs_[i].onClick = [this, i] { setPage(static_cast<int>(i)); };
+        addAndMakeVisible(tabs_[i]);
     }
-    for (const auto& parameter : kPerformanceParameters) {
-        if (juce::String(parameter.id) == "amp_enabled") {
-            addControl(std::make_unique<openclapper::ui::Toggle>(processor_.parameters, parameter.id, parameter.name,
-                openclapper::theme::kAccentAmber));
-            continue;
-        }
-        addControl(std::make_unique<openclapper::ui::Knob>(processor_.parameters, parameter.id, parameter.name,
-            openclapper::theme::kAccentCyan));
-    }
-    addControl(std::make_unique<openclapper::ui::Choice>(processor_.parameters, "roll_division", "Roll Division",
-        openclapper::theme::kAccentCyan));
-    addChildComponent(performancePanel_);
-    performanceButton_.setColour(juce::TextButton::textColourOffId, openclapper::theme::kAccentCyan);
-    performanceButton_.setColour(juce::TextButton::textColourOnId, openclapper::theme::kAccentAmber);
-    performanceButton_.setClickingTogglesState(true);
-    performanceButton_.onClick = [this] {
-        const bool visible = performanceButton_.getToggleState();
-        performanceButton_.setButtonText(visible ? "SOUND DESIGN" : "PERFORMANCE");
-        performancePanel_.setVisible(visible);
-        stagePanel_.setVisible(!visible);
-        synthPanel_.setVisible(!visible);
-        effectsPanel_.setVisible(!visible);
-        viewToggleBtn_.setEnabled(!visible);
-        resized();
-    };
-    addAndMakeVisible(performanceButton_);
-    prevPresetBtn_.setTooltip("Select the previous factory clap.");
-    nextPresetBtn_.setTooltip("Select the next factory clap.");
-    performanceButton_.setTooltip("Open the MIDI performance controls.");
-    setSize(1200, 840);
-    setResizable(false, false);
-    startTimerHz(20);
+    addAndMakeVisible(waveform_);
+    setLookAndFeel(&look_);
+    setSize(1080, 710);
+    syncPreset();
+    setPage(0);
+    startTimerHz(24);
 }
 
 OpenClapperEditor::~OpenClapperEditor() {
     stopTimer();
-    juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
+    setLookAndFeel(nullptr);
 }
 
-void OpenClapperEditor::syncPresetBox() {
-    presetBox_.setSelectedId(processor_.getSelectedPresetIndex() + 1, juce::dontSendNotification);
+void OpenClapperEditor::stepPreset(int delta) {
+    const int size = presets_.getNumItems();
+    const int current = processor_.getSelectedPresetIndex();
+    const int next = current < 0 ? (delta > 0 ? 0 : size - 1) : (current + delta + size) % size;
+    processor_.selectPreset(next);
+    syncPreset();
+    waveform_.refresh();
+}
+
+void OpenClapperEditor::syncPreset() {
+    presets_.setSelectedId(processor_.getSelectedPresetIndex() + 1, juce::dontSendNotification);
+}
+
+void OpenClapperEditor::setPage(int index) {
+    page_ = index;
+    for (size_t i = 0; i < pages_.size(); ++i) {
+        const bool active = static_cast<int>(i) == index;
+        pages_[i]->setVisible(active);
+        tabs_[i].setToggleState(active, juce::dontSendNotification);
+    }
+    waveform_.setVisible(page_ == 0);
+    if (page_ == 0) waveform_.refresh();
+    resized();
 }
 
 void OpenClapperEditor::timerCallback() {
-    if (presetBox_.getSelectedId() != processor_.getSelectedPresetIndex() + 1) {
-        syncPresetBox();
-    }
+    syncPreset();
+    if (page_ == 0 && isShowing()) waveform_.refresh();
+    repaint(getWidth() - 170, 89, 150, 59);
 }
 
 void OpenClapperEditor::paint(juce::Graphics& g) {
-    // 1. Solid dark chassis base
-    g.fillAll(openclapper::theme::kBackground);
-
-    // 2. Chassis texture in margins (high-tech carbon & cyber trace styling)
-    if (faceplate_.isValid()) {
-        const juce::Graphics::ScopedSaveState state(g);
-        g.setOpacity(0.22f);
-        g.drawImageWithin(faceplate_, 0, 0, getWidth(), getHeight(),
-                          juce::RectanglePlacement::stretchToFit);
+    g.fillAll(theme::paper);
+    g.setColour(theme::surface);
+    g.fillRect(0, 0, getWidth(), 88);
+    g.setColour(theme::edge);
+    g.drawHorizontalLine(87, 0, static_cast<float>(getWidth()));
+    g.setColour(theme::violet);
+    constexpr std::array<int, 3> lengths{24, 39, 30};
+    for (size_t i = 0; i < lengths.size(); ++i) {
+        const float x = 21.0f + static_cast<float>(i) * 9.0f;
+        const float h = static_cast<float>(lengths[i]);
+        juce::Path stroke;
+        stroke.startNewSubPath(x, 44.0f + h * 0.5f);
+        stroke.lineTo(x + 9, 44.0f - h * 0.5f);
+        g.strokePath(stroke, juce::PathStrokeType(5.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
+    g.setColour(theme::ink);
+    g.setFont(juce::FontOptions(32.0f, juce::Font::bold));
+    g.drawText("openClapper", 62, 11, 225, 40, juce::Justification::centredLeft);
+    g.setColour(theme::secondary);
+    g.setFont(juce::FontOptions(14.0f));
+    g.drawText("Pitched clap synthesizer", 64, 47, 220, 22, juce::Justification::centredLeft);
+    g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
+    g.drawText("Factory preset", presets_.getX(), 8, 280, 20, juce::Justification::centredLeft);
 
-    // 3. Solid top header bar with border and cyan accent strip
-    const auto headerArea = getLocalBounds().removeFromTop(96);
-    g.setGradientFill(juce::ColourGradient(
-        openclapper::theme::kPanel, 0.0f, 0.0f,
-        openclapper::theme::kBackground, 0.0f, static_cast<float>(headerArea.getHeight()), false));
-    g.fillRect(headerArea);
-    g.setColour(openclapper::theme::kPanelEdge);
-    g.drawHorizontalLine(headerArea.getBottom() - 1, 0.0f, static_cast<float>(getWidth()));
-    g.setColour(openclapper::theme::kAccentCyan.withAlpha(0.6f));
-    g.drawHorizontalLine(headerArea.getBottom() - 1, 12.0f, 260.0f);
-
-    // Logo & Title
-    g.setColour(openclapper::theme::kAccentCyan);
-    g.setFont(juce::FontOptions(20.0f, juce::Font::bold));
-    g.drawText("openClapper", 16, headerArea.getY() + 10, 140, 24, juce::Justification::left, true);
-
-    // Slogan in Header
-    g.setColour(openclapper::theme::kAccentAmber);
-    g.setFont(juce::FontOptions(13.0f, juce::Font::italic));
-    g.drawText("Clap on. Clap off.", 160, headerArea.getY() + 13, 140, 20, juce::Justification::left, true);
-
-    // Tech badges
-    g.setColour(openclapper::theme::kTextDim.brighter(0.25f));
-    g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
-    g.drawText("v" JucePlugin_VersionString " | MIDI-TUNED TRANCE CLAP", getWidth() - 250, headerArea.getY() + 13, 234, 20, juce::Justification::right, true);
+    const float beat = processor_.displayBeatPhase.load(std::memory_order_relaxed);
+    const bool running = beat >= 0.0f;
+    const float contact = running ? std::exp(-7.0f * std::min(beat, 1.0f - beat)) : 0.0f;
+    const float centre = static_cast<float>(getWidth() - 56);
+    if (hand_) {
+        for (float side : {-1.0f, 1.0f}) {
+            const auto transform = juce::AffineTransform::translation(-20, -22)
+                .scaled(-side * 0.72f, 0.72f)
+                .rotated(side * (0.18f + 0.26f * contact))
+                .translated(centre + side * (19.0f - 10.0f * contact), 118.0f);
+            hand_->draw(g, running ? 1.0f : 0.6f, transform);
+        }
+    }
+    g.setColour(theme::secondary);
+    g.drawText(running ? juce::String(juce::roundToInt(processor_.displayBpm.load())) + " BPM" : "Stopped",
+               getWidth() - 164, 99, 64, 38, juce::Justification::centredRight);
 }
 
 void OpenClapperEditor::resized() {
-    auto area = getLocalBounds().reduced(10, 8);
+    auto area = getLocalBounds().reduced(20, 0);
+    auto header = area.removeFromTop(88).withTrimmedTop(30).withHeight(38);
+    header.removeFromLeft(280);
+    audition_.setBounds(header.removeFromRight(140));
+    header.removeFromRight(14);
+    next_.setBounds(header.removeFromRight(70));
+    header.removeFromRight(5);
+    previous_.setBounds(header.removeFromRight(91));
+    header.removeFromRight(6);
+    presets_.setBounds(header);
 
-    // Top Header
-    auto header = area.removeFromTop(90);
-    constexpr int buttonHeight = 36;
-    constexpr int gap = 8;
-    constexpr int performanceWidth = 140;
-    constexpr int previousWidth = 132;
-    constexpr int presetWidth = 280;
-    constexpr int nextWidth = 112;
-    constexpr int viewWidth = 146;
-    const int rowWidth = performanceWidth + previousWidth + presetWidth + nextWidth + viewWidth + gap * 4;
-    int x = header.getX() + (header.getWidth() - rowWidth) / 2;
-    const int y = header.getBottom() - buttonHeight - 4;
-    performanceButton_.setBounds(x, y, performanceWidth, buttonHeight); x += performanceWidth + gap;
-    prevPresetBtn_.setBounds(x, y, previousWidth, buttonHeight); x += previousWidth + gap;
-    presetBox_.setBounds(x, y, presetWidth, buttonHeight); x += presetWidth + gap;
-    nextPresetBtn_.setBounds(x, y, nextWidth, buttonHeight); x += nextWidth + gap;
-    viewToggleBtn_.setBounds(x, y, viewWidth, buttonHeight);
-    performancePanel_.setBounds(area);
-    const int cellWidth = area.getWidth() / 6;
-    const int cellHeight = area.getHeight() / 4;
-    for (size_t index = 0; index < performanceControls_.size(); ++index)
-        performanceControls_[index]->setBounds(static_cast<int>(index % 6) * cellWidth + 8,
-            static_cast<int>(index / 6) * cellHeight + 8, cellWidth - 16, cellHeight - 16);
-
-    // Main Layout:
-    // Left side: ClappyStagePanel (approx 340 px width)
-    // Right side: Top = ClapSynthPanel, Bottom = EffectsPanel
-    const int stageWidth = 330;
-    stagePanel_.setBounds(area.removeFromLeft(stageWidth).reduced(2, 2));
-
-    auto rightArea = area.reduced(2, 2);
-    const float synthRatio = synthPanel_.isAdvancedMode() ? 0.58f : 0.50f;
-    const int synthHeight = static_cast<int>(static_cast<float>(rightArea.getHeight()) * synthRatio);
-    synthPanel_.setBounds(rightArea.removeFromTop(synthHeight).reduced(0, 2));
-    effectsPanel_.setBounds(rightArea.reduced(0, 2));
+    auto nav = area.removeFromTop(61).reduced(0, 12);
+    constexpr std::array widths{82, 95, 95, 160};
+    for (size_t i = 0; i < tabs_.size(); ++i) {
+        tabs_[i].setBounds(nav.removeFromLeft(widths[i]));
+        nav.removeFromLeft(6);
+    }
+    area.removeFromBottom(16);
+    if (page_ == 0) {
+        waveform_.setBounds(area.removeFromTop(213));
+        area.removeFromTop(10);
+    }
+    pages_[static_cast<size_t>(page_)]->setBounds(area);
 }

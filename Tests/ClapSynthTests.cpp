@@ -165,6 +165,68 @@ TEST_CASE("ClapSynth flam spread creates stereo differentiation during pre-burst
     REQUIRE(diffSum > 0.01f);
 }
 
+TEST_CASE("Pink and lo-fi textures keep independent stereo detail on one-shots and held notes", "[core][synth][stereo]") {
+    for (const double rate : {44100.0, 48000.0, 96000.0}) {
+        for (int note : {36, 69, 84}) {
+            for (const auto type : {NoiseType::Pink, NoiseType::LoFi}) {
+                for (bool held : {false, true}) {
+                    CAPTURE(rate, note, static_cast<int>(type), held);
+                    ClapSynth voice;
+                    voice.prepare(rate);
+                    ClapSynthSettings sound;
+                    sound.noiseType = type;
+                    sound.preClapCount = 0;
+                    sound.noiseHPF = 50;
+                    sound.noiseLPF = 8000;
+                    sound.layers[1].solo = true;
+                    sound.ampEnabled = held;
+                    sound.ampReleaseMs = 60;
+                    voice.trigger(sound, note);
+                    double ll = 0, rr = 0, lr = 0;
+                    const int samples = static_cast<int>(rate * 0.2);
+                    for (int i = 0; i < samples; ++i) {
+                        if (held && i == samples / 2) voice.noteOff(sound);
+                        const auto frame = voice.processSample(sound);
+                        ll += frame.left * frame.left;
+                        rr += frame.right * frame.right;
+                        lr += frame.left * frame.right;
+                    }
+                    REQUIRE(ll > 1);
+                    REQUIRE(rr > 1);
+                    REQUIRE(std::abs(lr / std::sqrt(ll * rr)) < 0.25);
+                    if (held) REQUIRE_FALSE(voice.isPlaying());
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("Flam contacts build toward the main strike at different sample rates", "[core][synth][flam]") {
+    for (double rate : {44100.0, 48000.0, 96000.0}) {
+        for (int note : {36, 69, 84}) {
+            CAPTURE(rate, note);
+            ClapSynth voice;
+            voice.prepare(rate);
+            ClapSynthSettings sound;
+            sound.preClapCount = 4;
+            sound.preClapJitter = 0;
+            sound.preClapSpreadMs = 20;
+            sound.preClapDecayMs = 2;
+            sound.preClapFlamSpread = 0;
+            sound.layers[3].solo = true;
+            voice.trigger(sound, note);
+            std::array<double, 4> energy{};
+            const int window = static_cast<int>(std::round(rate * 0.020));
+            for (int i = 0; i < 4 * window; ++i) {
+                const auto frame = voice.processSample(sound);
+                energy[static_cast<size_t>(i / window)] += frame.left * frame.left + frame.right * frame.right;
+            }
+            REQUIRE(energy.front() > 0.01);
+            REQUIRE(energy.back() > energy.front() * 1.35);
+        }
+    }
+}
+
 TEST_CASE("ClapSynth tone pitch follows MIDI notes", "[core][synth]") {
     ClapSynth synth;
     synth.prepare(48000.0);

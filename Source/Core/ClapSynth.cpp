@@ -259,6 +259,15 @@ StereoFrame GatedStereoReverb::process(
 
 void ClapSynth::prepare(double sampleRate) {
     sampleRate_ = sampleRate;
+    constexpr std::array poles{0.99765, 0.96300, 0.57000};
+    constexpr std::array gains{0.0990460, 0.2965164, 1.0526913};
+    for (size_t i = 0; i < poles.size(); ++i) {
+        const auto pole = std::pow(poles[i], 44100.0 / sampleRate);
+        pinkPoles_[i] = static_cast<float>(pole);
+        pinkGains_[i] = static_cast<float>(gains[i] * (1.0 - pole) / (1.0 - poles[i]));
+    }
+    lofiStep_ = std::min(1.0, 12000.0 / sampleRate);
+    contactRiseSteps_ = static_cast<float>(1.0 / std::max(1.0, 0.00035 * sampleRate));
     reset();
 }
 
@@ -289,9 +298,10 @@ void ClapSynth::reset() noexcept {
     noiseHPF_R_.reset();
     noiseLPF_L_.reset();
     noiseLPF_R_.reset();
-    pinkB0_ = pinkB1_ = pinkB2_ = 0.0f;
-    lofiHeld_ = 0.0f;
-    lofiCounter_ = 0;
+    pinkLeft_.fill(0.0f);
+    pinkRight_.fill(0.0f);
+    lofiHeld_ = {};
+    lofiPhase_ = 1.0;
 }
 
 void ClapSynth::trigger(const ClapSynthSettings& settings, int midiNote, float velocity) noexcept {
@@ -315,7 +325,9 @@ void ClapSynth::trigger(const ClapSynthSettings& settings, int midiNote, float v
         const float jitterTime = nextRandomFloat(prngState_) * 0.5f * jitter * spreadSamples;
         burstStartSamples_[i] = std::max(0, static_cast<int>(static_cast<float>(i) * spreadSamples + jitterTime));
         const float jitterAmp = 1.0f + nextRandomFloat(prngState_) * 0.2f * jitter;
-        burstAmplitudes_[i] = std::clamp(settings.preClapLevel * jitterAmp, 0.0f, 1.0f);
+        const float progression = burstCount_ > 1 ? static_cast<float>(i) / static_cast<float>(burstCount_ - 1) : 1.0f;
+        const float pressure = 0.63f + 0.37f * progression;
+        burstAmplitudes_[i] = std::clamp(settings.preClapLevel * pressure * jitterAmp, 0.0f, 1.0f);
         const float dir = (i % 2 == 0) ? -1.0f : 1.0f;
         const float spreadFrac = static_cast<float>(i + 1) / static_cast<float>(std::max(1, burstCount_));
         burstPans_[i] = std::clamp(dir * settings.preClapFlamSpread * spreadFrac, -1.0f, 1.0f);
@@ -339,36 +351,35 @@ void ClapSynth::trigger(const ClapSynthSettings& settings, int midiNote, float v
     totalDurationSamples_ = static_cast<int>(totalTimeMs * 0.001f * static_cast<float>(sampleRate_));
 }
 
-float ClapSynth::generateNoiseSample(NoiseType type) noexcept {
-    const float white = nextRandomFloat(prngState_);
-
+StereoFrame ClapSynth::generateNoise(NoiseType type) noexcept {
+    const StereoFrame white{nextRandomFloat(prngState_), nextRandomFloat(prngState_)};
     if (type == NoiseType::Pink) {
-        pinkB0_ = 0.99765f * pinkB0_ + white * 0.0990460f;
-        pinkB1_ = 0.96300f * pinkB1_ + white * 0.2965164f;
-        pinkB2_ = 0.57000f * pinkB2_ + white * 1.0526913f;
-        return (pinkB0_ + pinkB1_ + pinkB2_ + white * 0.1848f) * 0.35f;
+        const auto filter = [&](float input, std::array<float, 3>& memory) {
+            float sum = input * 0.1848f;
+            for (size_t i = 0; i < memory.size(); ++i) {
+                memory[i] = pinkPoles_[i] * memory[i] + input * pinkGains_[i];
+                sum += memory[i];
+            }
+            return sum * 0.35f;
+        };
+        return {filter(white.left, pinkLeft_), filter(white.right, pinkRight_)};
     }
-
     if (type == NoiseType::Velvet) {
-        // Sparse velvet noise pulses (density ~25%)
-        const float r = nextRandomFloat(prngState_);
-        if (std::abs(r) > 0.65f) {
-            return (r > 0.0f ? 1.0f : -1.0f) * (0.8f + 0.2f * std::abs(white));
-        }
-        return 0.0f;
+        const auto impulse = [&](float level) {
+            const float random = nextRandomFloat(prngState_);
+            return std::abs(random) > 0.65f ? std::copysign(0.8f + 0.2f * std::abs(level), random) : 0.0f;
+        };
+        return {impulse(white.left), impulse(white.right)};
     }
-
     if (type == NoiseType::LoFi) {
-        // Decimated 8-bit sample-and-hold
-        if (++lofiCounter_ >= 4) {
-            lofiCounter_ = 0;
-            // 8-bit quantization
-            lofiHeld_ = std::round(white * 15.0f) / 15.0f;
+        if (lofiPhase_ >= 1.0) {
+            lofiPhase_ -= 1.0;
+            lofiHeld_ = {std::round(white.left * 15.0f) / 15.0f, std::round(white.right * 15.0f) / 15.0f};
         }
+        lofiPhase_ += lofiStep_;
         return lofiHeld_;
     }
-
-    return white; // Default White
+    return white;
 }
 
 float ClapSynth::getEnvelopeProgress() const noexcept {
@@ -444,7 +455,8 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
             continue;
         }
 
-        const float env = std::exp(-static_cast<float>(age) / burstDecaySamples);
+        const float contact = std::min(1.0f, static_cast<float>(age) * contactRiseSteps_);
+        const float env = contact * std::exp(-static_cast<float>(age) / burstDecaySamples);
         const float pan = burstPans_[i];
         const float gainL = std::clamp(0.5f * (1.0f - pan), 0.0f, 1.0f);
         const float gainR = std::clamp(0.5f * (1.0f + pan), 0.0f, 1.0f);
@@ -506,8 +518,7 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
         }
     }
 
-    const float rawNoiseL = generateNoiseSample(settings.noiseType);
-    const float rawNoiseR = generateNoiseSample(settings.noiseType);
+    const auto [rawNoiseL, rawNoiseR] = generateNoise(settings.noiseType);
     const float totalNoiseL = rawNoiseL * noiseEnv * settings.noiseLevel;
     const float totalNoiseR = rawNoiseR * noiseEnv * settings.noiseLevel;
 

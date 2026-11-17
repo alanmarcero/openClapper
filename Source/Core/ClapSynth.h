@@ -190,7 +190,7 @@ public:
         int midiNote = 69) noexcept;
 
 private:
-    [[nodiscard]] float generateNoiseSample(NoiseType type) noexcept;
+    [[nodiscard]] StereoFrame generateNoise(NoiseType type) noexcept;
 
     double sampleRate_ = 48000.0;
     bool isPlaying_ = false;
@@ -239,9 +239,10 @@ private:
 
     // PRNG seed for deterministic and jittered noise
     uint32_t prngState_ = 0x12345678;
-    float pinkB0_ = 0.0f, pinkB1_ = 0.0f, pinkB2_ = 0.0f;
-    float lofiHeld_ = 0.0f;
-    int lofiCounter_ = 0;
+    std::array<float, 3> pinkPoles_{}, pinkGains_{}, pinkLeft_{}, pinkRight_{};
+    StereoFrame lofiHeld_{};
+    double lofiPhase_ = 1.0, lofiStep_ = 0.25;
+    float contactRiseSteps_ = 1.0f;
 };
 
 } // namespace openclapper::core

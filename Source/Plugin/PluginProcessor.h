@@ -22,10 +22,10 @@ public:
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     int getNumPrograms() override;
-    int getCurrentProgram() override { return currentProgram_; }
+    int getCurrentProgram() override { return currentProgram_.load(); }
     void setCurrentProgram(int index) override;
     void selectPreset(int index);
-    [[nodiscard]] int getSelectedPresetIndex() const noexcept { return selectedPreset_; }
+    [[nodiscard]] int getSelectedPresetIndex() const noexcept { return selectedPreset_.load(); }
     const juce::String getProgramName(int index) override;
     void changeProgramName(int, const juce::String&) override {}
 
@@ -47,6 +47,5 @@ public:
 private:
     openclapper::core::ClapEngine engine_;
     std::atomic<bool> auditionPending_{ false };
-    int currentProgram_ = 0;
-    int selectedPreset_ = 0;
+    std::atomic<int> currentProgram_{0}, selectedPreset_{0};
 };

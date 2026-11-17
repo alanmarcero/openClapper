@@ -4,19 +4,15 @@
 
 namespace openclapper::theme {
 
-inline const juce::Colour kBackground{ 0xff0d1317 };
-inline const juce::Colour kPanel{ 0xff152026 };
-inline const juce::Colour kPanelEdge{ 0xff283842 };
-inline const juce::Colour kKnobBody{ 0xff1a272d };
-inline const juce::Colour kTrack{ 0xff283842 };
-inline const juce::Colour kText{ 0xffe6f0f5 };
-inline const juce::Colour kTextDim{ 0xff869ca8 };
-
-inline const juce::Colour kAccentCyan{ 0xff48f0c8 };
-inline const juce::Colour kAccentAmber{ 0xffffbe3b };
-inline const juce::Colour kAccentViolet{ kAccentCyan };
-inline const juce::Colour kAccentNeonGreen{ kAccentCyan };
-inline const juce::Colour kAccentFlame{ kAccentAmber };
-inline const juce::Colour kAccentDim{ 0xff31434d };
+inline const juce::Colour paper{ 0xff1e1c27 };
+inline const juce::Colour surface{ 0xff2c2937 };
+inline const juce::Colour plot{ 0xff16131f };
+inline const juce::Colour ink{ 0xfff4eff9 };
+inline const juce::Colour secondary{ 0xffbdb4cb };
+inline const juce::Colour edge{ 0xff50495e };
+inline const juce::Colour violet{ 0xffb8a2ed };
+inline const juce::Colour selected{ 0xff69528f };
+inline const juce::Colour apricot{ 0xffffaa7b };
+inline const juce::Colour lilac{ 0xffc4aff7 };
 
 } // namespace openclapper::theme

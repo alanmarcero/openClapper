@@ -1,122 +1,50 @@
 #pragma once
 
+#include "ClapSynth.h"
 #include "Controls.h"
-#include <juce_audio_processors/juce_audio_processors.h>
-#include <juce_gui_basics/juce_gui_basics.h>
+#include <optional>
 
 class OpenClapperProcessor;
 
 namespace openclapper::ui {
 
-class ClappyStagePanel : public juce::Component, private juce::Timer {
+struct ControlSpec { const char* id; const char* caption; };
+
+class ControlGroup : public juce::Component {
 public:
-    explicit ClappyStagePanel(OpenClapperProcessor& processor);
-    ~ClappyStagePanel() override;
-
-    void paint(juce::Graphics& g) override;
+    ControlGroup(Apvts&, const char* heading, std::initializer_list<ControlSpec>, int columns, bool stacked);
+    void paint(juce::Graphics&) override;
     void resized() override;
-
+    int rows() const;
 private:
-    void timerCallback() override;
+    juce::String heading_;
+    int columns_;
+    bool stacked_;
+    std::vector<std::unique_ptr<juce::Component>> controls_;
+};
 
+enum class Page { clap, layers, effects, midi };
+
+class ControlPage : public juce::Component {
+public:
+    ControlPage(Apvts&, Page);
+    void resized() override;
+private:
+    Page page_;
+    std::vector<std::unique_ptr<ControlGroup>> groups_;
+};
+
+class Waveform : public juce::Component {
+public:
+    explicit Waveform(OpenClapperProcessor&);
+    void refresh();
+    void paint(juce::Graphics&) override;
+private:
     OpenClapperProcessor& processor_;
-    juce::TextButton auditionBtn_{ "AUDITION CLAP" };
-    uint32_t seenTriggers_ = 0;
-    double clapTriggerTimeMs_ = 0.0;
-    float clapPose_ = 0.0f; // -1 (open flam) .. 0 (slap) .. +1 (recoil)
-    float shockwave_ = 0.0f;
-    float impactIntensity_ = 1.0f;
-    float impactFlash_ = 0.0f;
-    float headTilt_ = 0.0f;
-    float idleBob_ = 0.0f;
-};
-
-class ClapSynthPanel : public juce::Component {
-public:
-    explicit ClapSynthPanel(OpenClapperProcessor& processor);
-    void paint(juce::Graphics& g) override;
-    void resized() override;
-    void setAdvancedMode(bool advanced);
-    [[nodiscard]] bool isAdvancedMode() const noexcept { return advancedMode_; }
-
-private:
-    bool advancedMode_ = false;
-
-    // Pre-Clap Flam
-    Knob preBursts_;
-    Knob preSpread_;
-    Knob flamSpread_;
-    Knob preLevel_;
-
-    // Resonant Body / Tone
-    Choice toneMode_;
-    Knob toneQ_;
-    Knob toneDecay_;
-    Knob tonePitchEnv_;
-    Knob tonePitchDecay_;
-    Knob toneHPF_;
-    Knob toneLPF_;
-    Knob toneLevel_;
-
-    // Noise & Sizzle
-    Choice noiseType_;
-    Knob noiseDecay_;
-    Knob noiseHPF_;
-    Knob noiseLPF_;
-    Knob noiseWidth_;
-    Knob noiseLevel_;
-
-    // Click
-    Choice clickType_;
-    Knob clickLevel_;
-    Knob clickFreq_;
-    Knob clickDecay_;
-
-    juce::Rectangle<int> attackSectionBounds_;
-    juce::Rectangle<int> tailSectionBounds_;
-    juce::Rectangle<int> noiseSectionBounds_;
-};
-
-class EffectsPanel : public juce::Component {
-public:
-    explicit EffectsPanel(OpenClapperProcessor& processor);
-    void paint(juce::Graphics& g) override;
-    void resized() override;
-    void setAdvancedMode(bool advanced);
-    [[nodiscard]] bool isAdvancedMode() const noexcept { return advancedMode_; }
-
-private:
-    bool advancedMode_ = false;
-
-    // Distortion
-    Choice distType_;
-    Knob distDrive_;
-    Knob distTone_;
-    Knob distMix_;
-
-    // Compressor
-    Knob compThresh_;
-    Knob compRatio_;
-    Knob compMakeup_;
-    Knob compMix_;
-
-    // Limiter
-    Knob limiterCeiling_;
-    Toggle limiterEnabled_;
-
-    // Gated Reverb
-    Knob reverbSize_;
-    Knob reverbDecay_;
-    Knob reverbGate_;
-    Knob reverbMix_;
-
-    // Reverse & Master
-    Choice reverseMode_;
-    Knob reverseMix_;
-    Choice slapbackDivision_;
-    Knob slapbackMix_;
-    Knob masterWidth_;
-    Knob outputGain_;
+    std::optional<core::ClapSynthSettings> previous_;
+    std::array<float, 560> upper_{}, lower_{};
+    int durationMs_ = 200;
+    float strikeMs_ = 0;
 };
 
 } // namespace openclapper::ui

@@ -10,33 +10,51 @@
 #include <vector>
 
 namespace {
-juce::File findRepositoryRoot() {
-#if defined(OPENCLAPPER_SOURCE_DIR)
-    const juce::File configuredRoot(OPENCLAPPER_SOURCE_DIR);
-    if (configuredRoot.getChildFile("assets").isDirectory())
-        return configuredRoot;
-#endif
-    auto directory = juce::File::getCurrentWorkingDirectory();
-    while (directory.exists()) {
-        if (directory.getChildFile("assets").isDirectory())
-            return directory;
-        const auto parent = directory.getParentDirectory();
-        if (parent == directory)
-            break;
-        directory = parent;
+template <typename Widget, typename Predicate>
+Widget* findVisible(juce::Component& root, Predicate matches) {
+    for (auto* child : root.getChildren()) {
+        if (!child->isVisible()) continue;
+        if (auto* widget = dynamic_cast<Widget*>(child); widget && matches(*widget)) return widget;
+        if (auto* result = findVisible<Widget>(*child, matches)) return result;
     }
-    return juce::File::getCurrentWorkingDirectory();
+    return nullptr;
 }
 
-void checkButtonHitAreas(juce::Component& component) {
-    for (auto* child : component.getChildren()) {
-        if (auto* button = dynamic_cast<juce::TextButton*>(child)) {
-            INFO(button->getButtonText());
-            CHECK(button->getHeight() >= 36);
-            CHECK(button->getLookAndFeel().getTextButtonFont(*button, button->getHeight()).getHeight() >= 14.0f);
+void click(juce::Component& editor, const juce::String& name) {
+    auto* button = findVisible<juce::TextButton>(editor, [&](const auto& b) { return b.getButtonText() == name; });
+    INFO(name);
+    REQUIRE(button != nullptr);
+    REQUIRE(button->getHeight() >= 36);
+    button->onClick();
+}
+
+void checkTargets(juce::Component& root, juce::Component& parent) {
+    for (auto* child : parent.getChildren()) {
+        if (!child->isVisible()) continue;
+        if (dynamic_cast<juce::TextButton*>(child) || dynamic_cast<juce::ComboBox*>(child)) {
+            CAPTURE(child->getName());
+            REQUIRE(child->getWidth() >= 44);
+            REQUIRE(child->getHeight() >= 36);
+            const auto bounds = root.getLocalArea(child, child->getLocalBounds());
+            REQUIRE(root.getLocalBounds().contains(bounds));
+            auto* target = root.getComponentAt(bounds.getCentre());
+            REQUIRE((target == child || child->isParentOf(target)));
         }
-        checkButtonHitAreas(*child);
+        checkTargets(root, *child);
     }
+}
+
+void snapshot(juce::Component& editor, const char* filename) {
+    checkTargets(editor, editor);
+    const auto image = editor.createComponentSnapshot(editor.getLocalBounds());
+    REQUIRE(image.isValid());
+    const auto directory = juce::SystemStats::getEnvironmentVariable("OPENCLAPPER_SCREENSHOTS", {});
+    if (directory.isEmpty()) return;
+    auto file = juce::File(directory).getChildFile(filename);
+    REQUIRE(file.deleteFile());
+    juce::FileOutputStream stream(file);
+    REQUIRE(stream.openedOk());
+    REQUIRE(juce::PNGImageFormat().writeImageToStream(image, stream));
 }
 }
 
@@ -132,6 +150,39 @@ TEST_CASE("All factory presets render and Bandpass patches use tuned noise", "[p
     REQUIRE(foundBandpass);
 }
 
+TEST_CASE("Factory claps leave headroom and finish inside a trance backbeat", "[plugin][bank]") {
+    const auto& bank = openclapper::presets::factoryPresets();
+    for (size_t i = 0; i < bank.size(); ++i) {
+        INFO(bank[i].name);
+        OpenClapperProcessor processor;
+        processor.selectPreset(static_cast<int>(i));
+        REQUIRE(processor.parameters.getRawParameterValue("amp_enabled")->load() < 0.5f);
+        processor.prepareToPlay(48000, 24000);
+        juce::AudioBuffer<float> audio(2, 24000);
+        juce::MidiBuffer midi;
+        midi.addEvent(juce::MidiMessage::noteOn(1, 69, 1.0f), 0);
+        processor.processBlock(audio, midi);
+        const auto peak = audio.getMagnitude(0, audio.getNumSamples());
+        double total = 0, cumulative = 0;
+        std::array<double, 500> byMs{};
+        for (int s = 0; s < audio.getNumSamples(); ++s) {
+            const double left = audio.getSample(0, s), right = audio.getSample(1, s);
+            byMs[static_cast<size_t>(s / 48)] += left * left + right * right;
+        }
+        for (auto energy : byMs) total += energy;
+        int endMs = 0;
+        while (endMs < 500 && cumulative < total * 0.99)
+            cumulative += byMs[static_cast<size_t>(endMs++)];
+        CAPTURE(peak, endMs);
+        REQUIRE(std::isfinite(total));
+        REQUIRE(peak > 0.14f);
+        REQUIRE(peak < 1.0f);
+        REQUIRE(endMs > 5);
+        REQUIRE(endMs < 180);
+        REQUIRE(audio.getMagnitude(14400, 9600) < peak * 0.004f);
+    }
+}
+
 TEST_CASE("OpenClapperProcessor renders audio upon MIDI note-on", "[plugin]") {
     OpenClapperProcessor processor;
     processor.prepareToPlay(48000.0, 512);
@@ -156,7 +207,7 @@ TEST_CASE("OpenClapperProcessor renders audio upon MIDI note-on", "[plugin]") {
 
 TEST_CASE("OpenClapperProcessor saves and restores state information", "[plugin]") {
     OpenClapperProcessor proc1;
-    proc1.setCurrentProgram(5); // Dutch Hardstyle Smacker
+    proc1.setCurrentProgram(5);
     const std::array<std::pair<const char*, float>, 5> featureValues {{
         { openclapper::params::kTonePitchEnv, -8.5f },
         { openclapper::params::kTonePitchDecay, 110.0f },
@@ -191,81 +242,105 @@ TEST_CASE("OpenClapperProcessor saves and restores state information", "[plugin]
         REQUIRE(std::abs(proc2.parameters.getRawParameterValue(id)->load() - value) < 0.11f);
 }
 
-TEST_CASE("OpenClapperEditor instantiates with correct dimensions", "[plugin][gui]") {
+TEST_CASE("Native editor browses, auditions and edits clap layers and held notes", "[plugin][gui]") {
     OpenClapperProcessor processor;
-    processor.prepareToPlay(48000.0, 512);
-
+    processor.prepareToPlay(48000, 512);
     std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
     REQUIRE(editor != nullptr);
-    CHECK(editor->getWidth() == 1200);
-    CHECK(editor->getHeight() == 840);
-    checkButtonHitAreas(*editor);
-
-    juce::TextButton* performanceButton = nullptr;
-    for (auto* child : editor->getChildren()) {
-        auto* button = dynamic_cast<juce::TextButton*>(child);
-        if (button != nullptr && button->getButtonText() == "PERFORMANCE") performanceButton = button;
-    }
-    REQUIRE(performanceButton != nullptr);
-    juce::ComboBox* editorPresets = nullptr;
-    for (auto* child : editor->getChildren())
-        if (auto* box = dynamic_cast<juce::ComboBox*>(child)) editorPresets = box;
-    REQUIRE(editorPresets != nullptr);
-    REQUIRE(editorPresets->getNumItems() == 45);
-    editorPresets->setSelectedId(45, juce::sendNotificationSync);
+    editor->setVisible(true);
+    auto* browser = findVisible<juce::ComboBox>(*editor, [](const auto& b) { return b.getName() == "Factory preset"; });
+    REQUIRE(browser != nullptr);
+    REQUIRE(browser->getNumItems() == 45);
+    snapshot(*editor, "openClapper-screenshot.png");
+    click(*editor, "Previous");
     REQUIRE(processor.getSelectedPresetIndex() == 44);
     REQUIRE(processor.getCurrentProgram() == 0);
-    REQUIRE(processor.parameters.getRawParameterValue("amp_release")->load() == Catch::Approx(20000.0f));
-    juce::Image snapshot = editor->createComponentSnapshot(editor->getLocalBounds());
-    REQUIRE(snapshot.isValid());
-    CHECK(snapshot.getWidth() == 1200);
-    CHECK(snapshot.getHeight() == 840);
-    juce::TextButton* viewButton = nullptr;
-    for (auto* child : editor->getChildren()) {
-        auto* button = dynamic_cast<juce::TextButton*>(child);
-        if (button != nullptr && button->getButtonText() == "SIMPLE VIEW") viewButton = button;
-    }
-    REQUIRE(viewButton != nullptr);
-    viewButton->onClick();
-    const auto advancedSnapshot = editor->createComponentSnapshot(editor->getLocalBounds());
-    REQUIRE(advancedSnapshot.isValid());
-    const auto advancedFile = findRepositoryRoot().getChildFile("assets/openClapper-screenshot-advanced.png");
-    advancedFile.deleteFile();
-    juce::FileOutputStream advancedImage(advancedFile);
-    REQUIRE(advancedImage.openedOk());
-    juce::PNGImageFormat advancedPng;
-    REQUIRE(advancedPng.writeImageToStream(advancedSnapshot, advancedImage));
-    viewButton->onClick();
-    performanceButton->setToggleState(true, juce::dontSendNotification);
-    performanceButton->onClick();
-    auto performanceSnapshot = editor->createComponentSnapshot(editor->getLocalBounds());
-    auto performanceFile = findRepositoryRoot().getChildFile("assets/openClapper-performance.png");
-    performanceFile.deleteFile();
-    juce::FileOutputStream performanceImage(performanceFile);
-    REQUIRE(performanceImage.openedOk());
-    juce::PNGImageFormat performancePng;
-    REQUIRE(performancePng.writeImageToStream(performanceSnapshot, performanceImage));
+    click(*editor, "Next");
+    REQUIRE(processor.getSelectedPresetIndex() == 0);
+    browser->setSelectedId(13, juce::sendNotificationSync);
+    REQUIRE(processor.getSelectedPresetIndex() == 12);
+    click(*editor, "Audition A4");
+    juce::AudioBuffer<float> audio(2, 512);
+    juce::MidiBuffer midi;
+    processor.processBlock(audio, midi);
+    REQUIRE(audio.getMagnitude(0, 512) > 0.01f);
 
-    juce::File repoScreenshot = findRepositoryRoot().getChildFile("assets/openClapper-screenshot.png");
-    if (repoScreenshot.getParentDirectory().exists()) {
-        repoScreenshot.deleteFile();
-        juce::FileOutputStream stream(repoScreenshot);
-        if (stream.openedOk()) {
-            juce::PNGImageFormat png;
-            png.writeImageToStream(snapshot, stream);
-        }
-    }
+    const auto edit = [&](const char* id, float value) {
+        auto* slider = findVisible<juce::Slider>(*editor, [id](const auto& control) {
+            return control.getParentComponent()->getComponentID() == id;
+        });
+        INFO(id);
+        REQUIRE(slider != nullptr);
+        slider->setValue(value, juce::sendNotificationSync);
+        REQUIRE(processor.parameters.getRawParameterValue(id)->load() == Catch::Approx(value));
+    };
+    click(*editor, "Layers");
+    edit("pre_decay", 6);
+    edit("noise_hold", 4);
+    edit("tone_decay", 60);
+    edit("click_decay", 2);
+    snapshot(*editor, "openClapper-screenshot-advanced.png");
+    click(*editor, "Effects");
+    edit("reverb_gate", 100);
+    snapshot(*editor, "openClapper-effects.png");
+    click(*editor, "MIDI & envelope");
+    click(*editor, "Hold notes");
+    REQUIRE(processor.parameters.getRawParameterValue("amp_enabled")->load() == Catch::Approx(1.0f));
+    edit("amp_attack", 5);
+    edit("amp_decay", 160);
+    edit("amp_sustain", 0.75f);
+    edit("amp_release", 420);
+    snapshot(*editor, "openClapper-performance.png");
+    click(*editor, "One-shot");
+    REQUIRE(processor.parameters.getRawParameterValue("amp_enabled")->load() == Catch::Approx(0.0f));
+    click(*editor, "Clap");
+}
 
-    juce::File tempFile = juce::File::createTempFile(".png");
-    {
-        juce::FileOutputStream stream(tempFile);
-        REQUIRE(stream.openedOk());
-        juce::PNGImageFormat png;
-        REQUIRE(png.writeImageToStream(snapshot, stream));
-    }
-    REQUIRE(tempFile.existsAsFile());
-    REQUIRE(tempFile.getSize() > 0);
-    tempFile.deleteFile();
+TEST_CASE("SVG hands follow host tempo and seeks, rest on stop, and pulse without a host", "[plugin][gui][clock]") {
+    struct Playhead : juce::AudioPlayHead {
+        PositionInfo info;
+        juce::Optional<PositionInfo> getPosition() const override { return info; }
+    } host;
+    OpenClapperProcessor processor;
+    processor.setRateAndBufferSizeDetails(48000, 480);
+    processor.prepareToPlay(48000, 480);
+    processor.setPlayHead(&host);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    const auto render = [&] {
+        juce::MidiBuffer midi;
+        juce::AudioBuffer<float> audio(2, 480);
+        processor.processBlock(audio, midi);
+        return editor->createComponentSnapshot({editor->getWidth() - 97, 90, 82, 54});
+    };
+    const auto difference = [](const juce::Image& a, const juce::Image& b) {
+        int count = 0;
+        for (int y = 0; y < a.getHeight(); ++y)
+            for (int x = 0; x < a.getWidth(); ++x)
+                if (a.getPixelAt(x,y) != b.getPixelAt(x,y)) ++count;
+        return count;
+    };
+    host.info.setIsPlaying(true);
+    host.info.setBpm(120);
+    host.info.setPpqPosition(8);
+    const auto downbeat = render();
+    REQUIRE(processor.displayBeatPhase.load() == Catch::Approx(0.02f));
+    host.info.setBpm(90);
+    host.info.setPpqPosition(-1.5);
+    const auto offbeat = render();
+    REQUIRE(processor.displayBeatPhase.load() == Catch::Approx(0.515f));
+    REQUIRE(processor.displayBpm.load() == Catch::Approx(90.0f));
+    REQUIRE(difference(downbeat, offbeat) > 80);
+    host.info.setIsPlaying(false);
+    const auto stopped = render();
+    host.info.setPpqPosition(16);
+    REQUIRE(difference(stopped, render()) == 0);
+    REQUIRE(processor.displayBeatPhase.load() < 0.0f);
+    processor.setPlayHead(nullptr);
+    render();
+    REQUIRE(processor.displayBpm.load() == Catch::Approx(138.0f));
+    const auto internal = processor.displayBeatPhase.load();
+    render();
+    REQUIRE(processor.displayBeatPhase.load() == Catch::Approx(internal + 0.023f));
 }
 
 TEST_CASE("Performance controls expose all approved clap features", "[plugin][performance]") {
@@ -397,26 +472,25 @@ TEST_CASE("Choke groups stop previous voices on a new accepted note", "[plugin][
     REQUIRE(audio.getMagnitude(0, 1024) <= 0.0000001f);
 }
 
-TEST_CASE("Impact Clap factory preset sustains a prominent twenty second noise release", "[plugin][performance]") {
+TEST_CASE("Old bank states recall their held sound as a custom patch", "[plugin][performance]") {
     OpenClapperProcessor processor;
-    int impact = -1;
-    const auto& bank = openclapper::presets::factoryPresets();
-    for (size_t index = 0; index < bank.size(); ++index)
-        if (juce::String(bank[index].name).contains("Impact Clap")) impact = static_cast<int>(index);
-    REQUIRE(impact >= 0);
-    processor.selectPreset(impact);
+    performanceValue(processor, "amp_enabled", 1);
+    performanceValue(processor, "amp_release", 20000);
+    auto legacy = processor.parameters.copyState();
+    legacy.removeProperty("clap_bank", nullptr);
+    legacy.setProperty("selected_preset", 44, nullptr);
+    juce::MemoryBlock data;
+    juce::AudioProcessor::copyXmlToBinary(*legacy.createXml(), data);
+    processor.selectPreset(1);
+    processor.setStateInformation(data.getData(), static_cast<int>(data.getSize()));
+    REQUIRE(processor.getSelectedPresetIndex() == -1);
+    REQUIRE(processor.parameters.getRawParameterValue("amp_enabled")->load() == Catch::Approx(1.0f));
     REQUIRE(processor.parameters.getRawParameterValue("amp_release")->load() == Catch::Approx(20000.0f));
-    REQUIRE(processor.parameters.getRawParameterValue(openclapper::params::kNoiseLevel)->load() >= 0.9f);
-    processor.prepareToPlay(48000, 48000);
-    juce::AudioBuffer<float> audio(2, 48000);
-    juce::MidiBuffer midi;
-    midi.addEvent(juce::MidiMessage::noteOn(1, 69, 1.0f), 0);
-    midi.addEvent(juce::MidiMessage::noteOff(1, 69), 12000);
-    processor.processBlock(audio, midi);
-    midi.clear();
-    for (int second = 0; second < 10; ++second)
-        processor.processBlock(audio, midi);
-    REQUIRE(audio.getMagnitude(0, 48000) > 0.001f);
+    processor.getStateInformation(data);
+    OpenClapperProcessor restored;
+    restored.setStateInformation(data.getData(), static_cast<int>(data.getSize()));
+    REQUIRE(restored.getSelectedPresetIndex() == -1);
+    REQUIRE(restored.parameters.getRawParameterValue("amp_enabled")->load() == Catch::Approx(1.0f));
 }
 
 TEST_CASE("Loading an old state resets absent performance controls to compatibility defaults", "[plugin][performance]") {
@@ -481,7 +555,7 @@ TEST_CASE("Legacy preset automation preserves all original normalized program va
     processor.selectPreset(44);
     REQUIRE(processor.getCurrentProgram() == 43);
     REQUIRE(processor.getSelectedPresetIndex() == 44);
-    REQUIRE(processor.getProgramName(44).contains("Impact Clap"));
+    REQUIRE(processor.getProgramName(44) == "Roll / Last Accent");
     REQUIRE(selector->getValue() == Catch::Approx(1.0f));
     REQUIRE(processor.parameters.getRawParameterValue(openclapper::params::kPreset)->load() == Catch::Approx(43.0f));
     juce::MemoryBlock impactState;
@@ -489,5 +563,5 @@ TEST_CASE("Legacy preset automation preserves all original normalized program va
     restored.setStateInformation(impactState.getData(), static_cast<int>(impactState.getSize()));
     REQUIRE(restored.getCurrentProgram() == 43);
     REQUIRE(restored.getSelectedPresetIndex() == 44);
-    REQUIRE(restored.parameters.getRawParameterValue("amp_release")->load() == Catch::Approx(20000.0f));
+    REQUIRE(restored.parameters.getRawParameterValue("amp_enabled")->load() == Catch::Approx(0.0f));
 }
