@@ -1,4 +1,4 @@
-# openClapper v3
+# openClapper v3.2.1
 
 [Install with OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest)
 
@@ -12,11 +12,11 @@ The synthesis engine builds each hit from a tuned resonant body, layered noise, 
 
 The editor screenshots show the Impact Clap preset in the sound controls and performance pages.
 
-![openClapper Impact Clap sound controls](assets/openClapper-screenshot.png)
+![openClapper Impact Clap sound controls with larger labeled buttons](assets/openClapper-screenshot.png)
 
-![openClapper Impact Clap advanced sound controls](assets/openClapper-screenshot-advanced.png)
+![openClapper Impact Clap advanced sound controls with larger labeled buttons](assets/openClapper-screenshot-advanced.png)
 
-![openClapper Impact Clap performance controls](assets/openClapper-performance.png)
+![openClapper Impact Clap performance controls with larger labeled buttons](assets/openClapper-performance.png)
 
 ## MIDI tuning
 

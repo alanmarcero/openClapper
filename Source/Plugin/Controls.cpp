@@ -63,7 +63,7 @@ void Choice::bind(Apvts& state, const juce::String& parameterId) {
 void Choice::resized() {
     auto area = getLocalBounds();
     title_.setBounds(area.removeFromTop(16));
-    const int height = juce::jmin(34, area.getHeight());
+    const int height = juce::jmin(36, area.getHeight());
     box_.setBounds(area.withHeight(height).withY(area.getCentreY() - height / 2).reduced(2, 0));
 }
 
@@ -82,7 +82,7 @@ Toggle::Toggle(Apvts& state, const juce::String& parameterId, const juce::String
 
 void Toggle::resized() {
     const auto area = getLocalBounds();
-    const int height = juce::jmin(34, area.getHeight());
+    const int height = juce::jmin(36, area.getHeight());
     button_.setBounds(area.withHeight(height).withY(area.getCentreY() - height / 2).reduced(2, 0));
 }
 

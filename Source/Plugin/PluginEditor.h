@@ -22,8 +22,8 @@ private:
     juce::Image faceplate_;
 
     juce::ComboBox presetBox_;
-    juce::TextButton prevPresetBtn_{ "<" };
-    juce::TextButton nextPresetBtn_{ ">" };
+    juce::TextButton prevPresetBtn_{ "PREVIOUS PRESET" };
+    juce::TextButton nextPresetBtn_{ "NEXT PRESET" };
     juce::TextButton viewToggleBtn_{ "SIMPLE" };
 
     openclapper::ui::ClappyStagePanel stagePanel_;
