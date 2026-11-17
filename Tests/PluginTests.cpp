@@ -27,6 +27,17 @@ juce::File findRepositoryRoot() {
     }
     return juce::File::getCurrentWorkingDirectory();
 }
+
+void checkButtonHitAreas(juce::Component& component) {
+    for (auto* child : component.getChildren()) {
+        if (auto* button = dynamic_cast<juce::TextButton*>(child)) {
+            INFO(button->getButtonText());
+            CHECK(button->getHeight() >= 36);
+            CHECK(button->getLookAndFeel().getTextButtonFont(*button, button->getHeight()).getHeight() >= 14.0f);
+        }
+        checkButtonHitAreas(*child);
+    }
+}
 }
 
 TEST_CASE("OpenClapperProcessor instantiates with valid parameters", "[plugin]") {
@@ -186,8 +197,9 @@ TEST_CASE("OpenClapperEditor instantiates with correct dimensions", "[plugin][gu
 
     std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
     REQUIRE(editor != nullptr);
-    REQUIRE(editor->getWidth() == 1100);
-    REQUIRE(editor->getHeight() == 740);
+    CHECK(editor->getWidth() == 1200);
+    CHECK(editor->getHeight() == 840);
+    checkButtonHitAreas(*editor);
 
     juce::TextButton* performanceButton = nullptr;
     for (auto* child : editor->getChildren()) {
@@ -206,12 +218,12 @@ TEST_CASE("OpenClapperEditor instantiates with correct dimensions", "[plugin][gu
     REQUIRE(processor.parameters.getRawParameterValue("amp_release")->load() == Catch::Approx(20000.0f));
     juce::Image snapshot = editor->createComponentSnapshot(editor->getLocalBounds());
     REQUIRE(snapshot.isValid());
-    REQUIRE(snapshot.getWidth() == 1100);
-    REQUIRE(snapshot.getHeight() == 740);
+    CHECK(snapshot.getWidth() == 1200);
+    CHECK(snapshot.getHeight() == 840);
     juce::TextButton* viewButton = nullptr;
     for (auto* child : editor->getChildren()) {
         auto* button = dynamic_cast<juce::TextButton*>(child);
-        if (button != nullptr && button->getButtonText() == "SIMPLE") viewButton = button;
+        if (button != nullptr && button->getButtonText() == "SIMPLE VIEW") viewButton = button;
     }
     REQUIRE(viewButton != nullptr);
     viewButton->onClick();

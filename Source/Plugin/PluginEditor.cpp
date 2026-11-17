@@ -47,7 +47,7 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& processorToEdit)
     addAndMakeVisible(nextPresetBtn_);
 
     // Mode toggle button (Simple vs Advanced)
-    viewToggleBtn_.setButtonText(synthPanel_.isAdvancedMode() ? "ADVANCED" : "SIMPLE");
+    viewToggleBtn_.setButtonText(synthPanel_.isAdvancedMode() ? "ADVANCED VIEW" : "SIMPLE VIEW");
     viewToggleBtn_.setColour(juce::TextButton::buttonColourId, openclapper::theme::kKnobBody);
     viewToggleBtn_.setColour(juce::TextButton::textColourOffId, openclapper::theme::kAccentCyan);
     viewToggleBtn_.setTooltip("Toggle between clean Simple mode and deep Advanced tweak controls.");
@@ -55,7 +55,7 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& processorToEdit)
         const bool nextAdv = !synthPanel_.isAdvancedMode();
         synthPanel_.setAdvancedMode(nextAdv);
         effectsPanel_.setAdvancedMode(nextAdv);
-        viewToggleBtn_.setButtonText(nextAdv ? "ADVANCED" : "SIMPLE");
+        viewToggleBtn_.setButtonText(nextAdv ? "ADVANCED VIEW" : "SIMPLE VIEW");
         viewToggleBtn_.setColour(juce::TextButton::textColourOffId,
             nextAdv ? openclapper::theme::kAccentAmber : openclapper::theme::kAccentCyan);
         resized();
@@ -100,6 +100,7 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& processorToEdit)
     performanceButton_.setClickingTogglesState(true);
     performanceButton_.onClick = [this] {
         const bool visible = performanceButton_.getToggleState();
+        performanceButton_.setButtonText(visible ? "SOUND DESIGN" : "PERFORMANCE");
         performancePanel_.setVisible(visible);
         stagePanel_.setVisible(!visible);
         synthPanel_.setVisible(!visible);
@@ -108,7 +109,10 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& processorToEdit)
         resized();
     };
     addAndMakeVisible(performanceButton_);
-    setSize(1100, 740);
+    prevPresetBtn_.setTooltip("Select the previous factory clap.");
+    nextPresetBtn_.setTooltip("Select the next factory clap.");
+    performanceButton_.setTooltip("Open the MIDI performance controls.");
+    setSize(1200, 840);
     setResizable(false, false);
     startTimerHz(20);
 }
@@ -141,7 +145,7 @@ void OpenClapperEditor::paint(juce::Graphics& g) {
     }
 
     // 3. Solid top header bar with border and cyan accent strip
-    const auto headerArea = getLocalBounds().removeFromTop(44);
+    const auto headerArea = getLocalBounds().removeFromTop(96);
     g.setGradientFill(juce::ColourGradient(
         openclapper::theme::kPanel, 0.0f, 0.0f,
         openclapper::theme::kBackground, 0.0f, static_cast<float>(headerArea.getHeight()), false));
@@ -171,15 +175,22 @@ void OpenClapperEditor::resized() {
     auto area = getLocalBounds().reduced(10, 8);
 
     // Top Header
-    auto header = area.removeFromTop(38);
-    const int presetW = 220;
-    auto presetArea = header.withX(header.getCentreX() - presetW / 2).withWidth(presetW);
-    prevPresetBtn_.setBounds(presetArea.getX() - 28, presetArea.getY() + 4, 24, 26);
-    presetBox_.setBounds(presetArea.withHeight(26).translated(0, 4));
-    nextPresetBtn_.setBounds(presetArea.getRight() + 4, presetArea.getY() + 4, 24, 26);
-    viewToggleBtn_.setBounds(nextPresetBtn_.getRight() + 12, presetArea.getY() + 4, 86, 26);
-
-    performanceButton_.setBounds(prevPresetBtn_.getX() - 106, presetArea.getY() + 4, 100, 26);
+    auto header = area.removeFromTop(90);
+    constexpr int buttonHeight = 36;
+    constexpr int gap = 8;
+    constexpr int performanceWidth = 140;
+    constexpr int previousWidth = 132;
+    constexpr int presetWidth = 280;
+    constexpr int nextWidth = 112;
+    constexpr int viewWidth = 146;
+    const int rowWidth = performanceWidth + previousWidth + presetWidth + nextWidth + viewWidth + gap * 4;
+    int x = header.getX() + (header.getWidth() - rowWidth) / 2;
+    const int y = header.getBottom() - buttonHeight - 4;
+    performanceButton_.setBounds(x, y, performanceWidth, buttonHeight); x += performanceWidth + gap;
+    prevPresetBtn_.setBounds(x, y, previousWidth, buttonHeight); x += previousWidth + gap;
+    presetBox_.setBounds(x, y, presetWidth, buttonHeight); x += presetWidth + gap;
+    nextPresetBtn_.setBounds(x, y, nextWidth, buttonHeight); x += nextWidth + gap;
+    viewToggleBtn_.setBounds(x, y, viewWidth, buttonHeight);
     performancePanel_.setBounds(area);
     const int cellWidth = area.getWidth() / 6;
     const int cellHeight = area.getHeight() / 4;

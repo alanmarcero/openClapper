@@ -23,6 +23,7 @@ ClappyStagePanel::ClappyStagePanel(OpenClapperProcessor& processor)
     : processor_(processor) {
     auditionBtn_.setColour(juce::TextButton::buttonColourId, theme::kKnobBody);
     auditionBtn_.setColour(juce::TextButton::textColourOffId, theme::kAccentNeonGreen);
+    auditionBtn_.setTooltip("Play a short preview using the selected clap preset.");
     auditionBtn_.onClick = [this]() {
         processor_.triggerAudition();
     };
@@ -47,7 +48,7 @@ void ClappyStagePanel::timerCallback() {
 
 void ClappyStagePanel::resized() {
     auto area = getLocalBounds().reduced(12, 10);
-    auditionBtn_.setBounds(area.removeFromBottom(24).reduced(area.getWidth() / 4, 0));
+    auditionBtn_.setBounds(area.removeFromBottom(36).reduced(area.getWidth() / 4, 0));
 }
 
 void ClappyStagePanel::paint(juce::Graphics& g) {
