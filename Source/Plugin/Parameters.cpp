@@ -1,4 +1,5 @@
 #include "Parameters.h"
+#include <algorithm>
 #include <vector>
 
 namespace openclapper::params {
@@ -10,7 +11,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
     params.push_back(std::make_unique<juce::AudioParameterInt>(
         juce::ParameterID{ kPreBursts, 1 }, "Pre-Clap Bursts", 1, 5, 3));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kPreSpread, 1 }, "Pre-Clap Spread", juce::NormalisableRange<float>(2.0f, 45.0f, 0.1f), 12.0f,
+        juce::ParameterID{ kPreSpread, 1 }, "Pre-Clap Spread", juce::NormalisableRange<float>(0.0f, openclapper::core::kMaxTimingOffsetMs, 0.1f), 1.5f,
         juce::AudioParameterFloatAttributes().withLabel("ms")));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kPreDecay, 1 }, "Pre-Clap Decay", juce::NormalisableRange<float>(2.0f, 35.0f, 0.1f), 8.0f,
@@ -50,7 +51,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID{ kNoiseType, 1 }, "Noise Type", noiseTypes, 0));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kNoiseAttack, 1 }, "Noise Attack", juce::NormalisableRange<float>(0.0f, 20.0f, 0.1f), 0.0f,
+        juce::ParameterID{ kNoiseAttack, 1 }, "Noise Attack", juce::NormalisableRange<float>(0.0f, openclapper::core::kMaxTimingOffsetMs, 0.1f), 0.0f,
         juce::AudioParameterFloatAttributes().withLabel("ms")));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kNoiseHold, 1 }, "Noise Hold", juce::NormalisableRange<float>(0.0f, 90.0f, 0.1f), 12.0f,
@@ -226,7 +227,8 @@ openclapper::core::EngineSettings readSettings(const juce::AudioProcessorValueTr
 
     // Pre-Clap Flam
     s.synth.preClapCount = static_cast<int>(*apvts.getRawParameterValue(kPreBursts));
-    s.synth.preClapSpreadMs = *apvts.getRawParameterValue(kPreSpread);
+    s.synth.preClapSpreadMs = std::min(openclapper::core::kMaxTimingOffsetMs,
+        std::max(0.0f, apvts.getRawParameterValue(kPreSpread)->load()));
     s.synth.preClapDecayMs = *apvts.getRawParameterValue(kPreDecay);
     s.synth.preClapJitter = *apvts.getRawParameterValue(kPreJitter);
     if (const auto* pFlamSpread = apvts.getRawParameterValue(kFlamSpread)) {
@@ -248,7 +250,8 @@ openclapper::core::EngineSettings readSettings(const juce::AudioProcessorValueTr
 
     // Noise & Sizzle
     s.synth.noiseType = static_cast<openclapper::core::NoiseType>(static_cast<int>(*apvts.getRawParameterValue(kNoiseType)));
-    s.synth.noiseAttackMs = *apvts.getRawParameterValue(kNoiseAttack);
+    s.synth.noiseAttackMs = std::min(openclapper::core::kMaxTimingOffsetMs,
+        std::max(0.0f, apvts.getRawParameterValue(kNoiseAttack)->load()));
     s.synth.noiseHoldMs = *apvts.getRawParameterValue(kNoiseHold);
     s.synth.noiseDecayMs = *apvts.getRawParameterValue(kNoiseDecay);
     s.synth.noiseCurve = *apvts.getRawParameterValue(kNoiseCurve);

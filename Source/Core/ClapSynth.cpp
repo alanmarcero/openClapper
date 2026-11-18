@@ -363,13 +363,20 @@ void ClapSynth::trigger(const ClapSynthSettings& settings, int midiNote, float v
     }
 
     burstCount_ = std::clamp(settings.preClapCount, 0, 5);
-    const float spreadSamples = std::max(0.0f, settings.preClapSpreadMs) * 0.001f * static_cast<float>(sampleRate_);
-    mainStartSamples_ = static_cast<int>(static_cast<float>(burstCount_) * spreadSamples);
+    // The main strike is the note-on. Any flam is squeezed into the first 5 ms so it
+    // reads as one tight clap, not a late hit.
+    mainStartSamples_ = 0;
+    const float requestedMs = std::clamp(settings.preClapSpreadMs, 0.0f, kMaxTimingOffsetMs);
+    const int gaps = std::max(1, burstCount_ - 1);
+    const float spacingMs = std::min(requestedMs, kMaxTimingOffsetMs / static_cast<float>(gaps));
+    const float spreadSamples = spacingMs * 0.001f * static_cast<float>(sampleRate_);
+    const int maxOffsetSamples = std::max(0, static_cast<int>(std::lround(kMaxTimingOffsetMs * 0.001 * sampleRate_)));
 
     for (int i = 0; i < burstCount_; ++i) {
         const float jitter = std::clamp(settings.preClapJitter, 0.0f, 1.0f);
         const float jitterTime = nextRandomFloat(prngState_) * 0.5f * jitter * spreadSamples;
-        burstStartSamples_[i] = std::max(0, static_cast<int>(static_cast<float>(i) * spreadSamples + jitterTime));
+        const int start = static_cast<int>(std::lround(static_cast<float>(i) * spreadSamples + jitterTime));
+        burstStartSamples_[i] = std::clamp(start, 0, maxOffsetSamples);
         const float jitterAmp = 1.0f + nextRandomFloat(prngState_) * 0.2f * jitter;
         const float progression = burstCount_ > 1 ? static_cast<float>(i) / static_cast<float>(burstCount_ - 1) : 1.0f;
         const float pressure = 0.63f + 0.37f * progression;
@@ -384,9 +391,9 @@ void ClapSynth::trigger(const ClapSynthSettings& settings, int midiNote, float v
         : 0.0f;
     pitchHumanizeRatio_ = std::exp2(pitchDetuneSemitones / 12.0f);
 
-    const float mainStartMs = static_cast<float>(burstCount_) * std::max(0.0f, settings.preClapSpreadMs);
+    const float mainStartMs = 0.0f;
     const float burstTailMs = burstCount_ > 0
-        ? mainStartMs + settings.preClapDecayMs * 4.0f
+        ? kMaxTimingOffsetMs + settings.preClapDecayMs * 4.0f
         : 0.0f;
     const float noiseTailMs = settings.noiseAttackMs + settings.noiseHoldMs + settings.noiseDecayMs * 4.0f;
     const float clickScale = settings.clickType == ClickType::Thump ? 2.5f : 1.0f;
@@ -511,7 +518,8 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
     }
 
     const float mainAge = static_cast<float>(currentSample - mainStartSamples_);
-    const float attackSamples = std::max(0.0f, settings.noiseAttackMs * 0.001f * static_cast<float>(sampleRate_));
+    const float attackSamples = std::clamp(settings.noiseAttackMs, 0.0f, kMaxTimingOffsetMs)
+        * 0.001f * static_cast<float>(sampleRate_);
     const float holdSamples = std::max(0.0f, settings.noiseHoldMs * 0.001f * static_cast<float>(sampleRate_));
     const float decaySamples = std::max(1.0f, settings.noiseDecayMs * 0.001f * static_cast<float>(sampleRate_));
     const float impact = std::clamp(settings.impactPunch, 0.0f, 1.0f);
@@ -591,6 +599,14 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
     float filteredNoiseR = processBiquad(
         processBiquad(filteredHP_R, noiseLPF_R_, b0_l_, b1_l_, b2_l_, a1_l_, a2_l_),
         noiseLPF2_R_, b0_l_, b1_l_, b2_l_, a1_l_, a2_l_);
+    if (!ampEnabled_ && mainAge >= 0.0f) {
+        const float snapSamples = 0.0012f * static_cast<float>(sampleRate_);
+        if (mainAge < snapSamples) {
+            const float snap = 1.0f + 1.15f * (1.0f - mainAge / snapSamples);
+            filteredNoiseL *= snap;
+            filteredNoiseR *= snap;
+        }
+    }
 
     float toneSample = 0.0f;
     if (mainAge >= 0.0f && settings.toneLevel > 0.001f) {
@@ -674,7 +690,7 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
         {preLeft * layerGains[3], preRight * layerGains[3]}
     }};
     // Leave the limiter some room. Factory levels are trimmed again on the way out.
-    constexpr float kHeadroom = 0.30f;
+    constexpr float kHeadroom = 0.12f;
     std::array<StereoFrame, 4> scaled{};
     for (size_t layer = 0; layer < layers.size(); ++layer) {
         scaled[layer].left = layers[layer].left * kHeadroom;

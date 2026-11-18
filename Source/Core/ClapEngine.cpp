@@ -319,8 +319,8 @@ void ClapEngine::process(
             doublerBufferL_[doublerWriteIndex_] = sL;
             doublerBufferR_[doublerWriteIndex_] = sR;
             // Haas offsets, low-passed so the copy widens the clap instead of comb-filtering a metallic ring.
-            const size_t tapL = std::clamp<size_t>(static_cast<size_t>(sampleRate_ * 0.019), 1, bufSize - 1);
-            const size_t tapR = std::clamp<size_t>(static_cast<size_t>(sampleRate_ * 0.029), 1, bufSize - 1);
+            const size_t tapL = std::clamp<size_t>(static_cast<size_t>(sampleRate_ * 0.0016), 1, bufSize - 1);
+            const size_t tapR = std::clamp<size_t>(static_cast<size_t>(sampleRate_ * 0.0042), 1, bufSize - 1);
             const float delayedL = doublerBufferL_[(doublerWriteIndex_ + bufSize - tapL) % bufSize];
             const float delayedR = doublerBufferR_[(doublerWriteIndex_ + bufSize - tapR) % bufSize];
             const float lp = 1.0f - std::exp(-2.0f * 3.14159265f * 1800.0f / static_cast<float>(sampleRate_));

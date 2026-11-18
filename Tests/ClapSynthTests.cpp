@@ -234,7 +234,7 @@ TEST_CASE("Pink and lo-fi textures keep independent stereo detail on one-shots a
     }
 }
 
-TEST_CASE("Flam contacts build toward the main strike at different sample rates", "[core][synth][flam]") {
+TEST_CASE("Flam contacts stay inside the 5 ms grid even if a longer spread is requested", "[core][synth][flam]") {
     for (double rate : {44100.0, 48000.0, 96000.0}) {
         for (int note : {36, 69, 84}) {
             CAPTURE(rate, note);
@@ -248,14 +248,19 @@ TEST_CASE("Flam contacts build toward the main strike at different sample rates"
             sound.preClapFlamSpread = 0;
             sound.layers[3].solo = true;
             voice.trigger(sound, note);
-            std::array<double, 4> energy{};
-            const int window = static_cast<int>(std::round(rate * 0.020));
-            for (int i = 0; i < 4 * window; ++i) {
+            const int earlyEnd = static_cast<int>(std::round(rate * 0.006));
+            const int lateStart = static_cast<int>(std::round(rate * 0.012));
+            const int lateEnd = lateStart + static_cast<int>(std::round(rate * 0.040));
+            double early = 0.0;
+            double late = 0.0;
+            for (int i = 0; i < lateEnd; ++i) {
                 const auto frame = voice.processSample(sound);
-                energy[static_cast<size_t>(i / window)] += frame.left * frame.left + frame.right * frame.right;
+                const double energy = frame.left * frame.left + frame.right * frame.right;
+                if (i < earlyEnd) early += energy;
+                if (i >= lateStart) late += energy;
             }
-            REQUIRE(energy.front() > 0.01);
-            REQUIRE(energy.back() > energy.front() * 1.35);
+            REQUIRE(early > 0.01);
+            REQUIRE(late < early * 0.08);
         }
     }
 }

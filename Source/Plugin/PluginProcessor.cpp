@@ -290,6 +290,15 @@ void OpenClapperProcessor::setStateInformation(const void* data, int sizeInBytes
             }
         }
         loadLocksFromState(state);
+        const auto clampDelay = [this](const char* id) {
+            auto* parameter = parameters.getParameter(id);
+            const auto* raw = parameters.getRawParameterValue(id);
+            if (parameter == nullptr || raw == nullptr) return;
+            if (raw->load() > openclapper::core::kMaxTimingOffsetMs)
+                parameter->setValueNotifyingHost(parameter->convertTo0to1(openclapper::core::kMaxTimingOffsetMs));
+        };
+        clampDelay(openclapper::params::kPreSpread);
+        clampDelay(openclapper::params::kNoiseAttack);
         currentProgram_ = std::clamp(static_cast<int>(parameters.getRawParameterValue(openclapper::params::kPreset)->load()),
             0, getNumPrograms() - 1);
         selectedPreset_ = bank == 3

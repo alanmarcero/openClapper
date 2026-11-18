@@ -40,7 +40,7 @@ struct ClapSynthSettings {
 
     // Pre-Clap Flam (Micro-bursts)
     int preClapCount = 3;         // 1..5 micro-bursts before main slap
-    float preClapSpreadMs = 12.0f;// 2..45 ms spacing between bursts
+    float preClapSpreadMs = 1.5f;// 0..5 ms, whole flam stays inside kMaxTimingOffsetMs
     float preClapDecayMs = 8.0f;  // 2..35 ms decay of each burst
     float preClapJitter = 0.15f;  // 0..1 timing and pitch humanization
     float preClapFlamSpread = 0.45f; // 0..1 stereo micro-panning spread
@@ -131,6 +131,9 @@ struct AllpassDiffuser {
 
 /** Release time of the room gate, shared with the reported plugin tail. */
 inline constexpr float kReverbGateReleaseMs = 64.0f;
+
+/** Flam, attack, and doubler offsets never push a clap off the beat by more than this. */
+inline constexpr float kMaxTimingOffsetMs = 5.0f;
 
 // Algorithmic stereo diffuser / reverb with gate
 class GatedStereoReverb {
