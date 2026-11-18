@@ -3,6 +3,7 @@
 #include "ClapEngine.h"
 #include <atomic>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <set>
 
 class OpenClapperProcessor : public juce::AudioProcessor {
 public:
@@ -34,6 +35,12 @@ public:
 
     void triggerAudition() noexcept { auditionPending_.store(true); }
 
+    [[nodiscard]] bool isParamLocked(const juce::String& id) const;
+    void setParamLocked(const juce::String& id, bool locked);
+    [[nodiscard]] bool isSectionLocked(const juce::StringArray& ids) const;
+    void toggleSectionLock(const juce::StringArray& ids);
+    [[nodiscard]] juce::StringArray lockedParameterIds() const;
+
     juce::AudioProcessorValueTreeState parameters;
 
     std::atomic<float> displayPeak{ 0.0f };
@@ -45,7 +52,11 @@ public:
     std::atomic<uint32_t> displayTriggerCount{ 0 };
 
 private:
+    void syncLocksToState();
+    void loadLocksFromState(const juce::ValueTree& state);
     openclapper::core::ClapEngine engine_;
     std::atomic<bool> auditionPending_{ false };
     std::atomic<int> currentProgram_{0}, selectedPreset_{0};
+    mutable juce::CriticalSection lockMutex_;
+    std::set<juce::String> lockedParams_;
 };

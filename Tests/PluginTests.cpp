@@ -6,6 +6,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 #include <cmath>
+#include <ranges>
 #include <utility>
 #include <vector>
 
@@ -597,4 +598,91 @@ TEST_CASE("Legacy preset automation preserves all original normalized program va
     REQUIRE(restored.getCurrentProgram() == 43);
     REQUIRE(restored.getSelectedPresetIndex() == 55);
     REQUIRE(restored.parameters.getRawParameterValue("amp_enabled")->load() == Catch::Approx(0.0f));
+}
+
+TEST_CASE("OpenClapper exposes 3-band EQ, main-page Output, and section/per-part locks", "[plugin][ui][locks][eq]") {
+    openclapper::core::ThreeBandEq eqBoost, eqCut;
+    eqBoost.prepare(48000.0);
+    eqCut.prepare(48000.0);
+    const openclapper::core::ThreeBandEqSettings boost{ 80.0f, 12.0f, 1000.0f, 0.0f, 7500.0f, 0.0f };
+    const openclapper::core::ThreeBandEqSettings cut{ 80.0f, -12.0f, 1000.0f, 0.0f, 7500.0f, 0.0f };
+    double rmsBoost = 0.0;
+    double rmsCut = 0.0;
+    std::ranges::for_each(std::views::iota(0, 4800), [&](int i) {
+        const float x = 0.25f * std::sin(2.0f * 3.14159265f * 30.0f * static_cast<float>(i) / 48000.0f);
+        float bL = x;
+        float bR = x;
+        eqBoost.process(bL, bR, boost);
+        float cL = x;
+        float cR = x;
+        eqCut.process(cL, cR, cut);
+        if (i >= 2400) {
+            rmsBoost += static_cast<double>(bL) * bL;
+            rmsCut += static_cast<double>(cL) * cL;
+        }
+    });
+    REQUIRE(10.0 * std::log10(rmsBoost / rmsCut) > 20.0);
+
+    OpenClapperProcessor processor;
+    std::ranges::for_each(std::array<const char*, 6>{
+        "eq_low_freq", "eq_low_db", "eq_mid_freq", "eq_mid_db", "eq_high_freq", "eq_high_db"},
+        [&](const char* id) { REQUIRE(processor.parameters.getParameter(id) != nullptr); });
+
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    REQUIRE(editor != nullptr);
+    editor->setVisible(true);
+    checkTargets(*editor, *editor);
+
+    const auto findById = [](auto&& self, juce::Component& parent, const juce::String& id) -> juce::Component* {
+        if (parent.getComponentID() == id) return &parent;
+        for (auto* child : parent.getChildren()) {
+            if (auto* found = self(self, *child, id)) return found;
+        }
+        return nullptr;
+    };
+
+    std::ranges::for_each(std::array<const char*, 5>{
+        "section_lock_Hand spacing", "section_lock_Tuned body", "section_lock_Noise tail",
+        "section_lock_Finish", "section_lock_Output"},
+        [&](const char* id) {
+            auto* button = dynamic_cast<juce::TextButton*>(findById(findById, *editor, id));
+            REQUIRE(button != nullptr);
+            CHECK(button->isVisible());
+        });
+
+    std::ranges::for_each(std::array<const char*, 16>{
+        "lock_pre_bursts", "lock_pre_spread", "lock_tone_level", "lock_tone_q",
+        "lock_noise_type", "lock_noise_decay", "lock_click_level", "lock_reverb_mix",
+        "lock_eq_low_db", "lock_eq_low_freq", "lock_eq_mid_db", "lock_eq_high_db",
+        "lock_stereo_width", "lock_output_gain", "lock_limiter_ceiling", "lock_limiter_enabled"},
+        [&](const char* id) {
+            auto* badge = findById(findById, *editor, id);
+            REQUIRE(badge != nullptr);
+            CHECK(badge->isVisible());
+        });
+
+    auto* finishLockBtn = dynamic_cast<juce::TextButton*>(findById(findById, *editor, "section_lock_Finish"));
+    REQUIRE(finishLockBtn != nullptr);
+    finishLockBtn->onClick();
+    REQUIRE(processor.isSectionLocked({ openclapper::params::kClickLevel, openclapper::params::kReverbMix, openclapper::params::kClapDoubler }));
+
+    performanceValue(processor, openclapper::params::kClickLevel, 0.91f);
+    performanceValue(processor, openclapper::params::kPreSpread, 33.0f);
+    performanceValue(processor, openclapper::params::kToneQ, 9.5f);
+    performanceValue(processor, openclapper::params::kNoiseDecay, 410.0f);
+    processor.setParamLocked(openclapper::params::kPreSpread, true);
+    processor.setParamLocked(openclapper::params::kToneQ, true);
+    processor.selectPreset(3);
+    CHECK(processor.parameters.getRawParameterValue(openclapper::params::kClickLevel)->load() == Catch::Approx(0.91f));
+    CHECK(processor.parameters.getRawParameterValue(openclapper::params::kPreSpread)->load() == Catch::Approx(33.0f));
+    CHECK(processor.parameters.getRawParameterValue(openclapper::params::kToneQ)->load() == Catch::Approx(9.5f));
+    CHECK(processor.parameters.getRawParameterValue(openclapper::params::kNoiseDecay)->load() != Catch::Approx(410.0f));
+
+    juce::MemoryBlock state;
+    processor.getStateInformation(state);
+    OpenClapperProcessor restored;
+    restored.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+    CHECK(restored.isParamLocked(openclapper::params::kPreSpread));
+    CHECK(restored.isParamLocked(openclapper::params::kToneQ));
+    CHECK(restored.isParamLocked(openclapper::params::kClickLevel));
 }

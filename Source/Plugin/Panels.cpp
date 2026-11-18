@@ -2,19 +2,57 @@
 #include "Parameters.h"
 #include "PluginProcessor.h"
 #include "Theme.h"
+#include <algorithm>
+#include <ranges>
+#include <tuple>
 
 namespace openclapper::ui {
 
 ControlGroup::ControlGroup(Apvts& state, const char* heading, std::initializer_list<ControlSpec> specs,
-                           int columns, bool stacked)
-    : heading_(heading), columns_(columns), stacked_(stacked) {
-    for (const auto& spec : specs) {
+                           int columns, bool stacked, bool outputSection)
+    : state_(state), heading_(heading), columns_(columns), stacked_(stacked), outputSection_(outputSection) {
+    if (outputSection_) {
+        std::ranges::for_each(std::array<std::tuple<const char*, const char*, const char*>, 3>{{
+            { params::kEqLowFreq, params::kEqLowDb, "Low EQ" },
+            { params::kEqMidFreq, params::kEqMidDb, "Mid EQ" },
+            { params::kEqHighFreq, params::kEqHighDb, "High EQ" }
+        }}, [&](const auto& eq) {
+            const auto& [freqId, dbId, title] = eq;
+            paramIds_.add(freqId);
+            paramIds_.add(dbId);
+            auto knob = std::make_unique<DualEqKnob>(state, freqId, dbId, title);
+            addAndMakeVisible(*knob);
+            controls_.push_back(std::move(knob));
+        });
+    }
+    std::ranges::for_each(specs, [&](const ControlSpec& spec) {
+        paramIds_.add(spec.id);
         std::unique_ptr<juce::Component> control;
         if (juce::String(spec.id) == "amp_enabled") control = std::make_unique<NoteGate>(state);
-        else control = std::make_unique<Control>(state, spec.id, spec.caption);
+        if (control == nullptr) control = std::make_unique<Control>(state, spec.id, spec.caption);
         addAndMakeVisible(*control);
         controls_.push_back(std::move(control));
-    }
+    });
+
+    lockButton_.setComponentID("section_lock_" + heading_);
+    lockButton_.setTooltip("Lock or unlock all settings in " + heading_ + " when browsing presets.");
+    lockButton_.setColour(juce::TextButton::buttonOnColourId, theme::violet);
+    lockButton_.setColour(juce::TextButton::textColourOnId, theme::plot);
+    lockButton_.onClick = [this] {
+        static_cast<OpenClapperProcessor&>(state_.processor).toggleSectionLock(paramIds_);
+        refreshLockButton();
+    };
+    addAndMakeVisible(lockButton_);
+    refreshLockButton();
+    startTimerHz(10);
+}
+
+void ControlGroup::timerCallback() { refreshLockButton(); }
+
+void ControlGroup::refreshLockButton() {
+    const bool locked = static_cast<OpenClapperProcessor&>(state_.processor).isSectionLocked(paramIds_);
+    lockButton_.setToggleState(locked, juce::dontSendNotification);
+    lockButton_.setButtonText(locked ? "Locked" : "Lock");
 }
 
 int ControlGroup::rows() const { return (static_cast<int>(controls_.size()) + columns_ - 1) / columns_; }
@@ -28,35 +66,63 @@ void ControlGroup::paint(juce::Graphics& g) {
     g.setColour(theme::ink);
     g.setFont(juce::FontOptions(stacked_ ? 22.0f : 17.0f, juce::Font::bold));
     if (stacked_) {
-        g.drawText(heading_, 17, 10, getWidth() - 30, 32, juce::Justification::centredLeft);
+        g.drawText(heading_, 17, 10, getWidth() - 94, 32, juce::Justification::centredLeft);
         g.setColour(theme::edge);
         g.drawHorizontalLine(49, 17, static_cast<float>(getWidth() - 17));
-    } else {
-        g.drawFittedText(heading_, 16, 0, 111, getHeight(), juce::Justification::centredLeft, 2);
-        g.setColour(theme::edge);
-        g.drawVerticalLine(134, 11, static_cast<float>(getHeight() - 11));
+        return;
     }
+    g.drawFittedText(heading_, 16, 10, 111, getHeight() - 56, juce::Justification::topLeft, 2);
+    g.setColour(theme::edge);
+    g.drawVerticalLine(134, 11, static_cast<float>(getHeight() - 11));
 }
 
 void ControlGroup::resized() {
-    auto area = getLocalBounds();
-    if (stacked_) area = area.withTrimmedTop(53).reduced(12, 5);
-    else area = area.withTrimmedLeft(143).reduced(5, 4);
+    if (stacked_) {
+        lockButton_.setBounds(getWidth() - 78, 6, 66, 36);
+    }
+    if (!stacked_) {
+        lockButton_.setBounds(16, std::max(8, getHeight() - 44), 66, 36);
+    }
+    if (outputSection_) {
+        auto area = getLocalBounds().withTrimmedTop(52).reduced(12, 6);
+        auto eqArea = area.removeFromLeft(std::min(436, area.getWidth() * 44 / 100));
+        const int eqW = eqArea.getWidth() / 3;
+        std::ranges::for_each(std::views::iota(0, 3), [&](int i) {
+            controls_[static_cast<size_t>(i)]->setBounds(eqArea.removeFromLeft(eqW));
+        });
+        area.removeFromLeft(8);
+        const int gridCols = 3;
+        const int otherCount = static_cast<int>(controls_.size()) - 3;
+        const int gridRows = std::max(1, (otherCount + gridCols - 1) / gridCols);
+        std::ranges::for_each(std::views::iota(0, otherCount), [&](int i) {
+            const int col = i % gridCols;
+            const int row = i / gridCols;
+            const int left = area.getX() + col * area.getWidth() / gridCols;
+            const int top = area.getY() + row * area.getHeight() / gridRows;
+            const int right = area.getX() + (col + 1) * area.getWidth() / gridCols;
+            const int bottom = area.getY() + (row + 1) * area.getHeight() / gridRows;
+            controls_[static_cast<size_t>(i + 3)]->setBounds(left, top, right - left, bottom - top);
+        });
+        return;
+    }
+    auto area = stacked_ ? getLocalBounds().withTrimmedTop(53).reduced(12, 5)
+                         : getLocalBounds().withTrimmedLeft(143).reduced(5, 4);
     const int rowCount = rows();
-    for (int index = 0; index < static_cast<int>(controls_.size()); ++index) {
-        const int col = index % columns_, row = index / columns_;
+    std::ranges::for_each(std::views::iota(0, static_cast<int>(controls_.size())), [&](int index) {
+        const int col = index % columns_;
+        const int row = index / columns_;
         const int left = area.getX() + col * area.getWidth() / columns_;
         const int top = area.getY() + row * area.getHeight() / rowCount;
         const int right = area.getX() + (col + 1) * area.getWidth() / columns_;
         const int bottom = area.getY() + (row + 1) * area.getHeight() / rowCount;
         controls_[static_cast<size_t>(index)]->setBounds(left, top, right - left, bottom - top);
-    }
+    });
 }
 
 ControlPage::ControlPage(Apvts& state, Page page) : page_(page) {
     using namespace params;
-    const auto group = [&](const char* name, int cols, std::initializer_list<ControlSpec> specs) {
-        auto item = std::make_unique<ControlGroup>(state, name, specs, cols, page == Page::clap);
+    const auto group = [&](const char* name, int cols, std::initializer_list<ControlSpec> specs, bool isOutput = false) {
+        auto item = std::make_unique<ControlGroup>(state, name, specs, cols, page == Page::clap || isOutput, isOutput);
         addAndMakeVisible(*item);
         groups_.push_back(std::move(item));
     };
@@ -65,7 +131,8 @@ ControlPage::ControlPage(Apvts& state, Page page) : page_(page) {
             group("Hand spacing", 1, {{kPreBursts,"Bursts"}, {kPreSpread,"Spacing"}, {kPreJitter,"Humanize"}, {kFlamSpread,"Pan spread"}});
             group("Tuned body", 1, {{kToneLevel,"Body level"}, {kToneQ,"Resonance"}, {kToneDecay,"Body decay"}});
             group("Noise tail", 1, {{kNoiseType,"Texture"}, {kNoiseHPF,"Low cut"}, {kNoiseDecay,"Noise decay"}, {kNoiseLevel,"Noise level"}});
-            group("Finish", 1, {{kClickLevel,"Transient level"}, {kReverbMix,"Room mix"}, {kStereoWidth,"Stereo width"}, {kOutputGain,"Output gain"}});
+            group("Finish", 1, {{kClickLevel,"Transient level"}, {kReverbMix,"Room mix"}, {kClapDoubler,"Doubler"}});
+            group("Output", 5, {{kStereoWidth,"Stereo width"}, {kOutputGain,"Output gain"}, {kLimiterCeiling,"Ceiling"}, {kLimiterEnabled,"Limiter"}, {kLimiterRelease,"Recovery"}}, true);
             break;
         case Page::layers:
             group("Pre-clap", 3, {{kPreBursts,"Bursts"}, {kPreSpread,"Spacing"}, {kPreLevel,"Level"},
@@ -82,17 +149,18 @@ ControlPage::ControlPage(Apvts& state, Page page) : page_(page) {
                 {kCompAttack,"Attack"}, {kCompRelease,"Release"}, {kCompMix,"Mix"}});
             group("Gated room", 5, {{kReverbSize,"Size"}, {kReverbDecay,"Decay"}, {kReverbDamp,"Damping"}, {kReverbGate,"Gate time"}, {kReverbMix,"Mix"}});
             group("Echo & reverse", 5, {{kSlapbackDivision,"Slapback time"}, {kSlapbackMix,"Slapback mix"}, {kSlapbackFeedback,"Feedback"}, {kReverseMode,"Reverse timing"}, {kReverseMix,"Reverse mix"}});
-            group("Output", 5, {{kLimiterEnabled,"Limiter"}, {kLimiterCeiling,"Ceiling"}, {kLimiterRelease,"Recovery"}, {kStereoWidth,"Stereo width"}, {kOutputGain,"Output gain"}});
             break;
         case Page::midi:
             group("Note envelope", 5, {{"amp_enabled",""}, {"amp_attack","Attack"}, {"amp_decay","Decay"}, {"amp_sustain","Sustain"}, {"amp_release","Release"}});
             group("Trigger zone", 5, {{"key_low","Lowest note"}, {"key_high","Highest note"}, {"velocity_low","Min velocity"}, {"velocity_high","Max velocity"}, {"choke_group","Choke group"}});
             group("Roll & fill", 3, {{"roll_division","Subdivision"}, {"roll_hits","Hit count"}, {kPitchHumanize,"Pitch humanize"}});
-            for (size_t layer = 0; layer < kLayerNames.size(); ++layer) {
-                if (layer < kLayerVelocity.size())
+            std::ranges::for_each(std::views::iota(size_t{0}, kLayerNames.size()), [&](size_t layer) {
+                if (layer < kLayerVelocity.size()) {
                     group(kLayerNames[layer], 3, {{kLayerMute[layer],"Mute"}, {kLayerSolo[layer],"Solo"}, {kLayerVelocity[layer],"Velocity response"}});
-                else group(kLayerNames[layer], 3, {{kLayerMute[layer],"Mute"}, {kLayerSolo[layer],"Solo"}});
-            }
+                    return;
+                }
+                group(kLayerNames[layer], 3, {{kLayerMute[layer],"Mute"}, {kLayerSolo[layer],"Solo"}});
+            });
             break;
     }
 }
@@ -102,10 +170,15 @@ void ControlPage::resized() {
     const int count = static_cast<int>(groups_.size());
     constexpr int gap = 8;
     if (page_ == Page::clap) {
-        for (int i = count; i > 0; --i) {
-            groups_[static_cast<size_t>(count - i)]->setBounds(area.removeFromLeft((area.getWidth() - (i - 1) * gap) / i));
+        auto outputCard = area.removeFromBottom(174);
+        area.removeFromBottom(gap);
+        constexpr int topCount = 4;
+        std::ranges::for_each(std::views::iota(0, topCount), [&](int index) {
+            const int remaining = topCount - index;
+            groups_[static_cast<size_t>(index)]->setBounds(area.removeFromLeft((area.getWidth() - (remaining - 1) * gap) / remaining));
             area.removeFromLeft(gap);
-        }
+        });
+        groups_[4]->setBounds(outputCard);
         return;
     }
     int rows = 0;

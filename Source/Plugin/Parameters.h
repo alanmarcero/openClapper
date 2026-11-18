@@ -76,9 +76,15 @@ inline constexpr const char* kPitchHumanize = "pitch_humanize";
 inline constexpr const char* kReverseMode = "reverse_mode";
 inline constexpr const char* kReverseMix = "reverse_mix";
 
-// Global / Master
+// Global / Master & Output EQ
 inline constexpr const char* kStereoWidth = "stereo_width";
 inline constexpr const char* kOutputGain = "output_gain";
+inline constexpr const char* kEqLowFreq = "eq_low_freq";
+inline constexpr const char* kEqLowDb = "eq_low_db";
+inline constexpr const char* kEqMidFreq = "eq_mid_freq";
+inline constexpr const char* kEqMidDb = "eq_mid_db";
+inline constexpr const char* kEqHighFreq = "eq_high_freq";
+inline constexpr const char* kEqHighDb = "eq_high_db";
 inline constexpr const char* kPreset = "preset";
 inline constexpr int kHostProgramCount = 44;
 

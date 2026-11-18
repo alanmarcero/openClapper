@@ -3,6 +3,7 @@
 #include "PluginEditor.h"
 #include "Presets.h"
 #include <algorithm>
+#include <ranges>
 
 OpenClapperProcessor::OpenClapperProcessor()
     : AudioProcessor(BusesProperties().withOutput("Output", juce::AudioChannelSet::stereo(), true)
@@ -193,7 +194,7 @@ void OpenClapperProcessor::selectPreset(int index) {
     const auto& presets = openclapper::presets::factoryPresets();
     if (index < 0 || index >= static_cast<int>(presets.size())) return;
     selectedPreset_ = index;
-    openclapper::presets::apply(presets[static_cast<size_t>(index)], parameters);
+    openclapper::presets::apply(presets[static_cast<size_t>(index)], parameters, lockedParameterIds());
 
     // Additional editor presets must not shift either JUCE's host program automation or the legacy selector.
     if (index >= getNumPrograms()) return;
@@ -202,7 +203,73 @@ void OpenClapperProcessor::selectPreset(int index) {
         parameter->setValueNotifyingHost(parameter->convertTo0to1(static_cast<float>(index)));
 }
 
+bool OpenClapperProcessor::isParamLocked(const juce::String& id) const {
+    const juce::ScopedLock guard(lockMutex_);
+    return lockedParams_.contains(id);
+}
+
+void OpenClapperProcessor::setParamLocked(const juce::String& id, bool locked) {
+    {
+        const juce::ScopedLock guard(lockMutex_);
+        if (locked) lockedParams_.insert(id);
+        if (!locked) lockedParams_.erase(id);
+    }
+    syncLocksToState();
+}
+
+bool OpenClapperProcessor::isSectionLocked(const juce::StringArray& ids) const {
+    if (ids.isEmpty()) return false;
+    const juce::ScopedLock guard(lockMutex_);
+    return std::ranges::all_of(ids, [&](const juce::String& id) { return lockedParams_.contains(id); });
+}
+
+void OpenClapperProcessor::toggleSectionLock(const juce::StringArray& ids) {
+    if (ids.isEmpty()) return;
+    {
+        const juce::ScopedLock guard(lockMutex_);
+        const bool allLocked = std::ranges::all_of(ids, [&](const juce::String& id) { return lockedParams_.contains(id); });
+        std::ranges::for_each(ids, [&](const juce::String& id) {
+            if (allLocked) {
+                lockedParams_.erase(id);
+                return;
+            }
+            lockedParams_.insert(id);
+        });
+    }
+    syncLocksToState();
+}
+
+juce::StringArray OpenClapperProcessor::lockedParameterIds() const {
+    const juce::ScopedLock guard(lockMutex_);
+    juce::StringArray ids;
+    std::ranges::for_each(lockedParams_, [&](const juce::String& id) { ids.add(id); });
+    return ids;
+}
+
+void OpenClapperProcessor::syncLocksToState() {
+    const juce::ScopedLock guard(lockMutex_);
+    auto tree = parameters.state.getOrCreateChildWithName("ParameterLocks", nullptr);
+    tree.removeAllChildren(nullptr);
+    std::ranges::for_each(lockedParams_, [&](const juce::String& id) {
+        juce::ValueTree child("Lock");
+        child.setProperty("id", id, nullptr);
+        tree.addChild(child, -1, nullptr);
+    });
+}
+
+void OpenClapperProcessor::loadLocksFromState(const juce::ValueTree& state) {
+    const juce::ScopedLock guard(lockMutex_);
+    lockedParams_.clear();
+    const auto tree = state.getChildWithName("ParameterLocks");
+    if (!tree.isValid()) return;
+    std::ranges::for_each(std::views::iota(0, tree.getNumChildren()), [&](int i) {
+        const auto id = tree.getChild(i).getProperty("id").toString();
+        if (id.isNotEmpty()) lockedParams_.insert(id);
+    });
+}
+
 void OpenClapperProcessor::getStateInformation(juce::MemoryBlock& destData) {
+    syncLocksToState();
     auto state = parameters.copyState();
     state.setProperty("selected_preset", selectedPreset_.load(), nullptr);
     state.setProperty("clap_bank", 2, nullptr);
@@ -216,6 +283,7 @@ void OpenClapperProcessor::setStateInformation(const void* data, int sizeInBytes
         auto state = juce::ValueTree::fromXml(*xmlState);
         state.removeProperty("locked_wav", nullptr);
         parameters.replaceState(state);
+        loadLocksFromState(state);
         currentProgram_ = std::clamp(static_cast<int>(parameters.getRawParameterValue(openclapper::params::kPreset)->load()),
             0, getNumPrograms() - 1);
         selectedPreset_ = static_cast<int>(state.getProperty("clap_bank", 0)) == 2

@@ -54,7 +54,7 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& instrument)
     }
     addAndMakeVisible(waveform_);
     setLookAndFeel(&look_);
-    setSize(1080, 710);
+    setSize(1080, 824);
     syncPreset();
     setPage(0);
     startTimerHz(24);
@@ -159,10 +159,10 @@ void OpenClapperEditor::resized() {
         tabs_[i].setBounds(nav.removeFromLeft(widths[i]));
         nav.removeFromLeft(6);
     }
-    area.removeFromBottom(16);
+    area.removeFromBottom(14);
     if (page_ == 0) {
-        waveform_.setBounds(area.removeFromTop(213));
-        area.removeFromTop(10);
+        waveform_.setBounds(area.removeFromTop(172));
+        area.removeFromTop(8);
     }
     pages_[static_cast<size_t>(page_)]->setBounds(area);
 }

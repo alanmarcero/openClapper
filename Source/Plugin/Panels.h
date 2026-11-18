@@ -10,16 +10,23 @@ namespace openclapper::ui {
 
 struct ControlSpec { const char* id; const char* caption; };
 
-class ControlGroup : public juce::Component {
+class ControlGroup : public juce::Component, private juce::Timer {
 public:
-    ControlGroup(Apvts&, const char* heading, std::initializer_list<ControlSpec>, int columns, bool stacked);
+    ControlGroup(Apvts&, const char* heading, std::initializer_list<ControlSpec>, int columns, bool stacked,
+                 bool outputSection = false);
     void paint(juce::Graphics&) override;
     void resized() override;
     int rows() const;
 private:
+    void timerCallback() override;
+    void refreshLockButton();
+    Apvts& state_;
     juce::String heading_;
     int columns_;
     bool stacked_;
+    bool outputSection_ = false;
+    juce::StringArray paramIds_;
+    juce::TextButton lockButton_;
     std::vector<std::unique_ptr<juce::Component>> controls_;
 };
 
