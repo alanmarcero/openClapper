@@ -7,10 +7,6 @@ namespace openclapper::core {
 
 namespace {
 
-constexpr std::array<float, 8> kSubThumpPartials = { 1.0f, 0.08f, 0.02f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
-constexpr std::array<float, 8> kSaturatedTriPartials = { 1.0f, 0.0f, 0.16f, 0.0f, 0.07f, 0.0f, 0.035f, 0.0f };
-constexpr std::array<float, 8> kCyberSquarePartials = { 1.0f, 0.42f, 0.26f, 0.18f, 0.12f, 0.08f, 0.05f, 0.03f };
-
 [[nodiscard]] constexpr float pi() noexcept {
     return std::numbers::pi_v<float>;
 }
@@ -283,9 +279,8 @@ void ClapSynth::reset() noexcept {
     totalDurationSamples_ = 0;
     mainStartSamples_ = 0;
     burstCount_ = 0;
-    partialFrequencies_.fill(0.0f);
-    partialPhases_.fill(0.0f);
     toneFilterL_.reset();
+    toneBrightFilterL_.reset();
     toneHPF_.reset();
     toneLPF_.reset();
     lastToneFrequency_ = -1.0f;
@@ -337,12 +332,6 @@ void ClapSynth::trigger(const ClapSynthSettings& settings, int midiNote, float v
         ? nextRandomFloat(prngState_) * (std::clamp(settings.pitchHumanizeCents, 0.0f, 100.0f) / 100.0f)
         : 0.0f;
     pitchHumanizeRatio_ = std::exp2(pitchDetuneSemitones / 12.0f);
-
-    const float fundamentalHz = midiNoteToHz(midiNote_) * pitchHumanizeRatio_;
-    for (size_t i = 0; i < partialFrequencies_.size(); ++i) {
-        const float partialHz = fundamentalHz * static_cast<float>(i + 1);
-        partialFrequencies_[i] = partialHz < static_cast<float>(sampleRate_) * 0.48f ? partialHz : 0.0f;
-    }
 
     const float mainStartMs = static_cast<float>(burstCount_) * std::max(0.0f, settings.preClapSpreadMs);
     const float burstTailMs = burstCount_ > 0
@@ -548,45 +537,20 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
         const float pitchSemitones = std::clamp(settings.tonePitchEnv, -24.0f, 24.0f)
             * std::exp(-std::max(0.0f, mainAge) / pitchDecaySamples);
         const float pitchRatio = std::exp2(pitchSemitones / 12.0f);
-        if (settings.toneMode == ToneMode::Bandpass) {
-            const float fundamental = std::clamp(midiNoteToHz(midiNote_) * pitchHumanizeRatio_ * pitchRatio, 20.0f, static_cast<float>(sampleRate_) * 0.48f);
-            if (std::abs(fundamental - lastToneFrequency_) > 2.0f || std::abs(settings.toneQ - lastToneQ_) > 0.01f) {
-                lastToneFrequency_ = fundamental;
-                lastToneQ_ = settings.toneQ;
-                computeBandpassCoeffs(lastToneFrequency_, lastToneQ_, sampleRate_, b0_t_, b1_t_, b2_t_, a1_t_, a2_t_);
-            }
-            const float impulse = mainAge < 4.0f ? 1.0f : 0.0f;
-            const float exciter = impulse + rawNoiseL * 0.35f;
-            toneSample = processBiquad(exciter * toneEnv, toneFilterL_, b0_t_, b1_t_, b2_t_, a1_t_, a2_t_) * 2.2f;
-        } else {
-            const std::array<float, 8>* weights = &kSubThumpPartials;
-            switch (settings.toneMode) {
-                case ToneMode::Bandpass: break;
-                case ToneMode::SubThump: weights = &kSubThumpPartials; break;
-                case ToneMode::SaturatedTri: weights = &kSaturatedTriPartials; break;
-                case ToneMode::CyberSquare: weights = &kCyberSquarePartials; break;
-            }
-
-            const float resonance = std::clamp(settings.toneQ / 6.0f, 0.1f, 2.0f);
-            float weightSum = 0.0f;
-            for (size_t i = 0; i < partialFrequencies_.size(); ++i) {
-                const float frequency = partialFrequencies_[i] * pitchRatio;
-                if (frequency <= 0.0f) {
-                    continue;
-                }
-                if (frequency >= static_cast<float>(sampleRate_) * 0.48f) continue;
-
-                partialPhases_[i] += 2.0f * pi() * frequency / static_cast<float>(sampleRate_);
-                if (partialPhases_[i] >= 2.0f * pi()) {
-                    partialPhases_[i] -= 2.0f * pi();
-                }
-                const float highPartial = static_cast<float>(i) / static_cast<float>(partialFrequencies_.size() - 1);
-                const float weight = (*weights)[i] * (1.0f + (resonance - 1.0f) * highPartial);
-                toneSample += std::sin(partialPhases_[i]) * weight;
-                weightSum += weight;
-            }
-            toneSample /= std::max(1.0f, weightSum);
+        const float fundamental = std::clamp(midiNoteToHz(midiNote_) * pitchHumanizeRatio_ * pitchRatio, 20.0f, static_cast<float>(sampleRate_) * 0.48f);
+        if (std::abs(fundamental - lastToneFrequency_) > 2.0f || std::abs(settings.toneQ - lastToneQ_) > 0.01f) {
+            lastToneFrequency_ = fundamental;
+            lastToneQ_ = settings.toneQ;
+            computeBandpassCoeffs(lastToneFrequency_, lastToneQ_, sampleRate_, b0_t_, b1_t_, b2_t_, a1_t_, a2_t_);
+            const float brightFreq = std::clamp(lastToneFrequency_ * 4.0f, 1200.0f, static_cast<float>(sampleRate_) * 0.45f);
+            const float brightQ = std::max(0.7f, lastToneQ_ * 0.65f);
+            computeBandpassCoeffs(brightFreq, brightQ, sampleRate_, b0_tb_, b1_tb_, b2_tb_, a1_tb_, a2_tb_);
         }
+        const float impulse = mainAge < 1.0f ? 1.0f : 0.0f;
+        const float exciter = impulse + rawNoiseL * 0.45f;
+        const float fundamentalBand = processBiquad(exciter * toneEnv, toneFilterL_, b0_t_, b1_t_, b2_t_, a1_t_, a2_t_) * 2.0f;
+        const float brightBand = processBiquad(exciter * toneEnv, toneBrightFilterL_, b0_tb_, b1_tb_, b2_tb_, a1_tb_, a2_tb_) * 1.4f;
+        toneSample = fundamentalBand + brightBand;
         if (std::abs(settings.toneHPF - lastToneHPF_) > 0.5f || lastToneHPF_ < 0.0f) {
             lastToneHPF_ = settings.toneHPF;
             computeHighpassCoeffs(lastToneHPF_, sampleRate_, b0_th_, b1_th_, b2_th_, a1_th_, a2_th_);

@@ -16,13 +16,6 @@ enum class NoiseType {
     LoFi = 3
 };
 
-enum class ToneMode {
-    Bandpass = 0,
-    SubThump = 1,
-    SaturatedTri = 2,
-    CyberSquare = 3
-};
-
 enum class ClickType {
     Needle = 0,
     Crack = 1,
@@ -54,7 +47,6 @@ struct ClapSynthSettings {
     float preClapLevel = 0.85f;   // 0..1 volume of pre-claps
 
     // Resonant Body / Tone
-    ToneMode toneMode = ToneMode::Bandpass;
     float toneQ = 3.2f;           // 0.5..12.0 resonance
     float toneDecayMs = 120.0f;   // 15..600 ms tone decay
     float tonePitchEnv = 0.0f;    // -24..+24 semitones, decays to the MIDI note
@@ -214,15 +206,14 @@ private:
     std::array<float, 5> burstAmplitudes_{};
     std::array<float, 5> burstPans_{};
 
-    std::array<float, 8> partialFrequencies_{};
-    std::array<float, 8> partialPhases_{};
-
     BiquadState toneFilterL_{};
+    BiquadState toneBrightFilterL_{};
     BiquadState toneHPF_{};
     BiquadState toneLPF_{};
     float lastToneFrequency_ = -1.0f;
     float lastToneQ_ = -1.0f;
     float b0_t_ = 0.0f, b1_t_ = 0.0f, b2_t_ = 0.0f, a1_t_ = 0.0f, a2_t_ = 0.0f;
+    float b0_tb_ = 0.0f, b1_tb_ = 0.0f, b2_tb_ = 0.0f, a1_tb_ = 0.0f, a2_tb_ = 0.0f;
     float lastToneHPF_ = -1.0f, lastToneLPF_ = -1.0f;
     float b0_th_ = 0.0f, b1_th_ = 0.0f, b2_th_ = 0.0f, a1_th_ = 0.0f, a2_th_ = 0.0f;
     float b0_tl_ = 1.0f, b1_tl_ = 0.0f, b2_tl_ = 0.0f, a1_tl_ = 0.0f, a2_tl_ = 0.0f;
