@@ -21,7 +21,7 @@ The 56 factory sounds span six dance styles: 16 Uplifting and eight each of Roll
 
 The animated hands beside the page tabs meet on each host beat and follow tempo changes and seeks. They rest when playback stops. Standalone and hosts without transport timing use the internal 138 BPM clock.
 
-The **Clap** page shows a dry A4 preview. The peach section contains the pre-claps. The vertical marker shows when the main strike begins. Change **Bursts** or **Spacing** to see it move. **Body decay** and **Noise decay** shape the pitched body and noise tail separately.
+The **Clap** page shows a dry A4 preview, section cards for **Hand spacing**, **Tuned body**, **Noise tail**, and **Finish**, and the **Output** section (dual-layer 3-band EQ with ±12 dB gain and smooth frequency glide, stereo width, output gain, and brickwall limiter). Both every section header and every individual control have lock toggles so locked parameters stay put when browsing factory presets. The peach section in the waveform marks the pre-claps and the vertical marker shows when the main strike begins. **Body decay** and **Noise decay** shape the pitched body and noise tail separately.
 
 ## Shape the layers
 
@@ -43,7 +43,7 @@ Set the inclusive MIDI key and velocity ranges. Choke group 0 allows overlaps. G
 
 ## Add effects and route audio
 
-On **Effects**, adjust drive, compression, gated stereo reverb, one-repeat slapback, reverse swell, limiting, stereo width, and output gain. Slapback follows host tempo and uses 138 BPM if the host supplies none. In hosts with multi-output support, route the body, noise, transient, and pre-clap to separate stereo buses. Each bus includes its layer controls and master gain, before shared effects and stereo width.
+On **Effects**, adjust drive, doubler, compression, gated stereo reverb, one-repeat slapback, and reverse swell. Output EQ, stereo width, output gain, and limiting live on the **Clap** page under **Output**. Slapback follows host tempo and uses 138 BPM if the host supplies none. In hosts with multi-output support, route the body, noise, transient, and pre-clap to separate stereo buses. Each bus includes its layer controls and master gain, before shared effects and stereo width.
 
 ![Effects page showing drive, compressor, gated room, echo, reverse, and output controls](assets/openClapper-effects.png)
 

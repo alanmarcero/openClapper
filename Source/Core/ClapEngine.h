@@ -56,6 +56,7 @@ struct ClapEffectSettings {
     ReverseSyncMode reverseMode = ReverseSyncMode::Off;
     float reverseMix = 0.5f;       // 0..1
 
+    ThreeBandEqSettings eq{};
     float stereoWidth = 1.0f;      // 0..2
     float outputGainDb = 0.0f;     // -36..+12 dB
 };
@@ -138,6 +139,7 @@ private:
     GatedStereoReverb reverb_;
     DistortionShaper distL_;
     DistortionShaper distR_;
+    ThreeBandEq eq_;
     StereoCompressor compressor_;
     BrickwallLimiter limiter_;
 

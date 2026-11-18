@@ -37,6 +37,39 @@ void EdmLookAndFeel::drawLinearSlider(juce::Graphics& g, int x, int y, int width
     g.fillRoundedRectangle(position - 3, centre - 7, 6, 14, 2);
 }
 
+void EdmLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height, float position,
+                                      float startAngle, float endAngle, juce::Slider& slider) {
+    const auto area = juce::Rectangle<int>(x, y, width, height).toFloat().reduced(3.0f);
+    const float radius = std::min(area.getWidth(), area.getHeight()) * 0.5f;
+    const auto centre = area.getCentre();
+    const float arcRadius = std::max(4.0f, radius - 3.5f);
+    const float angle = startAngle + position * (endAngle - startAngle);
+    const bool bipolar = slider.getMinimum() < 0.0 && slider.getMaximum() > 0.0;
+    const float origin = bipolar ? (startAngle + endAngle) * 0.5f : startAngle;
+    const auto stroke = juce::PathStrokeType(2.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
+
+    juce::Path base;
+    base.addCentredArc(centre.x, centre.y, arcRadius, arcRadius, 0.0f, startAngle, endAngle, true);
+    g.setColour(theme::edge);
+    g.strokePath(base, stroke);
+
+    juce::Path value;
+    value.addCentredArc(centre.x, centre.y, arcRadius, arcRadius, 0.0f, origin, angle, true);
+    g.setColour(slider.findColour(juce::Slider::rotarySliderFillColourId));
+    g.strokePath(value, stroke);
+
+    const float capRadius = std::max(3.0f, arcRadius - 5.0f);
+    const auto cap = juce::Rectangle<float>(capRadius * 2.0f, capRadius * 2.0f).withCentre(centre);
+    g.setColour(theme::surface.brighter(0.08f));
+    g.fillEllipse(cap);
+    g.setColour(theme::edge);
+    g.drawEllipse(cap, 1.0f);
+
+    const float pointerLen = capRadius * 0.68f;
+    g.setColour(theme::ink);
+    g.drawLine(centre.x, centre.y, centre.x + pointerLen * std::sin(angle), centre.y - pointerLen * std::cos(angle), 1.8f);
+}
+
 void EdmLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& button,
                                            const juce::Colour& background, bool hover, bool down) {
     auto fill = background;

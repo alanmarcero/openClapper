@@ -26,6 +26,7 @@ void ClapEngine::prepare(double sampleRate) {
     reverb_.prepare(sampleRate);
     distL_.reset();
     distR_.reset();
+    eq_.prepare(sampleRate);
     compressor_.prepare(sampleRate);
     limiter_.prepare(sampleRate);
 
@@ -53,6 +54,7 @@ void ClapEngine::reset() noexcept {
     reverb_.reset();
     distL_.reset();
     distR_.reset();
+    eq_.reset();
     compressor_.reset();
     limiter_.reset();
     std::fill(doublerBufferL_.begin(), doublerBufferL_.end(), 0.0f);
@@ -212,6 +214,7 @@ void ClapEngine::process(
             reverb_.reset();
             distL_.reset();
             distR_.reset();
+            eq_.reset();
             compressor_.reset();
             limiter_.reset();
         } else if (cc.controller == 121) {
@@ -363,6 +366,8 @@ void ClapEngine::process(
             sL = mid + side;
             sR = mid - side;
         }
+
+        eq_.process(sL, sR, settings.effects.eq);
 
         // Dynamics: Compressor
         compressor_.process(sL, sR, settings.effects.compressor);
