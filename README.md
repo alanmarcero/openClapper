@@ -1,4 +1,4 @@
-# openClapper v3.6.0
+# openClapper v3.7.0
 
 [Install with OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest)
 
@@ -8,20 +8,20 @@ openClapper is a pitched, four-layer clap synthesizer. Play the resonant body fr
 
 ## Choose a clap
 
-The 56 factory sounds span six dance styles: 16 Uplifting and eight each of Rolling, Progressive, Psy, Tech, and Classic. **Previous** and **Next** step through the bank. All factory sounds play as one-shots.
+The 56 factory sounds span six dance styles: 16 Uplifting and eight each of Rolling, Progressive, Psy, Tech, and Classic. **Previous** and **Next** step through the bank. All factory sounds play as one-shots and are voiced for full club impact and sustained bodies, noise tails, and gated room ambiance.
 
 | Style | Try | Sound |
 | --- | --- | --- |
-| Uplifting | Downbeat, Euphoria, High Gallery | Airy, wide ensemble claps and gated stadium claps for uplifting drops. |
-| Rolling | Two Hands, Sixteenth, Pocket Drag | Tight groove claps and rhythmic flams for rolling basslines. |
-| Progressive | Cupped Palm, Archway, Booth Air | Warm, rounded claps with soft body weight and controlled rooms. |
-| Psy | Fingertips, Tripwire, Five Across | Razor-crisp transients and snappy flams for fast psy patterns. |
-| Tech | Dry Chalk, Concrete, Mono Print | Focused, dry club hits and concrete-gated backbeats. |
-| Classic | Paper Fold, Palm Circle, Last Accent | Analog-inspired hand spreads and vintage studio rooms. |
+| Uplifting | Downbeat, Euphoria, High Gallery | Massive ensemble claps, chest punch, and long gated stadium tails for uplifting drops. |
+| Rolling | Two Hands, Sixteenth, Pocket Drag | Punchy groove claps and rhythmic flams for rolling basslines. |
+| Progressive | Cupped Palm, Archway, Booth Air | Warm, sustained claps with full body weight and lush mid-sized rooms. |
+| Psy | Fingertips, Tripwire, Five Across | Punchy multi-hand transients and tight yet weighty gated tails for fast psy patterns. |
+| Tech | Dry Chalk, Concrete, Mono Print | Solid club hits and wide concrete-gated backbeats. |
+| Classic | Paper Fold, Palm Circle, Last Accent | Analog-inspired hand spreads and warm vintage studio rooms. |
 
 The animated hands beside the page tabs meet on each host beat and follow tempo changes and seeks. They rest when playback stops. Standalone and hosts without transport timing use the internal 138 BPM clock.
 
-The **Clap** page shows a dry A4 preview, section cards for **Hand spacing**, **Tuned body**, **Noise tail**, and **Finish**, and the **Output** section (dual-layer 3-band EQ with ±12 dB gain and smooth frequency glide, stereo width, output gain, and brickwall limiter). Both every section header and every individual control have lock toggles so locked parameters stay put when browsing factory presets. The peach section in the waveform marks the pre-claps and the vertical marker shows when the main strike begins. **Body decay** and **Noise decay** shape the pitched body and noise tail separately.
+The **Clap** page shows a dry A4 preview, four-knob cards for **Hand spacing**, **Tuned body** (with **Impact** punch/chest slam), **Noise tail**, and **Finish** (with **Room gate**), and the **Output** section (dual-layer 3-band EQ with ±12 dB gain and smooth frequency glide, stereo width, output gain, and brickwall limiter). Both every section header and every individual control have lock toggles so locked parameters stay put when browsing factory presets. The peach section in the waveform marks the pre-claps and the vertical marker shows when the main strike begins. **Body decay** and **Noise decay** shape the pitched body and noise tail separately.
 
 ## Shape the layers
 
@@ -52,6 +52,12 @@ MIDI CC 7 adjusts master level and CC 74 controls noise brightness. CC 120 stops
 ## Changes in 3.5
 
 The Sub Thump, Saturated Tri and Cyber Square body voices are removed. They were stacked sine harmonics, which sounded like a synth tone rather than a clap. The tuned body is now always the resonant band-pass voice, and the **Voice** control is gone. Factory presets that used a removed voice now use the band-pass body. Earlier sessions keep every other setting.
+
+## Changes in 3.7
+
+- Added the **Impact** control (`impact_punch`) in **Tuned body** to layer chest slam weight, mid-chest resonator body, and multi-hand crowd saturation without burying crisp transients.
+- Extended body decay (`15–1200 ms`), noise hold/decay (`0–90 ms` hold, `20–2200 ms` decay), and gated room tail (`0–1400 ms`), and brought **Room gate** directly onto the **Finish** card on the **Clap** page.
+- Re-voiced all 56 factory claps for full stadium and club impact rather than thin, short snaps.
 
 ## Formats and compatibility
 

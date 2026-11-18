@@ -11,6 +11,36 @@ namespace {
     return std::numbers::pi_v<float>;
 }
 
+[[nodiscard]] float computeNoiseTailEnvelope(float mainAge,
+                                             bool ampEnabled,
+                                             float attackSamples,
+                                             float holdSamples,
+                                             float decaySamples,
+                                             float curve) noexcept {
+    if (mainAge < 0.0f) {
+        return 0.0f;
+    }
+    if (ampEnabled) {
+        return 1.0f;
+    }
+    if (mainAge < attackSamples && attackSamples > 0.0f) {
+        return mainAge / attackSamples;
+    }
+    if (mainAge < attackSamples + holdSamples) {
+        return 1.0f;
+    }
+    const float decayT = mainAge - attackSamples - holdSamples;
+    const float progress = std::clamp(decayT / decaySamples, 0.0f, 1.0f);
+    const float linearEnv = 1.0f - progress;
+    const float endFade = progress > 0.92f ? std::max(0.0f, (1.0f - progress) / 0.08f) : 1.0f;
+    const float expDecay = std::exp(-decayT / std::max(1.0f, decaySamples * 0.50f)) * endFade;
+    const float clampedCurve = std::clamp(curve, -1.0f, 1.0f);
+    if (clampedCurve < 0.0f) {
+        return (1.0f + clampedCurve) * linearEnv - clampedCurve * expDecay;
+    }
+    return (1.0f - clampedCurve) * linearEnv + clampedCurve * std::sqrt(std::max(0.0f, linearEnv));
+}
+
 // Fast xorshift32 PRNG
 [[nodiscard]] inline float nextRandomFloat(uint32_t& state) noexcept {
     state ^= state << 13;
@@ -280,7 +310,9 @@ void ClapSynth::reset() noexcept {
     mainStartSamples_ = 0;
     burstCount_ = 0;
     toneFilterL_.reset();
+    toneMidFilterL_.reset();
     toneBrightFilterL_.reset();
+    impactPhase_ = 0.0f;
     toneHPF_.reset();
     toneLPF_.reset();
     lastToneFrequency_ = -1.0f;
@@ -463,24 +495,12 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
     const float attackSamples = std::max(0.0f, settings.noiseAttackMs * 0.001f * static_cast<float>(sampleRate_));
     const float holdSamples = std::max(0.0f, settings.noiseHoldMs * 0.001f * static_cast<float>(sampleRate_));
     const float decaySamples = std::max(1.0f, settings.noiseDecayMs * 0.001f * static_cast<float>(sampleRate_));
-    float noiseEnv = 0.0f;
-    if (mainAge >= 0.0f && mainAge < attackSamples && attackSamples > 0.0f) {
-        noiseEnv = mainAge / attackSamples;
-    } else if (mainAge >= 0.0f && mainAge < attackSamples + holdSamples) {
-        noiseEnv = 1.0f;
-    } else if (mainAge >= 0.0f) {
-        const float decayT = mainAge - attackSamples - holdSamples;
-        const float linearFraction = std::clamp(decayT / decaySamples, 0.0f, 1.0f);
-        const float expDecay = std::exp(-decayT / std::max(1.0f, decaySamples * 0.35f));
-        const float curve = std::clamp(settings.noiseCurve, -1.0f, 1.0f);
-        if (curve < 0.0f) {
-            noiseEnv = (1.0f + curve) * (1.0f - linearFraction) - curve * expDecay;
-        } else {
-            noiseEnv = (1.0f - curve) * expDecay + curve * (1.0f - linearFraction);
-        }
-    }
+    const float impact = std::clamp(settings.impactPunch, 0.0f, 1.0f);
+    const float noiseEnv = computeNoiseTailEnvelope(
+        mainAge, ampEnabled_, attackSamples, holdSamples, decaySamples, settings.noiseCurve);
 
-    if (ampEnabled_ && mainAge >= 0.0f) noiseEnv = 1.0f;
+    // Impact punch thickens the noise tail subtly into a denser multi-hand slap crowd.
+    const float impactDrive = 1.0f + 1.35f * impact;
 
     const float toneDecaySamples = std::max(1.0f, settings.toneDecayMs * 0.001f * static_cast<float>(sampleRate_));
     const float toneEnv = ampEnabled_ ? 1.0f : std::exp(-std::max(0.0f, mainAge) / toneDecaySamples);
@@ -513,8 +533,14 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
     }
 
     const auto [rawNoiseL, rawNoiseR] = generateNoise(settings.noiseType);
-    const float totalNoiseL = rawNoiseL * noiseEnv * settings.noiseLevel;
-    const float totalNoiseR = rawNoiseR * noiseEnv * settings.noiseLevel;
+    const float shapedNoiseL = impact > 0.001f
+        ? std::tanh(rawNoiseL * impactDrive) / std::tanh(impactDrive)
+        : rawNoiseL;
+    const float shapedNoiseR = impact > 0.001f
+        ? std::tanh(rawNoiseR * impactDrive) / std::tanh(impactDrive)
+        : rawNoiseR;
+    const float totalNoiseL = shapedNoiseL * noiseEnv * settings.noiseLevel;
+    const float totalNoiseR = shapedNoiseR * noiseEnv * settings.noiseLevel;
 
     if (std::abs(settings.noiseHPF - lastHPF_) > 0.1f) {
         lastHPF_ = settings.noiseHPF;
@@ -537,20 +563,36 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
         const float pitchSemitones = std::clamp(settings.tonePitchEnv, -24.0f, 24.0f)
             * std::exp(-std::max(0.0f, mainAge) / pitchDecaySamples);
         const float pitchRatio = std::exp2(pitchSemitones / 12.0f);
-        const float fundamental = std::clamp(midiNoteToHz(midiNote_) * pitchHumanizeRatio_ * pitchRatio, 20.0f, static_cast<float>(sampleRate_) * 0.48f);
+        const float fundamental = std::clamp(midiNoteToHz(midiNote_) * pitchHumanizeRatio_ * pitchRatio,
+                                             20.0f, static_cast<float>(sampleRate_) * 0.48f);
         if (std::abs(fundamental - lastToneFrequency_) > 2.0f || std::abs(settings.toneQ - lastToneQ_) > 0.01f) {
             lastToneFrequency_ = fundamental;
             lastToneQ_ = settings.toneQ;
             computeBandpassCoeffs(lastToneFrequency_, lastToneQ_, sampleRate_, b0_t_, b1_t_, b2_t_, a1_t_, a2_t_);
-            const float brightFreq = std::clamp(lastToneFrequency_ * 4.0f, 1200.0f, static_cast<float>(sampleRate_) * 0.45f);
+            const float midFreq = std::clamp(lastToneFrequency_ * 1.62f, 240.0f, static_cast<float>(sampleRate_) * 0.45f);
+            computeBandpassCoeffs(midFreq, std::max(0.8f, lastToneQ_ * 0.72f), sampleRate_, b0_tm_, b1_tm_, b2_tm_, a1_tm_, a2_tm_);
+            const float brightFreq = std::clamp(lastToneFrequency_ * 3.8f, 1200.0f, static_cast<float>(sampleRate_) * 0.45f);
             const float brightQ = std::max(0.7f, lastToneQ_ * 0.65f);
             computeBandpassCoeffs(brightFreq, brightQ, sampleRate_, b0_tb_, b1_tb_, b2_tb_, a1_tb_, a2_tb_);
         }
         const float impulse = mainAge < 1.0f ? 1.0f : 0.0f;
-        const float exciter = impulse + rawNoiseL * 0.45f;
+        const float exciter = impulse + rawNoiseL * (0.45f + 0.30f * impact);
         const float fundamentalBand = processBiquad(exciter * toneEnv, toneFilterL_, b0_t_, b1_t_, b2_t_, a1_t_, a2_t_) * 2.0f;
+        const float midBand = processBiquad(exciter * toneEnv, toneMidFilterL_, b0_tm_, b1_tm_, b2_tm_, a1_tm_, a2_tm_)
+            * (0.9f + 0.9f * impact);
         const float brightBand = processBiquad(exciter * toneEnv, toneBrightFilterL_, b0_tb_, b1_tb_, b2_tb_, a1_tb_, a2_tb_) * 1.4f;
-        toneSample = fundamentalBand + brightBand;
+        const float sr = static_cast<float>(sampleRate_);
+        const float thumpTime = mainAge / sr;
+        const float thumpEnv = thumpTime < 0.032f ? std::exp(-thumpTime / 0.0085f) : 0.0f;
+        const float thumpHz = std::clamp(fundamental * (0.28f + 0.38f * thumpEnv), 65.0f, 340.0f);
+        impactPhase_ += thumpHz / sr;
+        impactPhase_ -= std::floor(impactPhase_);
+        const float chestSlam = impact > 0.001f
+            ? std::sin(2.0f * pi() * impactPhase_) * thumpEnv * impact * 0.95f
+            : 0.0f;
+        const float rawBody = fundamentalBand + midBand + brightBand + chestSlam;
+        const float satGain = 1.0f + 1.5f * impact;
+        toneSample = impact > 0.001f ? std::tanh(rawBody * satGain) / std::tanh(satGain) : rawBody;
         if (std::abs(settings.toneHPF - lastToneHPF_) > 0.5f || lastToneHPF_ < 0.0f) {
             lastToneHPF_ = settings.toneHPF;
             computeHighpassCoeffs(lastToneHPF_, sampleRate_, b0_th_, b1_th_, b2_th_, a1_th_, a2_th_);

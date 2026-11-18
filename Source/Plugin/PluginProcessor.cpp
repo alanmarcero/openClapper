@@ -272,7 +272,7 @@ void OpenClapperProcessor::getStateInformation(juce::MemoryBlock& destData) {
     syncLocksToState();
     auto state = parameters.copyState();
     state.setProperty("selected_preset", selectedPreset_.load(), nullptr);
-    state.setProperty("clap_bank", 2, nullptr);
+    state.setProperty("clap_bank", 3, nullptr);
     std::unique_ptr<juce::XmlElement> xml(state.createXml());
     copyXmlToBinary(*xml, destData);
 }
@@ -283,10 +283,16 @@ void OpenClapperProcessor::setStateInformation(const void* data, int sizeInBytes
         auto state = juce::ValueTree::fromXml(*xmlState);
         state.removeProperty("locked_wav", nullptr);
         parameters.replaceState(state);
+        const int bank = static_cast<int>(state.getProperty("clap_bank", 0));
+        if (bank < 3 && !state.getChildWithProperty("id", openclapper::params::kImpactPunch).isValid()) {
+            if (auto* impactParam = parameters.getParameter(openclapper::params::kImpactPunch)) {
+                impactParam->setValueNotifyingHost(impactParam->convertTo0to1(0.0f));
+            }
+        }
         loadLocksFromState(state);
         currentProgram_ = std::clamp(static_cast<int>(parameters.getRawParameterValue(openclapper::params::kPreset)->load()),
             0, getNumPrograms() - 1);
-        selectedPreset_ = static_cast<int>(state.getProperty("clap_bank", 0)) == 2
+        selectedPreset_ = bank == 3
             ? std::clamp(static_cast<int>(state.getProperty("selected_preset", currentProgram_.load())),
                          -1, static_cast<int>(openclapper::presets::factoryPresets().size()) - 1)
             : -1;

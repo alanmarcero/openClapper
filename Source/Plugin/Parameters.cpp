@@ -22,11 +22,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kPreLevel, 1 }, "Pre-Clap Level", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.85f));
 
-    // Resonant Body / Tone
+    // Resonant Body / Tone & Impact Slam
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kToneQ, 1 }, "Tone Q", juce::NormalisableRange<float>(0.5f, 12.0f, 0.1f), 3.2f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kToneDecay, 1 }, "Tone Decay", juce::NormalisableRange<float>(15.0f, 600.0f, 1.0f, 0.35f), 120.0f,
+        juce::ParameterID{ kToneDecay, 1 }, "Tone Decay", juce::NormalisableRange<float>(15.0f, 1200.0f, 1.0f, 0.38f), 160.0f,
         juce::AudioParameterFloatAttributes().withLabel("ms")));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kTonePitchEnv, 1 }, "Body Pitch Sweep", juce::NormalisableRange<float>(-24.0f, 24.0f, 0.1f), 0.0f,
@@ -42,6 +42,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
         juce::AudioParameterFloatAttributes().withLabel("Hz")));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kToneLevel, 1 }, "Tone Level", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.75f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ kImpactPunch, 1 }, "Impact", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.45f));
 
     // Noise & Sizzle
     juce::StringArray noiseTypes{ "White", "Pink", "Velvet", "Lo-Fi" };
@@ -51,13 +53,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
         juce::ParameterID{ kNoiseAttack, 1 }, "Noise Attack", juce::NormalisableRange<float>(0.0f, 20.0f, 0.1f), 0.0f,
         juce::AudioParameterFloatAttributes().withLabel("ms")));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kNoiseHold, 1 }, "Noise Hold", juce::NormalisableRange<float>(0.0f, 30.0f, 0.1f), 2.0f,
+        juce::ParameterID{ kNoiseHold, 1 }, "Noise Hold", juce::NormalisableRange<float>(0.0f, 90.0f, 0.1f), 12.0f,
         juce::AudioParameterFloatAttributes().withLabel("ms")));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kNoiseDecay, 1 }, "Noise Decay", juce::NormalisableRange<float>(20.0f, 1000.0f, 1.0f, 0.35f), 180.0f,
+        juce::ParameterID{ kNoiseDecay, 1 }, "Noise Decay", juce::NormalisableRange<float>(20.0f, 2200.0f, 1.0f, 0.38f), 320.0f,
         juce::AudioParameterFloatAttributes().withLabel("ms")));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kNoiseCurve, 1 }, "Noise Curve", juce::NormalisableRange<float>(-1.0f, 1.0f, 0.01f), -0.3f));
+        juce::ParameterID{ kNoiseCurve, 1 }, "Noise Curve", juce::NormalisableRange<float>(-1.0f, 1.0f, 0.01f), -0.25f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kNoiseHPF, 1 }, "Noise HPF", juce::NormalisableRange<float>(20.0f, 2500.0f, 1.0f, 0.35f), 350.0f,
         juce::AudioParameterFloatAttributes().withLabel("Hz")));
@@ -125,12 +127,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kReverbSize, 1 }, "Reverb Size", juce::NormalisableRange<float>(0.1f, 1.0f, 0.01f), 0.65f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kReverbDecay, 1 }, "Reverb Decay", juce::NormalisableRange<float>(50.0f, 2500.0f, 10.0f, 0.35f), 450.0f,
+        juce::ParameterID{ kReverbDecay, 1 }, "Reverb Decay", juce::NormalisableRange<float>(50.0f, 2500.0f, 10.0f, 0.35f), 680.0f,
         juce::AudioParameterFloatAttributes().withLabel("ms")));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kReverbDamp, 1 }, "Reverb Damp", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.4f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kReverbGate, 1 }, "Reverb Gate", juce::NormalisableRange<float>(0.0f, 600.0f, 5.0f), 160.0f,
+        juce::ParameterID{ kReverbGate, 1 }, "Reverb Gate", juce::NormalisableRange<float>(0.0f, 1400.0f, 5.0f), 280.0f,
         juce::AudioParameterFloatAttributes().withLabel("ms")));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kReverbMix, 1 }, "Reverb Mix", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.35f));
@@ -240,6 +242,9 @@ openclapper::core::EngineSettings readSettings(const juce::AudioProcessorValueTr
     s.synth.toneHPF = *apvts.getRawParameterValue(kToneHPF);
     s.synth.toneLPF = *apvts.getRawParameterValue(kToneLPF);
     s.synth.toneLevel = *apvts.getRawParameterValue(kToneLevel);
+    if (const auto* pImpact = apvts.getRawParameterValue(kImpactPunch)) {
+        s.synth.impactPunch = *pImpact;
+    }
 
     // Noise & Sizzle
     s.synth.noiseType = static_cast<openclapper::core::NoiseType>(static_cast<int>(*apvts.getRawParameterValue(kNoiseType)));

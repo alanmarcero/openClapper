@@ -21,6 +21,7 @@ inline constexpr const char* kTonePitchDecay = "tone_pitch_decay";
 inline constexpr const char* kToneHPF = "tone_hpf";
 inline constexpr const char* kToneLPF = "tone_lpf";
 inline constexpr const char* kToneLevel = "tone_level";
+inline constexpr const char* kImpactPunch = "impact_punch";
 
 // Noise & Sizzle
 inline constexpr const char* kNoiseType = "noise_type";
