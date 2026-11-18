@@ -143,6 +143,6 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
-          body: '![openClapper editor](https://raw.githubusercontent.com/alanmarcero/openClapper/${{ github.ref_name }}/assets/openClapper-screenshot.png)'
+          body: '![openClapper editor](https://raw.githubusercontent.com/alanmarcero/openClapper/${{ github.ref_name }}/docs/screenshots/preview.png)'
           files: openClapper-*.zip
           generate_release_notes: true
