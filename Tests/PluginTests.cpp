@@ -183,37 +183,42 @@ TEST_CASE("All factory presets render and use tuned noise", "[plugin][presets]")
 
 }
 
-TEST_CASE("Factory claps leave headroom and finish inside a trance backbeat", "[plugin][bank]") {
+TEST_CASE("Factory claps deliver impactful punch and sustained decay options", "[plugin][bank]") {
     const auto& bank = openclapper::presets::factoryPresets();
-    for (size_t i = 0; i < bank.size(); ++i) {
+    int largeImpactCount = 0;
+    std::ranges::for_each(std::views::iota(size_t{0}, bank.size()), [&](size_t i) {
         INFO(bank[i].name);
         OpenClapperProcessor processor;
         processor.selectPreset(static_cast<int>(i));
         REQUIRE(processor.parameters.getRawParameterValue("amp_enabled")->load() < 0.5f);
-        processor.prepareToPlay(48000, 24000);
-        juce::AudioBuffer<float> audio(2, 24000);
+        const int tailSamples = std::clamp(static_cast<int>(std::ceil((processor.getTailLengthSeconds() + 0.15) * 48000.0)),
+                                           48000, 120000);
+        processor.prepareToPlay(48000, tailSamples);
+        juce::AudioBuffer<float> audio(2, tailSamples);
         juce::MidiBuffer midi;
         midi.addEvent(juce::MidiMessage::noteOn(1, 69, 1.0f), 0);
         processor.processBlock(audio, midi);
         const auto peak = audio.getMagnitude(0, audio.getNumSamples());
         double total = 0, cumulative = 0;
-        std::array<double, 500> byMs{};
-        for (int s = 0; s < audio.getNumSamples(); ++s) {
+        const int msCount = tailSamples / 48;
+        std::vector<double> byMs(static_cast<size_t>(msCount), 0.0);
+        std::ranges::for_each(std::views::iota(0, msCount * 48), [&](int s) {
             const double left = audio.getSample(0, s), right = audio.getSample(1, s);
             byMs[static_cast<size_t>(s / 48)] += left * left + right * right;
-        }
-        for (auto energy : byMs) total += energy;
+        });
+        std::ranges::for_each(byMs, [&](double energy) { total += energy; });
         int endMs = 0;
-        while (endMs < 500 && cumulative < total * 0.99)
+        while (endMs < msCount && cumulative < total * 0.99)
             cumulative += byMs[static_cast<size_t>(endMs++)];
+        if (endMs >= 200) ++largeImpactCount;
         CAPTURE(peak, endMs);
         REQUIRE(std::isfinite(total));
-        REQUIRE(peak > 0.14f);
-        REQUIRE(peak < 1.0f);
-        REQUIRE(endMs > 5);
-        REQUIRE(endMs < 180);
-        REQUIRE(audio.getMagnitude(14400, 9600) < peak * 0.004f);
-    }
+        REQUIRE(peak > 0.25f);
+        REQUIRE(peak <= 1.0f);
+        REQUIRE(endMs >= 75);
+        REQUIRE(audio.getMagnitude(std::max(0, tailSamples - 4800), std::min(4800, tailSamples)) < peak * 0.02f);
+    });
+    REQUIRE(largeImpactCount >= 24);
 }
 
 TEST_CASE("OpenClapperProcessor renders audio upon MIDI note-on", "[plugin]") {
@@ -650,9 +655,9 @@ TEST_CASE("OpenClapper exposes 3-band EQ, main-page Output, and section/per-part
             CHECK(button->isVisible());
         });
 
-    std::ranges::for_each(std::array<const char*, 16>{
-        "lock_pre_bursts", "lock_pre_spread", "lock_tone_level", "lock_tone_q",
-        "lock_noise_type", "lock_noise_decay", "lock_click_level", "lock_reverb_mix",
+    std::ranges::for_each(std::array<const char*, 18>{
+        "lock_pre_bursts", "lock_pre_spread", "lock_tone_level", "lock_tone_q", "lock_impact_punch",
+        "lock_noise_type", "lock_noise_decay", "lock_click_level", "lock_reverb_mix", "lock_reverb_gate",
         "lock_eq_low_db", "lock_eq_low_freq", "lock_eq_mid_db", "lock_eq_high_db",
         "lock_stereo_width", "lock_output_gain", "lock_limiter_ceiling", "lock_limiter_enabled"},
         [&](const char* id) {

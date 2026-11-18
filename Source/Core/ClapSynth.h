@@ -46,21 +46,22 @@ struct ClapSynthSettings {
     float preClapFlamSpread = 0.45f; // 0..1 stereo micro-panning spread
     float preClapLevel = 0.85f;   // 0..1 volume of pre-claps
 
-    // Resonant Body / Tone
+    // Resonant Body / Tone & Impact Slam
     float toneQ = 3.2f;           // 0.5..12.0 resonance
-    float toneDecayMs = 120.0f;   // 15..600 ms tone decay
+    float toneDecayMs = 160.0f;   // 15..1200 ms tone decay
     float tonePitchEnv = 0.0f;    // -24..+24 semitones, decays to the MIDI note
     float tonePitchDecayMs = 28.0f; // 3..600 ms pitch sweep time
     float toneHPF = 20.0f;        // 20..12000 Hz body high-pass
     float toneLPF = 20000.0f;     // 100..20000 Hz body low-pass
     float toneLevel = 0.75f;      // 0..1 level of tone core
+    float impactPunch = 0.45f;    // 0..1 low-mid chest slam & multi-hand slap density
 
     // Noise & Sizzle
     NoiseType noiseType = NoiseType::White;
     float noiseAttackMs = 0.0f;   // 0..20 ms
-    float noiseHoldMs = 2.0f;     // 0..30 ms
-    float noiseDecayMs = 180.0f;  // 20..1000 ms
-    float noiseCurve = -0.3f;     // -1..+1 shape curve (-1 exp, 0 lin, +1 log)
+    float noiseHoldMs = 12.0f;    // 0..90 ms
+    float noiseDecayMs = 320.0f;  // 20..2200 ms
+    float noiseCurve = -0.25f;    // -1..+1 shape curve (-1 exp, 0 lin, +1 sustained shoulder)
     float noiseHPF = 350.0f;      // 20..2500 Hz
     float noiseLPF = 9500.0f;     // 800..20000 Hz
     float noiseStereoWidth = 1.0f;// 0 (mono) .. 2 (ultra-wide)
@@ -207,13 +208,16 @@ private:
     std::array<float, 5> burstPans_{};
 
     BiquadState toneFilterL_{};
+    BiquadState toneMidFilterL_{};
     BiquadState toneBrightFilterL_{};
     BiquadState toneHPF_{};
     BiquadState toneLPF_{};
     float lastToneFrequency_ = -1.0f;
     float lastToneQ_ = -1.0f;
     float b0_t_ = 0.0f, b1_t_ = 0.0f, b2_t_ = 0.0f, a1_t_ = 0.0f, a2_t_ = 0.0f;
+    float b0_tm_ = 0.0f, b1_tm_ = 0.0f, b2_tm_ = 0.0f, a1_tm_ = 0.0f, a2_tm_ = 0.0f;
     float b0_tb_ = 0.0f, b1_tb_ = 0.0f, b2_tb_ = 0.0f, a1_tb_ = 0.0f, a2_tb_ = 0.0f;
+    float impactPhase_ = 0.0f;
     float lastToneHPF_ = -1.0f, lastToneLPF_ = -1.0f;
     float b0_th_ = 0.0f, b1_th_ = 0.0f, b2_th_ = 0.0f, a1_th_ = 0.0f, a2_th_ = 0.0f;
     float b0_tl_ = 1.0f, b1_tl_ = 0.0f, b2_tl_ = 0.0f, a1_tl_ = 0.0f, a2_tl_ = 0.0f;

@@ -402,3 +402,28 @@ TEST_CASE("Full ADSR follows attack decay sustain and a complete twenty second r
     REQUIRE(std::abs(envelope.processSample(settings).left) < 0.00001f);
     REQUIRE_FALSE(envelope.isPlaying());
 }
+
+TEST_CASE("ClapSynth impact punch adds low-mid chest slam and sustained stadium tails", "[core][synth][impact]") {
+    const auto renderEnergy = [](float impactPunch, float noiseDecayMs) {
+        ClapSynth synth;
+        synth.prepare(48000.0);
+        ClapSynthSettings settings;
+        settings.impactPunch = impactPunch;
+        settings.toneDecayMs = 150.0f;
+        settings.noiseDecayMs = noiseDecayMs;
+        settings.noiseCurve = 0.1f;
+        std::vector<float> left, right;
+        synth.renderBlock(left, right, settings, 1.0f, 69);
+        double energy = 0.0;
+        for (float s : left) {
+            REQUIRE(std::isfinite(s));
+            energy += static_cast<double>(s) * s;
+        }
+        return std::pair{ energy, left.size() };
+    };
+
+    const auto [lightEnergy, lightLen] = renderEnergy(0.0f, 180.0f);
+    const auto [heavyEnergy, heavyLen] = renderEnergy(0.85f, 450.0f);
+    REQUIRE(heavyLen > lightLen);
+    REQUIRE(heavyEnergy > lightEnergy * 1.4);
+}
