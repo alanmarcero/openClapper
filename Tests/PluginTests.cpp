@@ -79,11 +79,50 @@ TEST_CASE("OpenClapper exposes automatable body sweep, body filters, and transie
     OpenClapperProcessor processor;
     for (const auto* id : { openclapper::params::kTonePitchEnv, openclapper::params::kTonePitchDecay,
                             openclapper::params::kToneHPF, openclapper::params::kToneLPF,
-                            openclapper::params::kClickDecay }) {
+                            openclapper::params::kClickDecay, openclapper::params::kSlapbackFeedback,
+                            openclapper::params::kClapDoubler, openclapper::params::kPitchHumanize }) {
         auto* parameter = processor.parameters.getParameter(id);
         REQUIRE(parameter != nullptr);
         CHECK(parameter->isAutomatable());
     }
+}
+
+TEST_CASE("Slapback feedback, stereo doubler, and pitch humanize shape output", "[plugin][dsp]") {
+    openclapper::core::SlapbackDelay delayNoFb, delayFb;
+    delayNoFb.prepare(48000.0);
+    delayFb.prepare(48000.0);
+    float l1 = 1.0f, r1 = 1.0f, l2 = 1.0f, r2 = 1.0f;
+    (void)delayNoFb.process(l1, r1, openclapper::core::SlapbackDivision::Sixteenth, 0.5f, 120.0, true, 0.0f);
+    (void)delayFb.process(l2, r2, openclapper::core::SlapbackDivision::Sixteenth, 0.5f, 120.0, true, 0.75f);
+    float lateEnergyNoFb = 0.0f, lateEnergyFb = 0.0f;
+    for (int i = 0; i < 16000; ++i) {
+        l1 = 0.0f; r1 = 0.0f; l2 = 0.0f; r2 = 0.0f;
+        (void)delayNoFb.process(l1, r1, openclapper::core::SlapbackDivision::Sixteenth, 0.5f, 120.0, false, 0.0f);
+        (void)delayFb.process(l2, r2, openclapper::core::SlapbackDivision::Sixteenth, 0.5f, 120.0, false, 0.75f);
+        if (i > 8000) {
+            lateEnergyNoFb += std::abs(l1);
+            lateEnergyFb += std::abs(l2);
+        }
+    }
+    REQUIRE(lateEnergyFb > lateEnergyNoFb + 0.05f);
+
+    OpenClapperProcessor procDry, procDoubler;
+    procDry.prepareToPlay(48000.0, 4096);
+    procDoubler.prepareToPlay(48000.0, 4096);
+    auto* doublerParam = procDoubler.parameters.getParameter(openclapper::params::kClapDoubler);
+    REQUIRE(doublerParam != nullptr);
+    doublerParam->setValueNotifyingHost(1.0f);
+    juce::AudioBuffer<float> bufDry(2, 4096), bufDoubler(2, 4096);
+    juce::MidiBuffer midiDry, midiDoubler;
+    midiDry.addEvent(juce::MidiMessage::noteOn(1, 69, 1.0f), 0);
+    midiDoubler.addEvent(juce::MidiMessage::noteOn(1, 69, 1.0f), 0);
+    procDry.processBlock(bufDry, midiDry);
+    procDoubler.processBlock(bufDoubler, midiDoubler);
+    float diff = 0.0f;
+    for (int i = 0; i < 4096; ++i) {
+        diff += std::abs(bufDry.getSample(0, i) - bufDoubler.getSample(0, i));
+    }
+    REQUIRE(diff > 0.1f);
 }
 
 TEST_CASE("OpenClapperProcessor retains 44 host programs and offers 45 editor presets", "[plugin]") {

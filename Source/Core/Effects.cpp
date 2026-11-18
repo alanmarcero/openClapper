@@ -45,16 +45,16 @@ bool SlapbackDelay::process(
     SlapbackDivision division,
     float mix,
     double bpm,
-    bool trigger) noexcept {
+    bool trigger,
+    float feedback) noexcept {
     if (leftBuffer_.empty() || rightBuffer_.empty()) {
         return false;
     }
 
     const float dryLeft = left;
     const float dryRight = right;
-    leftBuffer_[writeIndex_] = dryLeft;
-    rightBuffer_[writeIndex_] = dryRight;
-    triggerBuffer_[writeIndex_] = trigger ? 1.0f : 0.0f;
+    float writeLeft = dryLeft;
+    float writeRight = dryRight;
 
     constexpr std::array<double, 6> beatFractions = { 0.0, 0.25, 0.375, 0.5, 0.75, 1.0 };
     const auto divisionIndex = static_cast<size_t>(division);
@@ -78,12 +78,19 @@ bool SlapbackDelay::process(
         const float delayedMarker = triggerBuffer_[firstIndex] * (1.0f - fraction) + triggerBuffer_[secondIndex] * fraction;
         delayedTrigger = delayedMarker > 0.0f && !delayTriggerActive_;
         delayTriggerActive_ = delayedMarker > 0.0f;
+        const float clampedFeedback = std::clamp(feedback, 0.0f, 0.85f);
+        writeLeft = std::tanh(dryLeft + delayedLeft * clampedFeedback);
+        writeRight = std::tanh(dryRight + delayedRight * clampedFeedback);
         const float wet = std::clamp(mix, 0.0f, 1.0f);
         left = dryLeft * (1.0f - wet) + delayedLeft * wet;
         right = dryRight * (1.0f - wet) + delayedRight * wet;
     } else {
         delayTriggerActive_ = false;
     }
+
+    leftBuffer_[writeIndex_] = writeLeft;
+    rightBuffer_[writeIndex_] = writeRight;
+    triggerBuffer_[writeIndex_] = trigger ? 1.0f : 0.0f;
 
     writeIndex_ = (writeIndex_ + 1) % leftBuffer_.size();
     return delayedTrigger;

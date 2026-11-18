@@ -44,7 +44,7 @@ double OpenClapperProcessor::getTailLengthSeconds() const {
 
     const bool usesSlapback = value(openclapper::params::kSlapbackDivision) > 0.0f
         && value(openclapper::params::kSlapbackMix) > 0.0f;
-    const double delayTail = usesSlapback ? 4.0 : 0.0;
+    const double delayTail = usesSlapback ? 4.0 * (1.0 + value(openclapper::params::kSlapbackFeedback) * 3.0) : 0.0;
     const double reverseTail = value(openclapper::params::kReverseMode) > 0.0f
         && value(openclapper::params::kReverseMix) > 0.0f
         ? 2.0

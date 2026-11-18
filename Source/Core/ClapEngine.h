@@ -44,6 +44,8 @@ struct ClapEffectSettings {
 
     SlapbackDivision slapbackDivision = SlapbackDivision::Off;
     float slapbackMix = 0.3f;
+    float slapbackFeedback = 0.0f;
+    float doublerAmount = 0.0f;
 
     float reverbSize = 0.65f;
     float reverbDecayMs = 450.0f;
@@ -142,6 +144,9 @@ private:
     // Reverse swell buffer
     std::vector<float> reverseBufferL_;
     std::vector<float> reverseBufferR_;
+    std::vector<float> doublerBufferL_;
+    std::vector<float> doublerBufferR_;
+    size_t doublerWriteIndex_ = 0;
     int reversePlayHead_ = -1;
     int reverseDuration_ = 0;
     bool isReversing_ = false;

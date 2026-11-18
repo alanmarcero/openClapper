@@ -101,8 +101,10 @@ void OpenClapperEditor::paint(juce::Graphics& g) {
     }
     g.setColour(theme::ink);
     g.setFont(juce::FontOptions(32.0f, juce::Font::bold));
-    g.drawText("openClapper", 62, 11, 225, 40, juce::Justification::centredLeft);
+    g.drawText("openClapper", 62, 11, 200, 40, juce::Justification::centredLeft);
     g.setColour(theme::secondary);
+    g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
+    g.drawText("v" JucePlugin_VersionString, 256, 20, 48, 24, juce::Justification::centredLeft);
     g.setFont(juce::FontOptions(14.0f));
     g.drawText("Pitched clap synthesizer", 64, 47, 220, 22, juce::Justification::centredLeft);
     g.setFont(juce::FontOptions(13.0f, juce::Font::bold));

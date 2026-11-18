@@ -143,6 +143,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
         juce::ParameterID{ kSlapbackDivision, 1 }, "Slapback Division", slapbackDivisions, 0));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kSlapbackMix, 1 }, "Slapback Mix", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.3f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ kSlapbackFeedback, 1 }, "Slapback Feedback", juce::NormalisableRange<float>(0.0f, 0.85f, 0.01f), 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ kClapDoubler, 1 }, "Stereo Doubler", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ kPitchHumanize, 1 }, "Pitch Humanize", juce::NormalisableRange<float>(0.0f, 100.0f, 1.0f), 0.0f,
+        juce::AudioParameterFloatAttributes().withLabel("ct")));
 
     // Reverse & Sync
     juce::StringArray revModes{ "Off", "Beat End (Sync)", "Beat 4 Auto", "1/2 Beat", "1/4 Beat" };
@@ -256,6 +263,15 @@ openclapper::core::EngineSettings readSettings(const juce::AudioProcessorValueTr
     s.effects.slapbackDivision = static_cast<openclapper::core::SlapbackDivision>(
         static_cast<int>(*apvts.getRawParameterValue(kSlapbackDivision)));
     s.effects.slapbackMix = *apvts.getRawParameterValue(kSlapbackMix);
+    if (const auto* pFeedback = apvts.getRawParameterValue(kSlapbackFeedback)) {
+        s.effects.slapbackFeedback = *pFeedback;
+    }
+    if (const auto* pDoubler = apvts.getRawParameterValue(kClapDoubler)) {
+        s.effects.doublerAmount = *pDoubler;
+    }
+    if (const auto* pPitchHum = apvts.getRawParameterValue(kPitchHumanize)) {
+        s.synth.pitchHumanizeCents = *pPitchHum;
+    }
 
     s.effects.reverbSize = *apvts.getRawParameterValue(kReverbSize);
     s.effects.reverbDecayMs = *apvts.getRawParameterValue(kReverbDecay);
