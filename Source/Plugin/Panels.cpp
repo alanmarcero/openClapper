@@ -199,7 +199,7 @@ void Waveform::refresh() {
     const auto settings = params::readSettings(processor_.parameters).synth;
     if (previous_ && *previous_ == settings) return;
     previous_ = settings;
-    strikeMs_ = static_cast<float>(settings.preClapCount) * settings.preClapSpreadMs;
+    strikeMs_ = 0.0f;
     durationMs_ = juce::jmax(100, 50 * static_cast<int>(std::ceil(
         (strikeMs_ + std::max(settings.noiseAttackMs + settings.noiseHoldMs + 1.6f * settings.noiseDecayMs,
                               2.5f * settings.toneDecayMs)) / 50.0f)));

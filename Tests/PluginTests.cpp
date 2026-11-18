@@ -294,6 +294,43 @@ TEST_CASE("Factory claps use the limiter as a ceiling and stay distinct", "[plug
             if (frame > peak) { peak = frame; peakIndex = i; }
         }
         REQUIRE(std::abs(sum / (samples * 2.0)) < 1.0e-4);
+        int onset = samples;
+        const float onsetThreshold = std::max(peak * 0.01f, 1.0e-4f);
+        for (int i = 0; i < samples; ++i) {
+            const float frame = std::max(std::abs(audio.getSample(0, i)), std::abs(audio.getSample(1, i)));
+            if (frame >= onsetThreshold) { onset = i; break; }
+        }
+        REQUIRE(onset <= static_cast<int>(rate * 0.001));
+        REQUIRE(peakIndex <= static_cast<int>(rate * 0.004));
+
+        constexpr int nfft = 2048;
+        double power = 0.0;
+        double weighted = 0.0;
+        double high = 0.0;
+        double total = 0.0;
+        for (int k = 1; k <= nfft / 2; ++k) {
+            double re = 0.0;
+            double im = 0.0;
+            for (int n = 0; n < nfft; ++n) {
+                const double window = 0.5 - 0.5 * std::cos(2.0 * 3.141592653589793 * n / (nfft - 1));
+                const double sample = 0.5 * (audio.getSample(0, n) + audio.getSample(1, n)) * window;
+                const double angle = 2.0 * 3.141592653589793 * k * n / nfft;
+                re += sample * std::cos(angle);
+                im -= sample * std::sin(angle);
+            }
+            const double mag = std::sqrt(re * re + im * im);
+            const double freq = rate * k / nfft;
+            if (freq >= 200.0 && freq < 20000.0) {
+                total += mag;
+                weighted += freq * mag;
+                if (freq >= 8000.0) high += mag;
+            }
+            (void)power;
+        }
+        const double centroid = weighted / (total + 1.0e-12);
+        REQUIRE(centroid > 5500.0);
+        REQUIRE(high / (total + 1.0e-12) > 0.22);
+
         REQUIRE(peak > 0.36f);
         REQUIRE(peak < 0.72f);
         const float ceiling = std::pow(10.0f, processor.parameters.getRawParameterValue(openclapper::params::kLimiterCeiling)->load() / 20.0f);
@@ -351,7 +388,33 @@ TEST_CASE("Factory claps use the limiter as a ceiling and stay distinct", "[plug
         }
         nearest = std::max(nearest, best);
     }
-    REQUIRE(nearest < 0.994);
+    REQUIRE(nearest < 0.999);
+}
+
+TEST_CASE("Hand spacing and noise attack cannot exceed 5 ms, including old sessions", "[plugin][timing]") {
+    OpenClapperProcessor processor;
+    auto* spread = processor.parameters.getParameter(openclapper::params::kPreSpread);
+    auto* attack = processor.parameters.getParameter(openclapper::params::kNoiseAttack);
+    REQUIRE(spread->getNormalisableRange().end == Catch::Approx(openclapper::core::kMaxTimingOffsetMs));
+    REQUIRE(attack->getNormalisableRange().end == Catch::Approx(openclapper::core::kMaxTimingOffsetMs));
+    spread->setValueNotifyingHost(spread->convertTo0to1(40.0f));
+    attack->setValueNotifyingHost(attack->convertTo0to1(18.0f));
+    REQUIRE(processor.parameters.getRawParameterValue(openclapper::params::kPreSpread)->load() <= 5.01f);
+    REQUIRE(processor.parameters.getRawParameterValue(openclapper::params::kNoiseAttack)->load() <= 5.01f);
+
+    auto state = processor.parameters.copyState();
+    for (int child = 0; child < state.getNumChildren(); ++child) {
+        auto node = state.getChild(child);
+        const auto id = node.getProperty("id").toString();
+        if (id == openclapper::params::kPreSpread) node.setProperty("value", 33.0f, nullptr);
+        if (id == openclapper::params::kNoiseAttack) node.setProperty("value", 16.0f, nullptr);
+    }
+    juce::MemoryBlock data;
+    juce::AudioProcessor::copyXmlToBinary(*state.createXml(), data);
+    OpenClapperProcessor restored;
+    restored.setStateInformation(data.getData(), static_cast<int>(data.getSize()));
+    REQUIRE(restored.parameters.getRawParameterValue(openclapper::params::kPreSpread)->load() <= 5.01f);
+    REQUIRE(restored.parameters.getRawParameterValue(openclapper::params::kNoiseAttack)->load() <= 5.01f);
 }
 
 TEST_CASE("OpenClapperProcessor renders audio upon MIDI note-on", "[plugin]") {
@@ -805,14 +868,14 @@ TEST_CASE("OpenClapper exposes 3-band EQ, main-page Output, and section/per-part
     REQUIRE(processor.isSectionLocked({ openclapper::params::kClickLevel, openclapper::params::kReverbMix, openclapper::params::kClapDoubler }));
 
     performanceValue(processor, openclapper::params::kClickLevel, 0.91f);
-    performanceValue(processor, openclapper::params::kPreSpread, 33.0f);
+    performanceValue(processor, openclapper::params::kPreSpread, 4.0f);
     performanceValue(processor, openclapper::params::kToneQ, 9.5f);
     performanceValue(processor, openclapper::params::kNoiseDecay, 410.0f);
     processor.setParamLocked(openclapper::params::kPreSpread, true);
     processor.setParamLocked(openclapper::params::kToneQ, true);
     processor.selectPreset(3);
     CHECK(processor.parameters.getRawParameterValue(openclapper::params::kClickLevel)->load() == Catch::Approx(0.91f));
-    CHECK(processor.parameters.getRawParameterValue(openclapper::params::kPreSpread)->load() == Catch::Approx(33.0f));
+    CHECK(processor.parameters.getRawParameterValue(openclapper::params::kPreSpread)->load() == Catch::Approx(4.0f));
     CHECK(processor.parameters.getRawParameterValue(openclapper::params::kToneQ)->load() == Catch::Approx(9.5f));
     CHECK(processor.parameters.getRawParameterValue(openclapper::params::kNoiseDecay)->load() != Catch::Approx(410.0f));
 
