@@ -1,4 +1,4 @@
-# openClapper v3.7.0
+# openClapper v3.8.0
 
 [Install with OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest)
 
@@ -8,7 +8,7 @@ openClapper is a pitched, four-layer clap synthesizer. Play the resonant body fr
 
 ## Choose a clap
 
-The 56 factory sounds span six dance styles: 16 Uplifting and eight each of Rolling, Progressive, Psy, Tech, and Classic. **Previous** and **Next** step through the bank. All factory sounds play as one-shots and are voiced for full club impact and sustained bodies, noise tails, and gated room ambiance.
+The 56 factory sounds span six dance styles: 16 Uplifting and eight each of Rolling, Progressive, Psy, Tech, and Classic. **Previous** and **Next** step through the bank. All factory sounds play as one-shots. They are level-matched, and the limiter is a ceiling above the clap rather than the sound of it.
 
 | Style | Try | Sound |
 | --- | --- | --- |
@@ -52,6 +52,15 @@ MIDI CC 7 adjusts master level and CC 74 controls noise brightness. CC 120 stops
 ## Changes in 3.5
 
 The Sub Thump, Saturated Tri and Cyber Square body voices are removed. They were stacked sine harmonics, which sounded like a synth tone rather than a clap. The tuned body is now always the resonant band-pass voice, and the **Voice** control is gone. Factory presets that used a removed voice now use the band-pass body. Earlier sessions keep every other setting.
+
+## Changes in 3.8
+
+- The tuned body is a short strike plus a wide noise color. It no longer keeps a metallic ring through the decay.
+- Clicks are filtered noise bursts. Hand spacing, body decay, and noise decay still shape the clap.
+- Noise tails fall away smoothly. The room gate closes on a slow curve.
+- Drive no longer shifts the waveform off centre.
+- Factory claps are level-matched, with the limiter sitting above them.
+- Saved sessions keep their parameter values.
 
 ## Changes in 3.7
 

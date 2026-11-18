@@ -30,15 +30,21 @@ namespace {
         return 1.0f;
     }
     const float decayT = mainAge - attackSamples - holdSamples;
-    const float progress = std::clamp(decayT / decaySamples, 0.0f, 1.0f);
-    const float linearEnv = 1.0f - progress;
-    const float endFade = progress > 0.92f ? std::max(0.0f, (1.0f - progress) / 0.08f) : 1.0f;
-    const float expDecay = std::exp(-decayT / std::max(1.0f, decaySamples * 0.50f)) * endFade;
-    const float clampedCurve = std::clamp(curve, -1.0f, 1.0f);
-    if (clampedCurve < 0.0f) {
-        return (1.0f + clampedCurve) * linearEnv - clampedCurve * expDecay;
+    if (decayT >= decaySamples) {
+        return 0.0f;
     }
-    return (1.0f - clampedCurve) * linearEnv + clampedCurve * std::sqrt(std::max(0.0f, linearEnv));
+    // Curve only changes how fast the exponential falls. The tail always
+    // settles to silence instead of holding a shelf and then stopping.
+    const float clampedCurve = std::clamp(curve, -1.0f, 1.0f);
+    const float tauScale = 0.20f + (clampedCurve + 1.0f) * 0.5f * 0.42f;
+    const float tau = std::max(1.0f, decaySamples * tauScale);
+    const float progress = decayT / decaySamples;
+    float window = 1.0f;
+    if (progress > 0.82f) {
+        const float fade = (progress - 0.82f) / 0.18f;
+        window = 0.5f * (1.0f + std::cos(pi() * fade));
+    }
+    return std::exp(-decayT / tau) * window;
 }
 
 // Fast xorshift32 PRNG
@@ -201,10 +207,13 @@ StereoFrame GatedStereoReverb::process(
     // Compute gate envelope with smooth exponential-release damping
     if (gateMs > 0.0f) {
         const float gateSamples = (gateMs * 0.001f) * static_cast<float>(sampleRate);
-        const float releaseSamples = (18.0f * 0.001f) * static_cast<float>(sampleRate);
-        if (static_cast<float>(sampleCounter_) > gateSamples) {
-            const float samplesOver = static_cast<float>(sampleCounter_) - gateSamples;
-            gateEnvelope_ = std::max(0.0f, 1.0f - (samplesOver / releaseSamples));
+        const float releaseSamples = (kReverbGateReleaseMs * 0.001f) * static_cast<float>(sampleRate);
+        const float elapsed = static_cast<float>(sampleCounter_);
+        if (elapsed >= gateSamples + releaseSamples) {
+            gateEnvelope_ = 0.0f;
+        } else if (elapsed > gateSamples) {
+            const float fade = (elapsed - gateSamples) / std::max(1.0f, releaseSamples);
+            gateEnvelope_ = 0.5f * (1.0f + std::cos(pi() * fade));
         } else {
             gateEnvelope_ = 1.0f;
         }
@@ -305,18 +314,24 @@ void ClapSynth::reset() noexcept {
     preHPF_R_.reset();
     preLPF_L_.reset();
     preLPF_R_.reset();
+    preHPF2_L_.reset();
+    preHPF2_R_.reset();
+    preLPF2_L_.reset();
+    preLPF2_R_.reset();
     totalSamplesPlayed_ = 0;
     totalDurationSamples_ = 0;
     mainStartSamples_ = 0;
     burstCount_ = 0;
     toneFilterL_.reset();
-    toneMidFilterL_.reset();
-    toneBrightFilterL_.reset();
-    impactPhase_ = 0.0f;
+    toneBloomFilterL_.reset();
+    clickFilter_.reset();
+    impactLp_ = 0.0f;
     toneHPF_.reset();
     toneLPF_.reset();
     lastToneFrequency_ = -1.0f;
     lastToneQ_ = -1.0f;
+    lastClickFrequency_ = -1.0f;
+    lastClickQ_ = -1.0f;
     lastToneHPF_ = -1.0f;
     lastToneLPF_ = -1.0f;
     lastHPF_ = -1.0f;
@@ -325,6 +340,10 @@ void ClapSynth::reset() noexcept {
     noiseHPF_R_.reset();
     noiseLPF_L_.reset();
     noiseLPF_R_.reset();
+    noiseHPF2_L_.reset();
+    noiseHPF2_R_.reset();
+    noiseLPF2_L_.reset();
+    noiseLPF2_R_.reset();
     pinkLeft_.fill(0.0f);
     pinkRight_.fill(0.0f);
     lofiHeld_ = {};
@@ -499,44 +518,53 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
     const float noiseEnv = computeNoiseTailEnvelope(
         mainAge, ampEnabled_, attackSamples, holdSamples, decaySamples, settings.noiseCurve);
 
-    // Impact punch thickens the noise tail subtly into a denser multi-hand slap crowd.
-    const float impactDrive = 1.0f + 1.35f * impact;
-
     const float toneDecaySamples = std::max(1.0f, settings.toneDecayMs * 0.001f * static_cast<float>(sampleRate_));
     const float toneEnv = ampEnabled_ ? 1.0f : std::exp(-std::max(0.0f, mainAge) / toneDecaySamples);
+    const auto [rawNoiseL, rawNoiseR] = generateNoise(settings.noiseType);
+
     float clickSample = 0.0f;
     const float clickScale = settings.clickType == ClickType::Thump ? 2.5f : 1.0f;
     const float clickDecaySamples = std::max(1.0f, std::clamp(settings.clickDecayMs, 0.2f, 20.0f)
         * clickScale * 0.001f * static_cast<float>(sampleRate_));
-    if (mainAge >= 0.0f && mainAge < clickDecaySamples * 6.0f) {
-        const float clickT = mainAge / static_cast<float>(sampleRate_);
-        const float clickHz = std::min(settings.clickFreqHz, static_cast<float>(sampleRate_) * 0.45f);
+    if (mainAge >= 0.0f && mainAge < clickDecaySamples * 8.0f && settings.clickLevel > 0.001f) {
         const float envFast = std::exp(-mainAge / clickDecaySamples);
+        float clickHz = std::min(settings.clickFreqHz, static_cast<float>(sampleRate_) * 0.45f);
+        float clickQ = 0.7f;
+        float clickGain = 2.4f;
         switch (settings.clickType) {
-            case ClickType::Needle: {
-                clickSample = std::sin(2.0f * pi() * clickHz * clickT) * envFast * settings.clickLevel;
+            case ClickType::Needle:
+                clickQ = 0.55f;
+                clickGain = 2.6f;
                 break;
-            }
-            case ClickType::Crack: {
-                const float phase1 = 2.0f * pi() * clickHz * clickT;
-                const float phase2 = 2.0f * pi() * std::min(clickHz * 1.6f, static_cast<float>(sampleRate_) * 0.45f) * clickT;
-                clickSample = (std::sin(phase1) * 0.6f + std::sin(phase2) * 0.4f) * envFast * settings.clickLevel * 1.3f;
+            case ClickType::Crack:
+                clickQ = 0.72f;
+                clickGain = 2.8f;
                 break;
-            }
-            case ClickType::Thump: {
-                clickSample = std::sin(2.0f * pi() * clickHz * 0.45f * clickT)
-                    * std::exp(-mainAge / (0.002f * static_cast<float>(sampleRate_)))
-                    * settings.clickLevel * 1.2f;
+            case ClickType::Thump:
+                clickHz = std::clamp(clickHz * 0.28f, 140.0f, 480.0f);
+                clickQ = 0.85f;
+                clickGain = 3.0f;
                 break;
-            }
         }
+        if (std::abs(clickHz - lastClickFrequency_) > 0.5f || std::abs(clickQ - lastClickQ_) > 0.01f) {
+            lastClickFrequency_ = clickHz;
+            lastClickQ_ = clickQ;
+            computeBandpassCoeffs(clickHz, clickQ, sampleRate_, b0_c_, b1_c_, b2_c_, a1_c_, a2_c_);
+        }
+        // A wide noise band, not a sine, so the transient cracks instead of ringing.
+        clickSample = processBiquad(rawNoiseL * envFast, clickFilter_, b0_c_, b1_c_, b2_c_, a1_c_, a2_c_)
+            * clickGain * settings.clickLevel;
     }
 
-    const auto [rawNoiseL, rawNoiseR] = generateNoise(settings.noiseType);
-    const float shapedNoiseL = impact > 0.001f
+    // Impact density is an attack-only soft clip. The tail stays unsaturated.
+    const float attackSat = mainAge >= 0.0f
+        ? std::exp(-mainAge / (0.008f * static_cast<float>(sampleRate_)))
+        : 0.0f;
+    const float impactDrive = 1.0f + 0.9f * impact * attackSat;
+    const float shapedNoiseL = (impact > 0.001f && attackSat > 0.05f)
         ? std::tanh(rawNoiseL * impactDrive) / std::tanh(impactDrive)
         : rawNoiseL;
-    const float shapedNoiseR = impact > 0.001f
+    const float shapedNoiseR = (impact > 0.001f && attackSat > 0.05f)
         ? std::tanh(rawNoiseR * impactDrive) / std::tanh(impactDrive)
         : rawNoiseR;
     const float totalNoiseL = shapedNoiseL * noiseEnv * settings.noiseLevel;
@@ -546,15 +574,23 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
         lastHPF_ = settings.noiseHPF;
         computeHighpassCoeffs(lastHPF_, sampleRate_, b0_h_, b1_h_, b2_h_, a1_h_, a2_h_);
     }
-    const float filteredHP_L = processBiquad(totalNoiseL, noiseHPF_L_, b0_h_, b1_h_, b2_h_, a1_h_, a2_h_);
-    const float filteredHP_R = processBiquad(totalNoiseR, noiseHPF_R_, b0_h_, b1_h_, b2_h_, a1_h_, a2_h_);
+    const float filteredHP_L = processBiquad(
+        processBiquad(totalNoiseL, noiseHPF_L_, b0_h_, b1_h_, b2_h_, a1_h_, a2_h_),
+        noiseHPF2_L_, b0_h_, b1_h_, b2_h_, a1_h_, a2_h_);
+    const float filteredHP_R = processBiquad(
+        processBiquad(totalNoiseR, noiseHPF_R_, b0_h_, b1_h_, b2_h_, a1_h_, a2_h_),
+        noiseHPF2_R_, b0_h_, b1_h_, b2_h_, a1_h_, a2_h_);
 
     if (std::abs(settings.noiseLPF - lastLPF_) > 0.1f) {
         lastLPF_ = settings.noiseLPF;
         computeLowpassCoeffs(lastLPF_, sampleRate_, b0_l_, b1_l_, b2_l_, a1_l_, a2_l_);
     }
-    float filteredNoiseL = processBiquad(filteredHP_L, noiseLPF_L_, b0_l_, b1_l_, b2_l_, a1_l_, a2_l_);
-    float filteredNoiseR = processBiquad(filteredHP_R, noiseLPF_R_, b0_l_, b1_l_, b2_l_, a1_l_, a2_l_);
+    float filteredNoiseL = processBiquad(
+        processBiquad(filteredHP_L, noiseLPF_L_, b0_l_, b1_l_, b2_l_, a1_l_, a2_l_),
+        noiseLPF2_L_, b0_l_, b1_l_, b2_l_, a1_l_, a2_l_);
+    float filteredNoiseR = processBiquad(
+        processBiquad(filteredHP_R, noiseLPF_R_, b0_l_, b1_l_, b2_l_, a1_l_, a2_l_),
+        noiseLPF2_R_, b0_l_, b1_l_, b2_l_, a1_l_, a2_l_);
 
     float toneSample = 0.0f;
     if (mainAge >= 0.0f && settings.toneLevel > 0.001f) {
@@ -565,34 +601,35 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
         const float pitchRatio = std::exp2(pitchSemitones / 12.0f);
         const float fundamental = std::clamp(midiNoteToHz(midiNote_) * pitchHumanizeRatio_ * pitchRatio,
                                              20.0f, static_cast<float>(sampleRate_) * 0.48f);
-        if (std::abs(fundamental - lastToneFrequency_) > 2.0f || std::abs(settings.toneQ - lastToneQ_) > 0.01f) {
+        const float toneQ = std::clamp(settings.toneQ, 0.5f, 12.0f);
+        if (std::abs(fundamental - lastToneFrequency_) > 0.4f || std::abs(toneQ - lastToneQ_) > 0.01f) {
             lastToneFrequency_ = fundamental;
-            lastToneQ_ = settings.toneQ;
-            computeBandpassCoeffs(lastToneFrequency_, lastToneQ_, sampleRate_, b0_t_, b1_t_, b2_t_, a1_t_, a2_t_);
-            const float midFreq = std::clamp(lastToneFrequency_ * 1.62f, 240.0f, static_cast<float>(sampleRate_) * 0.45f);
-            computeBandpassCoeffs(midFreq, std::max(0.8f, lastToneQ_ * 0.72f), sampleRate_, b0_tm_, b1_tm_, b2_tm_, a1_tm_, a2_tm_);
-            const float brightFreq = std::clamp(lastToneFrequency_ * 3.8f, 1200.0f, static_cast<float>(sampleRate_) * 0.45f);
-            const float brightQ = std::max(0.7f, lastToneQ_ * 0.65f);
-            computeBandpassCoeffs(brightFreq, brightQ, sampleRate_, b0_tb_, b1_tb_, b2_tb_, a1_tb_, a2_tb_);
+            lastToneQ_ = toneQ;
+            computeBandpassCoeffs(lastToneFrequency_, toneQ, sampleRate_, b0_t_, b1_t_, b2_t_, a1_t_, a2_t_);
+            // Broad presence, not a tuned harmonic. A narrow 1.6x/3.8x stack rang like a bell.
+            const float bloomHz = std::clamp(1100.0f + fundamental * 0.55f, 900.0f, 2800.0f);
+            computeBandpassCoeffs(bloomHz, 0.55f, sampleRate_, b0_tb_, b1_tb_, b2_tb_, a1_tb_, a2_tb_);
         }
-        const float impulse = mainAge < 1.0f ? 1.0f : 0.0f;
-        const float exciter = impulse + rawNoiseL * (0.45f + 0.30f * impact);
-        const float fundamentalBand = processBiquad(exciter * toneEnv, toneFilterL_, b0_t_, b1_t_, b2_t_, a1_t_, a2_t_) * 2.0f;
-        const float midBand = processBiquad(exciter * toneEnv, toneMidFilterL_, b0_tm_, b1_tm_, b2_tm_, a1_tm_, a2_tm_)
-            * (0.9f + 0.9f * impact);
-        const float brightBand = processBiquad(exciter * toneEnv, toneBrightFilterL_, b0_tb_, b1_tb_, b2_tb_, a1_tb_, a2_tb_) * 1.4f;
         const float sr = static_cast<float>(sampleRate_);
-        const float thumpTime = mainAge / sr;
-        const float thumpEnv = thumpTime < 0.032f ? std::exp(-thumpTime / 0.0085f) : 0.0f;
-        const float thumpHz = std::clamp(fundamental * (0.28f + 0.38f * thumpEnv), 65.0f, 340.0f);
-        impactPhase_ += thumpHz / sr;
-        impactPhase_ -= std::floor(impactPhase_);
-        const float chestSlam = impact > 0.001f
-            ? std::sin(2.0f * pi() * impactPhase_) * thumpEnv * impact * 0.95f
-            : 0.0f;
-        const float rawBody = fundamentalBand + midBand + brightBand + chestSlam;
-        const float satGain = 1.0f + 1.5f * impact;
-        toneSample = impact > 0.001f ? std::tanh(rawBody * satGain) / std::tanh(satGain) : rawBody;
+        const float impulse = mainAge < 1.0f ? 1.0f : 0.0f;
+        // The tuned resonator is a short strike. High Q may ring briefly; it is not fed for the whole decay.
+        const float knockEnv = std::exp(-mainAge / std::max(1.0f, (0.0045f + 0.0011f * std::min(toneQ, 8.0f)) * sr));
+        const float knock = processBiquad(impulse + rawNoiseL * knockEnv, toneFilterL_, b0_t_, b1_t_, b2_t_, a1_t_, a2_t_);
+        const float bloomMix = 1.0f / (1.0f + 0.12f * std::max(0.0f, toneQ - 2.0f));
+        const float bloom = processBiquad(rawNoiseL, toneBloomFilterL_, b0_tb_, b1_tb_, b2_tb_, a1_tb_, a2_tb_)
+            * (0.28f * bloomMix);
+        float thump = 0.0f;
+        if (impact > 0.001f && mainAge < 0.050f * sr) {
+            const float lpCoeff = 1.0f - std::exp(-2.0f * pi() * 180.0f / sr);
+            impactLp_ += lpCoeff * (rawNoiseL - impactLp_);
+            const float thumpEnv = std::exp(-mainAge / (0.011f * sr));
+            thump = impactLp_ * thumpEnv * impact * 1.6f;
+        }
+        toneSample = knock * (1.15f + 0.35f * std::min(toneQ, 6.0f) / 6.0f) + bloom + thump;
+        if (impact > 0.001f && knockEnv > 0.08f) {
+            const float satGain = 1.0f + 0.55f * impact * knockEnv;
+            toneSample = std::tanh(toneSample * satGain) / std::tanh(satGain);
+        }
         if (std::abs(settings.toneHPF - lastToneHPF_) > 0.5f || lastToneHPF_ < 0.0f) {
             lastToneHPF_ = settings.toneHPF;
             computeHighpassCoeffs(lastToneHPF_, sampleRate_, b0_th_, b1_th_, b2_th_, a1_th_, a2_th_);
@@ -613,10 +650,18 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
         filteredNoiseR = mid - side;
     }
 
-    const float preHighL = processBiquad(rawNoiseL * burstGainL, preHPF_L_, b0_h_, b1_h_, b2_h_, a1_h_, a2_h_);
-    const float preHighR = processBiquad(rawNoiseR * burstGainR, preHPF_R_, b0_h_, b1_h_, b2_h_, a1_h_, a2_h_);
-    float preLeft = processBiquad(preHighL, preLPF_L_, b0_l_, b1_l_, b2_l_, a1_l_, a2_l_);
-    float preRight = processBiquad(preHighR, preLPF_R_, b0_l_, b1_l_, b2_l_, a1_l_, a2_l_);
+    const float preHighL = processBiquad(
+        processBiquad(rawNoiseL * burstGainL, preHPF_L_, b0_h_, b1_h_, b2_h_, a1_h_, a2_h_),
+        preHPF2_L_, b0_h_, b1_h_, b2_h_, a1_h_, a2_h_);
+    const float preHighR = processBiquad(
+        processBiquad(rawNoiseR * burstGainR, preHPF_R_, b0_h_, b1_h_, b2_h_, a1_h_, a2_h_),
+        preHPF2_R_, b0_h_, b1_h_, b2_h_, a1_h_, a2_h_);
+    float preLeft = processBiquad(
+        processBiquad(preHighL, preLPF_L_, b0_l_, b1_l_, b2_l_, a1_l_, a2_l_),
+        preLPF2_L_, b0_l_, b1_l_, b2_l_, a1_l_, a2_l_);
+    float preRight = processBiquad(
+        processBiquad(preHighR, preLPF_R_, b0_l_, b1_l_, b2_l_, a1_l_, a2_l_),
+        preLPF2_R_, b0_l_, b1_l_, b2_l_, a1_l_, a2_l_);
     const float preMid = (preLeft + preRight) * 0.5f;
     const float preSide = (preLeft - preRight) * 0.5f * settings.noiseStereoWidth;
     preLeft = preMid + preSide;
@@ -628,11 +673,35 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
         {clickSample * layerGains[2], clickSample * layerGains[2]},
         {preLeft * layerGains[3], preRight * layerGains[3]}
     }};
-    if (components != nullptr) *components = layers;
+    // Leave the limiter some room. Factory levels are trimmed again on the way out.
+    constexpr float kHeadroom = 0.30f;
+    std::array<StereoFrame, 4> scaled{};
+    for (size_t layer = 0; layer < layers.size(); ++layer) {
+        scaled[layer].left = layers[layer].left * kHeadroom;
+        scaled[layer].right = layers[layer].right * kHeadroom;
+    }
+    if (!ampEnabled_ && totalDurationSamples_ > 0) {
+        const int fadeSamples = std::max(1, static_cast<int>(0.004 * sampleRate_));
+        const int remaining = totalDurationSamples_ - static_cast<int>(currentSample);
+        if (remaining < fadeSamples) {
+            const float fade = std::clamp(static_cast<float>(remaining) / static_cast<float>(fadeSamples), 0.0f, 1.0f);
+            for (auto& layer : scaled) {
+                layer.left *= fade;
+                layer.right *= fade;
+            }
+        }
+    }
+    if (components != nullptr) *components = scaled;
     StereoFrame mix;
-    for (const auto& layer : layers) {
+    for (const auto& layer : scaled) {
         mix.left += layer.left;
         mix.right += layer.right;
+    }
+    if (!std::isfinite(mix.left) || !std::isfinite(mix.right)) {
+        toneFilterL_.reset();
+        toneBloomFilterL_.reset();
+        clickFilter_.reset();
+        return {};
     }
     return mix;
 }

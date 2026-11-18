@@ -129,6 +129,9 @@ struct AllpassDiffuser {
     }
 };
 
+/** Release time of the room gate, shared with the reported plugin tail. */
+inline constexpr float kReverbGateReleaseMs = 64.0f;
+
 // Algorithmic stereo diffuser / reverb with gate
 class GatedStereoReverb {
 public:
@@ -208,25 +211,32 @@ private:
     std::array<float, 5> burstPans_{};
 
     BiquadState toneFilterL_{};
-    BiquadState toneMidFilterL_{};
-    BiquadState toneBrightFilterL_{};
+    BiquadState toneBloomFilterL_{};
     BiquadState toneHPF_{};
     BiquadState toneLPF_{};
+    BiquadState clickFilter_{};
     float lastToneFrequency_ = -1.0f;
     float lastToneQ_ = -1.0f;
+    float lastClickFrequency_ = -1.0f;
+    float lastClickQ_ = -1.0f;
     float b0_t_ = 0.0f, b1_t_ = 0.0f, b2_t_ = 0.0f, a1_t_ = 0.0f, a2_t_ = 0.0f;
-    float b0_tm_ = 0.0f, b1_tm_ = 0.0f, b2_tm_ = 0.0f, a1_tm_ = 0.0f, a2_tm_ = 0.0f;
     float b0_tb_ = 0.0f, b1_tb_ = 0.0f, b2_tb_ = 0.0f, a1_tb_ = 0.0f, a2_tb_ = 0.0f;
-    float impactPhase_ = 0.0f;
+    float b0_c_ = 0.0f, b1_c_ = 0.0f, b2_c_ = 0.0f, a1_c_ = 0.0f, a2_c_ = 0.0f;
+    float impactLp_ = 0.0f;
     float lastToneHPF_ = -1.0f, lastToneLPF_ = -1.0f;
     float b0_th_ = 0.0f, b1_th_ = 0.0f, b2_th_ = 0.0f, a1_th_ = 0.0f, a2_th_ = 0.0f;
     float b0_tl_ = 1.0f, b1_tl_ = 0.0f, b2_tl_ = 0.0f, a1_tl_ = 0.0f, a2_tl_ = 0.0f;
 
     BiquadState preHPF_L_{}, preHPF_R_{}, preLPF_L_{}, preLPF_R_{};
+    BiquadState preHPF2_L_{}, preHPF2_R_{}, preLPF2_L_{}, preLPF2_R_{};
     BiquadState noiseHPF_L_{};
     BiquadState noiseHPF_R_{};
     BiquadState noiseLPF_L_{};
     BiquadState noiseLPF_R_{};
+    BiquadState noiseHPF2_L_{};
+    BiquadState noiseHPF2_R_{};
+    BiquadState noiseLPF2_L_{};
+    BiquadState noiseLPF2_R_{};
 
     // Filter cache to avoid recalculating biquad trig every sample
     float lastHPF_ = -1.0f;

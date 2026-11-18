@@ -103,6 +103,8 @@ bool SlapbackDelay::process(
 
 void DistortionShaper::reset() noexcept {
     toneFilterState_ = 0.0f;
+    dcX_ = 0.0f;
+    dcY_ = 0.0f;
 }
 
 float DistortionShaper::processSample(
@@ -122,9 +124,10 @@ float DistortionShaper::processSample(
 
     switch (type) {
         case DistortionType::Tape: {
-            // Warm asymmetric soft tape saturation with even-harmonic richness
-            shaped = (std::tanh(x * 1.4f + 0.08f) - std::tanh(0.08f)) * 0.85f;
-            shaped += 0.035f * x * std::abs(x);
+            // Bounded soft clip plus a little even harmonic. The DC blocker
+            // below keeps that warmth from shifting the waveform off centre.
+            const float curved = std::tanh(x * 1.2f);
+            shaped = curved + 0.18f * curved * curved;
             break;
         }
         case DistortionType::Tube: {
@@ -171,7 +174,11 @@ float DistortionShaper::processSample(
         }
     }
 
-    return output;
+    const float dcPole = std::exp(-2.0f * pi() * 25.0f / static_cast<float>(std::max(1.0, sampleRate)));
+    const float blocked = output - dcX_ + dcPole * dcY_;
+    dcX_ = output;
+    dcY_ = blocked;
+    return blocked;
 }
 
 // ============================================================================

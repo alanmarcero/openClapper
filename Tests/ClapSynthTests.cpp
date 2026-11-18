@@ -1,4 +1,5 @@
 #include "ClapSynth.h"
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
 
@@ -132,9 +133,9 @@ TEST_CASE("GatedStereoReverb respects gate cutoff", "[core][synth]") {
     }
     REQUIRE(maxTail > 0.01f);
 
-    // Advance past gate time (50 ms gate + 15ms release = 65 ms = 3120 samples)
+    // Advance past the 50 ms gate plus its release.
     StereoFrame gatedFrame = { 0.0f, 0.0f };
-    for (int i = 0; i < 3000; ++i) {
+    for (int i = 0; i < 8000; ++i) {
         gatedFrame = reverb.process(0.0f, 0.0f, 0.5f, 500.0f, 0.2f, 50.0f, 48000.0);
     }
 
@@ -426,4 +427,89 @@ TEST_CASE("ClapSynth impact punch adds low-mid chest slam and sustained stadium 
     const auto [heavyEnergy, heavyLen] = renderEnergy(0.85f, 450.0f);
     REQUIRE(heavyLen > lightLen);
     REQUIRE(heavyEnergy > lightEnergy * 1.4);
+}
+
+TEST_CASE("Moderate body resonance dies with the strike", "[core][synth][tone]") {
+    const auto render = [](float q) {
+        ClapSynth synth;
+        synth.prepare(48000.0);
+        ClapSynthSettings settings;
+        settings.preClapCount = 0;
+        settings.noiseLevel = 0.0f;
+        settings.clickLevel = 0.0f;
+        settings.impactPunch = 0.0f;
+        settings.toneLevel = 1.0f;
+        settings.toneQ = q;
+        settings.toneDecayMs = 80.0f;
+        settings.toneHPF = 80.0f;
+        settings.toneLPF = 12000.0f;
+        std::vector<float> left, right;
+        synth.renderBlock(left, right, settings, 1.0f, 69);
+        for (float sample : left) REQUIRE(std::isfinite(sample));
+        return left;
+    };
+    const auto salience = [](const std::vector<float>& buffer, int start, int end) {
+        start = std::min(start, static_cast<int>(buffer.size()));
+        end = std::min(end, static_cast<int>(buffer.size()));
+        if (end - start < 64) return 0.0;
+        double mean = 0.0;
+        for (int i = start; i < end; ++i) mean += buffer[i];
+        mean /= (end - start);
+        double power = 0.0;
+        double best = 0.0;
+        for (int i = start; i < end; ++i) {
+            const double value = buffer[i] - mean;
+            power += value * value;
+        }
+        for (int lag = 20; lag < 280; ++lag) {
+            double sum = 0.0;
+            for (int i = start; i + lag < end; ++i)
+                sum += (buffer[i] - mean) * (buffer[i + lag] - mean);
+            best = std::max(best, sum);
+        }
+        return power > 1.0e-8 ? best / power : 0.0;
+    };
+
+    const auto moderate = render(1.4f);
+    const auto resonant = render(9.0f);
+    const double earlyModerate = salience(moderate, 0, 1800);
+    const double earlyResonant = salience(resonant, 0, 1800);
+    const double lateModerate = salience(moderate, 3600, 7000);
+    REQUIRE(earlyResonant > earlyModerate);
+    REQUIRE(lateModerate < 0.45);
+}
+
+TEST_CASE("A full noise curve settles instead of falling off a shelf", "[core][synth][envelope]") {
+    ClapSynth synth;
+    synth.prepare(48000.0);
+    ClapSynthSettings settings;
+    settings.preClapCount = 0;
+    settings.toneLevel = 0.0f;
+    settings.clickLevel = 0.0f;
+    settings.layers[1].solo = true;
+    settings.noiseLevel = 1.0f;
+    settings.noiseHoldMs = 10.0f;
+    settings.noiseDecayMs = 260.0f;
+    settings.noiseCurve = 1.0f;
+    settings.noiseHPF = 180.0f;
+    settings.noiseLPF = 9000.0f;
+    std::vector<float> left, right;
+    synth.renderBlock(left, right, settings, 1.0f, 69);
+
+    constexpr int window = 96;
+    std::vector<float> envelope;
+    for (size_t i = 0; i + window <= left.size(); i += window) {
+        double energy = 0.0;
+        for (int k = 0; k < window; ++k) energy += static_cast<double>(left[i + k]) * left[i + k];
+        envelope.push_back(static_cast<float>(std::sqrt(energy / window)));
+    }
+    const float peak = *std::max_element(envelope.begin(), envelope.end());
+    REQUIRE(peak > 0.02f);
+    float worstDropDb = 0.0f;
+    for (size_t i = 2; i + 4 < envelope.size(); ++i) {
+        if (envelope[i] < peak * 0.18f) continue;
+        const float drop = 20.0f * std::log10((envelope[i] + 1.0e-8f) / (envelope[i + 4] + 1.0e-8f));
+        worstDropDb = std::max(worstDropDb, drop);
+    }
+    REQUIRE(worstDropDb < 9.0f);
 }

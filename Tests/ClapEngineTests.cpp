@@ -140,3 +140,41 @@ TEST_CASE("Switching rolls Off cancels a pending fill", "[performance]") {
     engine.process(settings, transport, {}, channels, 2, 24000);
     REQUIRE(engine.triggerSerial() == 1);
 }
+
+TEST_CASE("A driven clap does not sit off centre or explode", "[core][engine][quality]") {
+    ClapEngine engine;
+    engine.prepare(48000.0);
+    EngineSettings settings;
+    settings.synth.preClapCount = 3;
+    settings.synth.toneLevel = 0.6f;
+    settings.synth.noiseLevel = 0.85f;
+    settings.synth.clickLevel = 0.4f;
+    settings.synth.impactPunch = 0.4f;
+    settings.effects.distType = DistortionType::Tape;
+    settings.effects.distDrive = 0.7f;
+    settings.effects.distMix = 1.0f;
+    settings.effects.distTone = 0.2f;
+    settings.effects.compressor.mix = 0.0f;
+    settings.effects.reverbMix = 0.0f;
+    settings.effects.limiter.enabled = false;
+    settings.effects.outputGainDb = 0.0f;
+
+    constexpr int samples = 24000;
+    std::vector<float> left(samples), right(samples);
+    float* channels[]{left.data(), right.data()};
+    Transport transport;
+    const MidiTrigger trigger{};
+    engine.process(settings, transport, std::span(&trigger, 1), channels, 2, samples);
+
+    double mean = 0.0;
+    float peak = 0.0f;
+    for (int i = 0; i < samples; ++i) {
+        REQUIRE(std::isfinite(left[i]));
+        REQUIRE(std::isfinite(right[i]));
+        mean += static_cast<double>(left[i]) + right[i];
+        peak = std::max(peak, std::max(std::abs(left[i]), std::abs(right[i])));
+    }
+    mean /= static_cast<double>(samples) * 2.0;
+    REQUIRE(peak > 0.02f);
+    REQUIRE(std::abs(mean) < 2.0e-4);
+}
