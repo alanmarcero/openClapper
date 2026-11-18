@@ -149,6 +149,8 @@ private:
     std::vector<float> doublerBufferL_;
     std::vector<float> doublerBufferR_;
     size_t doublerWriteIndex_ = 0;
+    float doublerLpL_ = 0.0f;
+    float doublerLpR_ = 0.0f;
     int reversePlayHead_ = -1;
     int reverseDuration_ = 0;
     bool isReversing_ = false;

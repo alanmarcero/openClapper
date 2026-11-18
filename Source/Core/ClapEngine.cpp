@@ -33,7 +33,7 @@ void ClapEngine::prepare(double sampleRate) {
     const int maxReverseSamples = static_cast<int>(sampleRate * 2.0);
     reverseBufferL_.assign(maxReverseSamples, 0.0f);
     reverseBufferR_.assign(maxReverseSamples, 0.0f);
-    const size_t maxDoublerSamples = std::max<size_t>(16, static_cast<size_t>(sampleRate * 0.025));
+    const size_t maxDoublerSamples = std::max<size_t>(16, static_cast<size_t>(sampleRate * 0.045));
     doublerBufferL_.assign(maxDoublerSamples, 0.0f);
     doublerBufferR_.assign(maxDoublerSamples, 0.0f);
     reset();
@@ -60,6 +60,8 @@ void ClapEngine::reset() noexcept {
     std::fill(doublerBufferL_.begin(), doublerBufferL_.end(), 0.0f);
     std::fill(doublerBufferR_.begin(), doublerBufferR_.end(), 0.0f);
     doublerWriteIndex_ = 0;
+    doublerLpL_ = 0.0f;
+    doublerLpR_ = 0.0f;
     reversePlayHead_ = -1;
     reverseDuration_ = 0;
     isReversing_ = false;
@@ -316,12 +318,16 @@ void ClapEngine::process(
             const size_t bufSize = doublerBufferL_.size();
             doublerBufferL_[doublerWriteIndex_] = sL;
             doublerBufferR_[doublerWriteIndex_] = sR;
-            const size_t tapL = std::clamp<size_t>(static_cast<size_t>(sampleRate_ * 0.0042), 1, bufSize - 1);
-            const size_t tapR = std::clamp<size_t>(static_cast<size_t>(sampleRate_ * 0.0115), 1, bufSize - 1);
+            // Haas offsets, low-passed so the copy widens the clap instead of comb-filtering a metallic ring.
+            const size_t tapL = std::clamp<size_t>(static_cast<size_t>(sampleRate_ * 0.019), 1, bufSize - 1);
+            const size_t tapR = std::clamp<size_t>(static_cast<size_t>(sampleRate_ * 0.029), 1, bufSize - 1);
             const float delayedL = doublerBufferL_[(doublerWriteIndex_ + bufSize - tapL) % bufSize];
             const float delayedR = doublerBufferR_[(doublerWriteIndex_ + bufSize - tapR) % bufSize];
-            sL += delayedR * doubler * 0.45f;
-            sR -= delayedL * doubler * 0.45f;
+            const float lp = 1.0f - std::exp(-2.0f * 3.14159265f * 1800.0f / static_cast<float>(sampleRate_));
+            doublerLpL_ += lp * (delayedL - doublerLpL_);
+            doublerLpR_ += lp * (delayedR - doublerLpR_);
+            sL += doublerLpR_ * doubler * 0.28f;
+            sR += doublerLpL_ * doubler * 0.28f;
             doublerWriteIndex_ = (doublerWriteIndex_ + 1) % bufSize;
         }
 

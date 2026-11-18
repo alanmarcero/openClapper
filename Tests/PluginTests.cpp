@@ -3,9 +3,11 @@
 #include "PluginProcessor.h"
 #include "Presets.h"
 #include <algorithm>
+#include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 #include <cmath>
+#include <numeric>
 #include <ranges>
 #include <utility>
 #include <vector>
@@ -219,6 +221,137 @@ TEST_CASE("Factory claps deliver impactful punch and sustained decay options", "
         REQUIRE(audio.getMagnitude(std::max(0, tailSamples - 4800), std::min(4800, tailSamples)) < peak * 0.02f);
     });
     REQUIRE(largeImpactCount >= 24);
+}
+
+TEST_CASE("Factory claps use the limiter as a ceiling and stay distinct", "[plugin][bank][quality]") {
+    const auto& bank = openclapper::presets::factoryPresets();
+    constexpr double rate = 48000.0;
+    constexpr int samples = 48000;
+    std::vector<std::vector<double>> signatures;
+    std::vector<float> peaks;
+    signatures.reserve(bank.size());
+
+    const auto signature = [](const juce::AudioBuffer<float>& audio) {
+        const int n = audio.getNumSamples();
+        int peakIndex = 0;
+        float peak = 0.0f;
+        for (int i = 0; i < n; ++i) {
+            const float value = std::max(std::abs(audio.getSample(0, i)), std::abs(audio.getSample(1, i)));
+            if (value > peak) { peak = value; peakIndex = i; }
+        }
+        std::vector<double> bands(8, 1.0e-12);
+        const int start = std::max(0, peakIndex - 64);
+        const int end = std::min(n, peakIndex + 7200);
+        for (int i = start; i < end; ++i) {
+            const double sample = 0.5 * (audio.getSample(0, i) + audio.getSample(1, i));
+            const double window = 0.5 - 0.5 * std::cos(2.0 * 3.141592653589793 * (i - start) / std::max(1, end - start - 1));
+            const double weighted = sample * window;
+            const double t = static_cast<double>(i) / rate;
+            for (int band = 0; band < 8; ++band) {
+                const double freq = 180.0 * std::pow(2.0, band * 0.75);
+                bands[static_cast<size_t>(band)] += weighted * std::sin(2.0 * 3.141592653589793 * freq * t);
+            }
+        }
+        for (double& band : bands) band = std::log(std::abs(band) + 1.0e-8);
+        const double mean = std::accumulate(bands.begin(), bands.end(), 0.0) / bands.size();
+        for (double& band : bands) band -= mean;
+        std::array<double, 5> envelope{};
+        for (int bin = 0; bin < 5; ++bin) {
+            const int a = std::min(n - 1, peakIndex + bin * 2400);
+            const int b = std::min(n, a + 2400);
+            double energy = 0.0;
+            for (int i = a; i < b; ++i) {
+                const double sample = audio.getSample(0, i);
+                energy += sample * sample;
+            }
+            envelope[static_cast<size_t>(bin)] = std::log(std::sqrt(energy / std::max(1, b - a)) + 1.0e-8);
+        }
+        const double envMean = std::accumulate(envelope.begin(), envelope.end(), 0.0) / envelope.size();
+        for (double value : envelope) bands.push_back((value - envMean) * 1.2);
+        return bands;
+    };
+
+    for (size_t index = 0; index < bank.size(); ++index) {
+        INFO(bank[index].name);
+        OpenClapperProcessor processor;
+        processor.selectPreset(static_cast<int>(index));
+        processor.prepareToPlay(rate, samples);
+        juce::AudioBuffer<float> audio(2, samples);
+        juce::MidiBuffer midi;
+        midi.addEvent(juce::MidiMessage::noteOn(1, 69, 1.0f), 0);
+        processor.processBlock(audio, midi);
+
+        double sum = 0.0;
+        float peak = 0.0f;
+        int peakIndex = 0;
+        for (int i = 0; i < samples; ++i) {
+            const float left = audio.getSample(0, i);
+            const float right = audio.getSample(1, i);
+            REQUIRE(std::isfinite(left));
+            REQUIRE(std::isfinite(right));
+            sum += static_cast<double>(left) + right;
+            const float frame = std::max(std::abs(left), std::abs(right));
+            if (frame > peak) { peak = frame; peakIndex = i; }
+        }
+        REQUIRE(std::abs(sum / (samples * 2.0)) < 1.0e-4);
+        REQUIRE(peak > 0.36f);
+        REQUIRE(peak < 0.72f);
+        const float ceiling = std::pow(10.0f, processor.parameters.getRawParameterValue(openclapper::params::kLimiterCeiling)->load() / 20.0f);
+        const float output = std::pow(10.0f, processor.parameters.getRawParameterValue(openclapper::params::kOutputGain)->load() / 20.0f);
+        REQUIRE(peak < ceiling * output * std::pow(10.0f, -1.0f / 20.0f));
+
+        std::vector<float> mono(static_cast<size_t>(std::min(samples - peakIndex, 4800)));
+        for (size_t i = 0; i < mono.size(); ++i) {
+            const int at = peakIndex + static_cast<int>(i);
+            mono[i] = 0.5f * (audio.getSample(0, at) + audio.getSample(1, at));
+        }
+        if (mono.size() > 2000) {
+            const auto late = mono.begin() + 1920;
+            double mean = 0.0;
+            for (auto it = late; it != mono.end(); ++it) mean += *it;
+            mean /= static_cast<double>(mono.end() - late);
+            std::vector<double> ac(400, 0.0);
+            double power = 0.0;
+            for (auto it = late; it != mono.end(); ++it) {
+                const double value = *it - mean;
+                power += value * value;
+            }
+            for (int lag = 16; lag < 320; ++lag) {
+                double sumLag = 0.0;
+                for (int i = 0; i + lag < static_cast<int>(mono.end() - late); ++i)
+                    sumLag += (mono[static_cast<size_t>(1920 + i)] - mean) * (mono[static_cast<size_t>(1920 + i + lag)] - mean);
+                ac[static_cast<size_t>(lag)] = sumLag;
+            }
+            const double salience = power > 1.0e-8 ? *std::max_element(ac.begin(), ac.end()) / power : 0.0;
+            REQUIRE(salience < 0.55);
+        }
+        peaks.push_back(peak);
+        signatures.push_back(signature(audio));
+    }
+
+    const auto db = [](float peak) { return 20.0f * std::log10(std::max(peak, 1.0e-8f)); };
+    const auto [low, high] = std::minmax_element(peaks.begin(), peaks.end());
+    REQUIRE(db(*high) - db(*low) > 0.4f);
+
+    const auto cosine = [](const std::vector<double>& a, const std::vector<double>& b) {
+        double dot = 0.0, na = 0.0, nb = 0.0;
+        for (size_t i = 0; i < a.size(); ++i) {
+            dot += a[i] * b[i];
+            na += a[i] * a[i];
+            nb += b[i] * b[i];
+        }
+        return dot / std::sqrt(na * nb + 1.0e-12);
+    };
+    double nearest = 0.0;
+    for (size_t i = 0; i < signatures.size(); ++i) {
+        double best = 0.0;
+        for (size_t j = 0; j < signatures.size(); ++j) {
+            if (i == j) continue;
+            best = std::max(best, cosine(signatures[i], signatures[j]));
+        }
+        nearest = std::max(nearest, best);
+    }
+    REQUIRE(nearest < 0.994);
 }
 
 TEST_CASE("OpenClapperProcessor renders audio upon MIDI note-on", "[plugin]") {

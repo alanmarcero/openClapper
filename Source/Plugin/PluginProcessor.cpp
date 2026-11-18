@@ -62,7 +62,7 @@ double OpenClapperProcessor::getTailLengthSeconds() const {
 
     const double gateMs = value(openclapper::params::kReverbGate);
     if (gateMs > 0.0) {
-        return std::max(effectInputTail, fillTail + delayTail + (gateMs + 18.0) / 1000.0);
+        return std::max(effectInputTail, fillTail + delayTail + (gateMs + openclapper::core::kReverbGateReleaseMs) / 1000.0);
     }
 
     return effectInputTail + value(openclapper::params::kReverbDecay) / 1000.0;

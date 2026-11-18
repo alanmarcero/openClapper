@@ -57,6 +57,8 @@ public:
 
 private:
     float toneFilterState_ = 0.0f;
+    float dcX_ = 0.0f;
+    float dcY_ = 0.0f;
 };
 
 // ============================================================================

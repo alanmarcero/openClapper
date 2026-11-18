@@ -8,118 +8,108 @@ namespace {
 using namespace params;
 using namespace core;
 
-struct Material {
+struct Clap {
+    const char* name;
     NoiseType noise;
     ClickType click;
     DistortionType dist;
-    float bodyLevel, resonance, noiseLevel, clickHz, clickLevel, clickDecayMs, pitchSweep;
-};
-
-constexpr Material palm{NoiseType::Pink,   ClickType::Crack,  DistortionType::Tape,     0.92f, 2.0f, 1.00f, 2400, 0.58f, 2.2f, 7};
-constexpr Material chalk{NoiseType::White, ClickType::Crack,  DistortionType::Tape,     0.88f, 2.2f, 1.00f, 3400, 0.60f, 1.9f, 5};
-constexpr Material rim{NoiseType::Velvet,  ClickType::Crack,  DistortionType::Tube,     0.78f, 2.4f, 0.98f, 4100, 0.62f, 1.7f, 8};
-constexpr Material paper{NoiseType::LoFi,  ClickType::Thump,  DistortionType::HardClip, 0.92f, 1.9f, 0.98f, 2100, 0.56f, 2.5f, 6};
-constexpr Material silk{NoiseType::White,  ClickType::Thump,  DistortionType::Tape,     0.95f, 1.8f, 1.00f, 2000, 0.54f, 2.6f, 8};
-
-struct Clap {
-    const char* name;
-    const Material& material;
     int bursts;
-    float spacingMs, burstDecayMs, jitter, pan, width, bodyMs, noiseMs, lowCutHz, highCutHz, roomMix, gateMs;
-    float roomSize, roomMs, impact, preLevel, noiseHoldMs, noiseCurve, drive, driveMix, doubler, outDb;
+    float spacingMs, burstDecayMs, jitter, pan, preLevel;
+    float toneLevel, resonance, bodyMs, pitchSweep, pitchMs, toneHpf, toneLpf, impact;
+    float noiseLevel, noiseHoldMs, noiseMs, noiseCurve, lowCutHz, highCutHz, width;
+    float noiseAttackMs;
+    float clickHz, clickLevel, clickDecayMs;
+    float drive, driveTone, driveMix;
+    float roomMix, roomSize, roomMs, gateMs, damp;
+    float doubler, humanize, masterWidth, outDb;
+    float compThresh, compRatio, compAttack, compRelease, compMakeup, compMix;
+    float eqLowDb, eqMidDb, eqMidHz, eqHighDb;
 };
 
 constexpr Clap bank[]{
-    // Uplifting: huge layered stadium & euphoric hands-in-the-air trance claps
-    {"Uplifting / Downbeat",       chalk, 4, 10.5f, 12.0f, .18f, .52f, 1.24f, 110, 320, 210, 14500, .32f, 290, .80f,  860, .68f, .92f, 18.0f, -.10f, .34f, .40f, .36f, -0.4f},
-    {"Uplifting / First Light",    silk,  5, 11.5f, 13.5f, .24f, .86f, 1.44f, 145, 420, 190, 15200, .38f, 380, .86f, 1120, .74f, .95f, 24.0f, +.05f, .32f, .38f, .46f, -0.4f},
-    {"Uplifting / Balcony",        silk,  4, 12.8f, 14.5f, .28f, .90f, 1.48f, 165, 460, 200, 14200, .42f, 420, .90f, 1240, .76f, .94f, 26.0f, +.12f, .30f, .36f, .48f, -0.4f},
-    {"Uplifting / Sunlit Palm",    palm,  4, 11.2f, 13.0f, .22f, .78f, 1.32f, 125, 360, 180, 13600, .34f, 320, .82f,  920, .78f, .96f, 20.0f, +.02f, .36f, .42f, .40f, -0.4f},
-    {"Uplifting / Wide Ribbon",    silk,  5, 11.0f, 13.5f, .26f, .98f, 1.56f, 135, 390, 220, 15400, .36f, 350, .85f, 1050, .70f, .95f, 22.0f, +.08f, .32f, .38f, .50f, -0.4f},
-    {"Uplifting / Euphoria",       chalk, 5, 11.4f, 13.0f, .22f, .92f, 1.50f, 150, 480, 220, 15600, .40f, 410, .88f, 1180, .80f, .96f, 26.0f, +.14f, .38f, .44f, .48f, -0.3f},
-    {"Uplifting / High Gallery",   silk,  4, 13.2f, 15.0f, .30f, .84f, 1.44f, 175, 520, 210, 13800, .44f, 460, .92f, 1360, .74f, .94f, 28.0f, +.18f, .30f, .38f, .46f, -0.4f},
-    {"Uplifting / Silver Edge",    rim,   4,  9.8f, 11.0f, .20f, .84f, 1.38f,  95, 290, 280, 15800, .30f, 260, .76f,  780, .62f, .92f, 14.0f, -.12f, .38f, .42f, .38f, -0.3f},
-    {"Uplifting / Morning Sun",    palm,  4, 11.8f, 13.5f, .24f, .70f, 1.28f, 140, 410, 175, 12800, .38f, 360, .84f, 1080, .82f, .95f, 22.0f, +.06f, .34f, .40f, .42f, -0.4f},
-    {"Uplifting / Pure 138",       chalk, 4, 10.6f, 11.8f, .19f, .80f, 1.34f, 115, 340, 230, 14800, .32f, 300, .78f,  860, .72f, .94f, 18.0f, -.04f, .36f, .42f, .40f, -0.3f},
-    {"Uplifting / Opposite Walls", chalk, 3, 14.5f, 13.5f, .20f, 1.0f, 1.60f, 130, 380, 240, 13800, .36f, 340, .86f,  980, .70f, .95f, 20.0f, +.04f, .34f, .38f, .50f, -0.4f},
-    {"Uplifting / Silk Fans",      silk,  5, 11.5f, 13.2f, .26f, .98f, 1.58f, 140, 420, 200, 13000, .36f, 370, .84f, 1060, .74f, .94f, 22.0f, +.10f, .31f, .38f, .48f, -0.4f},
-    {"Uplifting / Skyward",        chalk, 5, 11.8f, 13.8f, .23f, .94f, 1.52f, 160, 500, 230, 15600, .42f, 440, .90f, 1280, .82f, .96f, 28.0f, +.16f, .36f, .42f, .48f, -0.3f},
-    {"Uplifting / Glass Ceiling",  rim,   4, 10.2f, 11.5f, .16f, .78f, 1.34f, 105, 310, 260, 15000, .35f, 310, .80f,  920, .64f, .92f, 16.0f, -.08f, .36f, .40f, .40f, -0.4f},
-    {"Uplifting / Starlight",      palm,  4, 11.4f, 13.0f, .25f, .90f, 1.44f, 135, 390, 200, 14200, .38f, 360, .85f, 1040, .76f, .95f, 22.0f, +.08f, .35f, .40f, .44f, -0.4f},
-    {"Uplifting / Afterglow",      silk,  4, 12.5f, 14.2f, .26f, .76f, 1.38f, 180, 540, 185, 13200, .44f, 480, .92f, 1400, .80f, .94f, 30.0f, +.20f, .32f, .38f, .46f, -0.4f},
-
-    // Rolling: heavy punchy pocket claps with chest weight and distinct flam articulation
-    {"Rolling / Two Hands",        palm,  3, 12.2f, 11.5f, .20f, .62f, 1.12f,  95, 240, 200, 11800, .24f, 200, .66f,  580, .68f, .94f, 14.0f, -.14f, .36f, .42f, .28f, -0.5f},
-    {"Rolling / Sixteenth",        chalk, 2,  8.8f,  8.2f, .10f, .34f,  .96f,  70, 175, 280, 12800, .16f, 145, .54f,  420, .54f, .90f,  9.0f, -.26f, .34f, .40f, .18f, -0.5f},
-    {"Rolling / Pocket Drag",      paper, 3, 13.2f, 12.5f, .28f, .52f, 1.04f, 115, 280, 210, 10400, .26f, 230, .70f,  660, .74f, .94f, 16.0f, -.10f, .40f, .46f, .24f, -0.5f},
-    {"Rolling / Offbeat",          chalk, 3,  9.8f,  9.8f, .16f, .48f, 1.08f,  85, 220, 260, 12400, .20f, 180, .60f,  520, .62f, .92f, 12.0f, -.18f, .35f, .42f, .24f, -0.5f},
-    {"Rolling / Brush Cut",        paper, 3, 10.4f,  9.5f, .20f, .52f, 1.00f,  80, 205, 250, 10800, .18f, 170, .58f,  480, .64f, .92f, 12.0f, -.18f, .38f, .44f, .22f, -0.5f},
-    {"Rolling / Slipstream",       silk,  3, 11.2f, 11.0f, .18f, .60f, 1.18f, 100, 255, 220, 11800, .26f, 210, .68f,  620, .60f, .92f, 14.0f, -.12f, .32f, .38f, .28f, -0.5f},
-    {"Rolling / Soft Shoe",        palm,  3, 10.0f,  9.8f, .17f, .40f,  .94f,  90, 225, 200, 10600, .22f, 185, .62f,  540, .66f, .90f, 13.0f, -.14f, .34f, .40f, .22f, -0.5f},
-    {"Rolling / Clock Hands",      chalk, 3,  8.6f,  8.5f, .08f, .48f,  .98f,  75, 190, 290, 12200, .18f, 160, .56f,  460, .58f, .90f, 10.0f, -.22f, .36f, .42f, .20f, -0.5f},
-
-    // Progressive: warm, heavy chest slam, sculpted wide arena room
-    {"Progressive / Cupped Palm",  palm,  3, 12.0f, 12.8f, .26f, .40f, 1.06f, 135, 310, 165, 10200, .28f, 260, .74f,  780, .78f, .94f, 18.0f, -.04f, .34f, .40f, .28f, -0.5f},
-    {"Progressive / Soft Heel",    silk,  3, 12.4f, 13.2f, .24f, .46f, 1.08f, 150, 350, 175, 10600, .32f, 300, .78f,  860, .72f, .94f, 20.0f, +.04f, .30f, .38f, .30f, -0.5f},
-    {"Progressive / Archway",      silk,  4, 11.8f, 13.0f, .26f, .76f, 1.38f, 165, 420, 190, 12200, .40f, 380, .86f, 1100, .68f, .94f, 24.0f, +.12f, .32f, .38f, .42f, -0.4f},
-    {"Progressive / Shoulder Room",palm,  4, 11.4f, 12.6f, .30f, .84f, 1.32f, 155, 380, 170, 11000, .34f, 320, .80f,  940, .76f, .95f, 20.0f, +.06f, .35f, .42f, .38f, -0.4f},
-    {"Progressive / Felt Pad",     silk,  2, 10.8f, 11.2f, .20f, .38f,  .96f, 120, 270, 180,  9800, .26f, 230, .70f,  720, .68f, .90f, 16.0f, -.06f, .30f, .36f, .22f, -0.5f},
-    {"Progressive / Booth Air",    palm,  3, 11.5f, 12.2f, .22f, .50f, 1.16f, 140, 340, 185, 11400, .36f, 310, .82f,  920, .72f, .92f, 20.0f, +.04f, .32f, .38f, .32f, -0.5f},
-    {"Progressive / Side Street",  paper, 4, 11.6f, 12.6f, .30f, .88f, 1.40f, 150, 390, 220, 10600, .32f, 340, .80f,  980, .78f, .94f, 22.0f, +.08f, .38f, .44f, .36f, -0.4f},
-    {"Progressive / Low Roof",     palm,  4, 12.0f, 13.0f, .24f, .60f, 1.22f, 185, 450, 155, 10000, .38f, 400, .88f, 1160, .82f, .95f, 24.0f, +.14f, .34f, .40f, .34f, -0.4f},
-
-    // Psy: biting stereo-cutting whips backed by solid chest core
-    {"Psy / Fingertips",           rim,   2,  8.2f,  7.8f, .10f, .32f,  .94f,  65, 160, 340, 14200, .18f, 140, .58f,  460, .48f, .90f, 10.0f, -.28f, .38f, .44f, .20f, -0.4f},
-    {"Psy / Tripwire",             rim,   3,  9.8f,  8.8f, .14f, .62f, 1.14f,  78, 195, 310, 13800, .22f, 175, .64f,  560, .55f, .92f, 12.0f, -.22f, .40f, .46f, .28f, -0.4f},
-    {"Psy / Pinwheel",             rim,   3,  9.4f,  8.5f, .16f, .82f, 1.36f,  75, 185, 330, 14400, .22f, 170, .62f,  540, .52f, .92f, 11.0f, -.24f, .38f, .44f, .34f, -0.4f},
-    {"Psy / Ratchet",              rim,   4,  7.8f,  7.5f, .09f, .56f, 1.12f,  65, 155, 360, 14800, .18f, 145, .56f,  480, .54f, .92f, 10.0f, -.28f, .42f, .46f, .28f, -0.3f},
-    {"Psy / Split Second",         rim,   4,  9.4f,  9.2f, .14f, .84f, 1.28f,  85, 220, 290, 14200, .25f, 200, .68f,  640, .58f, .94f, 14.0f, -.18f, .40f, .45f, .34f, -0.4f},
-    {"Psy / Broken Pair",          chalk, 3, 11.2f, 10.5f, .36f, .86f, 1.32f,  95, 250, 260, 13200, .26f, 220, .70f,  700, .64f, .94f, 15.0f, -.14f, .40f, .44f, .32f, -0.4f},
-    {"Psy / Frosted Tile",         chalk, 3,  9.4f,  9.6f, .14f, .70f, 1.38f,  98, 260, 280, 13800, .34f, 240, .76f,  820, .60f, .93f, 16.0f, -.12f, .38f, .44f, .36f, -0.4f},
-    {"Psy / Five Across",          chalk, 5,  9.6f,  9.8f, .20f, .94f, 1.36f, 105, 265, 260, 13400, .28f, 230, .74f,  740, .68f, .95f, 16.0f, -.14f, .40f, .46f, .38f, -0.3f},
-
-    // Tech: slamming, saturated, industrial club & warehouse smashes
-    {"Tech / Dry Chalk",           chalk, 3,  8.8f,  8.8f, .12f, .34f,  .90f,  88, 210, 270, 11800, .18f, 180, .62f,  520, .72f, .92f, 14.0f, -.18f, .44f, .50f, .18f, -0.3f},
-    {"Tech / Concrete",            paper, 3, 11.2f, 12.0f, .22f, .64f, 1.24f, 130, 340, 195,  9800, .38f, 320, .82f,  960, .86f, .96f, 22.0f, +.04f, .48f, .54f, .32f, -0.3f},
-    {"Tech / Front Row",           chalk, 4, 10.2f, 11.0f, .18f, .54f, 1.18f, 115, 290, 220, 14000, .28f, 250, .74f,  760, .78f, .95f, 18.0f, -.08f, .42f, .48f, .28f, -0.3f},
-    {"Tech / Mono Print",          palm,  3,  9.6f,  9.8f, .12f,    0,  .00f, 100, 240, 200, 11200, .18f, 190, .60f,  540, .84f, .94f, 15.0f, -.14f, .44f, .50f, .00f, -0.3f},
-    {"Tech / Short Plate",         chalk, 3, 10.6f, 11.5f, .14f, .56f, 1.28f, 120, 320, 230, 12600, .36f, 290, .80f,  880, .74f, .94f, 18.0f, -.04f, .40f, .46f, .30f, -0.4f},
-    {"Tech / Four Corners",        palm,  4, 10.8f, 11.0f, .22f, .88f, 1.26f, 125, 310, 195, 11800, .28f, 260, .76f,  780, .82f, .95f, 18.0f, -.06f, .44f, .50f, .34f, -0.3f},
-    {"Tech / Loose Knuckle",       paper, 3, 12.2f, 12.2f, .32f, .76f, 1.22f, 135, 340, 210,  9800, .28f, 280, .78f,  840, .84f, .95f, 20.0f, -.02f, .46f, .52f, .30f, -0.4f},
-    {"Tech / Corner Pocket",       paper, 4, 10.4f, 11.2f, .24f, .72f, 1.24f, 145, 370, 225, 10800, .34f, 330, .82f,  960, .88f, .94f, 22.0f, +.04f, .46f, .52f, .30f, -0.3f},
-
-    // Classic: fat 808/909 analog stacks & gated 80s stadium claps
-    {"Classic / Paper Fold",       paper, 4, 10.6f, 11.4f, .20f, .50f, 1.10f, 115, 290, 200, 10400, .26f, 240, .72f,  700, .74f, .94f, 16.0f, -.08f, .40f, .46f, .26f, -0.4f},
-    {"Classic / Wood Block",       paper, 2,  9.4f,  9.5f, .16f, .36f,  .96f,  95, 230, 210,  9600, .24f, 200, .66f,  620, .68f, .90f, 14.0f, -.14f, .38f, .44f, .18f, -0.4f},
-    {"Classic / Lean Back",        silk,  3, 13.0f, 12.6f, .28f, .72f, 1.24f, 135, 360, 185, 11000, .34f, 320, .80f,  940, .70f, .95f, 20.0f, +.04f, .34f, .40f, .34f, -0.4f},
-    {"Classic / Palm Circle",      palm,  5, 10.8f, 12.4f, .32f, .92f, 1.44f, 150, 420, 175, 12000, .38f, 390, .86f, 1140, .80f, .96f, 24.0f, +.10f, .36f, .42f, .42f, -0.3f},
-    {"Classic / Staggered Line",   paper, 4, 11.2f, 11.8f, .28f, .96f, 1.38f, 130, 340, 210, 10800, .32f, 310, .80f,  900, .76f, .94f, 20.0f, +.02f, .38f, .44f, .36f, -0.4f},
-    {"Classic / Upper Deck",       chalk, 5, 11.0f, 11.6f, .24f, .96f, 1.54f, 165, 480, 210, 14400, .42f, 440, .90f, 1300, .78f, .96f, 26.0f, +.16f, .36f, .42f, .44f, -0.3f},
-    {"Classic / Ghost Palm",       palm,  2,  9.0f,  8.8f, .18f, .30f,  .90f,  90, 220, 205, 10200, .20f, 190, .62f,  560, .58f, .90f, 12.0f, -.16f, .34f, .40f, .18f, -0.5f},
-    {"Classic / Last Accent",      palm,  4, 11.2f, 12.2f, .20f, .62f, 1.22f, 140, 380, 190, 11600, .34f, 340, .82f,  980, .76f, .94f, 20.0f, +.06f, .36f, .42f, .34f, -0.4f}
+    {"Uplifting / Downbeat", NoiseType::White, ClickType::Crack, DistortionType::Tape, 2, 7.0f, 4.0f, 0.04f, 0.35f, 0.62f, 0.42f, 1.2f, 28.0f, 6.0f, 16.0f, 220.0f, 11039.833449f, 0.4f, 0.9f, 0.0f, 145.0f, -0.85f, 963.410299f, 9199.861208f, 1.05f, 0.0f, 5200.0f, 0.48f, 0.55f, 0.22f, 0.0f, 0.28f, 0.0f, 0.55f, 420.0f, 90.0f, 0.5f, 0.0f, 5.0f, 1.08f, -0.24f, -12.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.45f, -1.5f, 1.6f, 2800.0f, 1.2f},
+    {"Uplifting / First Light", NoiseType::Pink, ClickType::Thump, DistortionType::Tape, 3, 10.0f, 6.5f, 0.1f, 0.55f, 0.74f, 0.3f, 0.8f, 70.0f, 1.0f, 16.0f, 140.0f, 2576.010658f, 0.12f, 0.78f, 2.0f, 280.0f, -0.28f, 433.318707f, 2146.675548f, 1.25f, 0.0f, 1800.0f, 0.28f, 1.4f, 0.08f, 0.0f, 0.12f, 0.16f, 0.7f, 700.0f, 230.0f, 0.7f, 0.0f, 5.0f, 1.2f, 8.49f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, 0.5f, -0.8f, 1800.0f, -0.4f},
+    {"Uplifting / Balcony", NoiseType::White, ClickType::Needle, DistortionType::Tape, 4, 12.0f, 8.0f, 0.16f, 0.9f, 0.7f, 0.28f, 0.9f, 48.0f, 3.0f, 16.0f, 220.0f, 12170.980698f, 0.18f, 0.8f, 4.0f, 420.0f, -0.12f, 1482.401879f, 10142.483915f, 1.55f, 0.4f, 7000.0f, 0.34f, 0.35f, 0.12f, 0.0f, 0.18f, 0.26f, 0.75f, 900.0f, 380.0f, 0.55f, 0.12f, 5.0f, 1.35f, 1.36f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, -2.5f, 0.2f, 2500.0f, 2.2f},
+    {"Uplifting / Sunlit Palm", NoiseType::Pink, ClickType::Thump, DistortionType::Tape, 5, 18.0f, 7.0f, 0.22f, 0.65f, 0.8f, 0.48f, 1.0f, 55.0f, 2.0f, 16.0f, 160.0f, 2200.0f, 0.34f, 0.86f, 0.0f, 150.0f, -0.55f, 332.001075f, 1800.206049f, 1.45f, 0.0f, 1600.0f, 0.36f, 1.6f, 0.16f, 0.0f, 0.24f, 0.0f, 0.4f, 320.0f, 140.0f, 0.66f, 0.2f, 5.0f, 1.0f, 2.97f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, 1.0f, -1.2f, 3200.0f, -1.5f},
+    {"Uplifting / Wide Ribbon", NoiseType::White, ClickType::Needle, DistortionType::Tape, 3, 14.0f, 11.0f, 0.2f, 1.0f, 0.55f, 0.22f, 0.7f, 22.0f, 8.0f, 16.0f, 220.0f, 2867.44958f, 0.05f, 0.74f, 8.0f, 360.0f, 0.0f, 321.726431f, 2389.541317f, 1.8f, 3.5f, 9000.0f, 0.46f, 0.3f, 0.05f, 0.0f, 0.08f, 0.18f, 0.4f, 320.0f, 340.0f, 0.68f, 0.0f, 12.0f, 1.55f, 3.44f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.1f, -3.5f, 1.2f, 4500.0f, 2.8f},
+    {"Uplifting / Euphoria", NoiseType::White, ClickType::Crack, DistortionType::Tape, 2, 7.0f, 4.0f, 0.04f, 0.7f, 0.62f, 0.36f, 1.15f, 40.0f, 5.0f, 16.0f, 220.0f, 17572.577314f, 0.3f, 0.92f, 0.0f, 145.0f, -0.85f, 1958.162782f, 14643.814429f, 1.3f, 0.0f, 5600.0f, 0.5f, 0.5f, 0.2f, 0.0f, 0.26f, 0.0f, 0.75f, 800.0f, 90.0f, 0.48f, 0.0f, 5.0f, 1.22f, -2.66f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.5f, -1.5f, 2.0f, 3000.0f, 1.8f},
+    {"Uplifting / High Gallery", NoiseType::Pink, ClickType::Crack, DistortionType::Tape, 3, 10.0f, 6.5f, 0.1f, 0.85f, 0.74f, 0.34f, 0.95f, 60.0f, 1.5f, 16.0f, 180.0f, 18000.0f, 0.26f, 0.8f, 2.0f, 280.0f, -0.28f, 2167.853933f, 18000.0f, 1.4f, 0.0f, 3000.0f, 0.32f, 0.9f, 0.12f, 0.0f, 0.18f, 0.16f, 0.9f, 1100.0f, 230.0f, 0.6f, 0.0f, 5.0f, 1.25f, 2.37f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, 0.8f, -0.4f, 2500.0f, 0.2f},
+    {"Uplifting / Silver Edge", NoiseType::Velvet, ClickType::Needle, DistortionType::Tube, 4, 12.0f, 8.0f, 0.16f, 0.3f, 0.7f, 0.2f, 1.4f, 18.0f, 10.0f, 16.0f, 220.0f, 13245.219516f, 0.0f, 0.7f, 4.0f, 420.0f, -0.12f, 2100.764004f, 11037.68293f, 0.9f, 0.4f, 11000.0f, 0.55f, 0.25f, 0.1f, 0.4f, 0.15f, 0.26f, 0.75f, 900.0f, 380.0f, 0.55f, 0.12f, 2.0f, 0.95f, 5.42f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.15f, -4.0f, 2.4f, 5000.0f, 3.0f},
+    {"Uplifting / Morning Sun", NoiseType::Pink, ClickType::Thump, DistortionType::Tape, 5, 18.0f, 7.0f, 0.22f, 0.75f, 0.8f, 0.5f, 0.9f, 64.0f, -2.0f, 16.0f, 130.0f, 7461.667269f, 0.38f, 0.88f, 0.0f, 150.0f, -0.55f, 1172.062464f, 6218.056057f, 1.5f, 0.0f, 1500.0f, 0.4f, 1.8f, 0.18f, 0.0f, 0.3f, 0.0f, 0.6f, 320.0f, 200.0f, 0.64f, 0.2f, 5.0f, 1.0f, 1.38f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, 1.4f, -1.6f, 2400.0f, -1.0f},
+    {"Uplifting / Pure 138", NoiseType::White, ClickType::Crack, DistortionType::Tape, 3, 14.0f, 11.0f, 0.2f, 0.25f, 0.55f, 0.4f, 1.3f, 30.0f, 4.0f, 16.0f, 220.0f, 3194.854518f, 0.36f, 0.9f, 8.0f, 360.0f, 0.0f, 455.929876f, 2662.378765f, 0.95f, 3.5f, 6000.0f, 0.52f, 0.45f, 0.24f, 0.0f, 0.32f, 0.18f, 0.4f, 320.0f, 340.0f, 0.68f, 0.0f, 5.0f, 0.98f, 2.63f, -14.0f, 2.6f, 6.0f, 90.0f, 0.0f, 0.55f, -1.5f, 1.8f, 2200.0f, 0.8f},
+    {"Uplifting / Opposite Walls", NoiseType::White, ClickType::Crack, DistortionType::Tape, 2, 7.0f, 4.0f, 0.04f, 1.0f, 0.62f, 0.26f, 1.0f, 26.0f, 5.0f, 16.0f, 220.0f, 5597.654233f, 0.16f, 0.76f, 0.0f, 145.0f, -0.85f, 633.682186f, 4664.711861f, 1.7f, 0.0f, 4500.0f, 0.44f, 0.5f, 0.12f, 0.0f, 0.18f, 0.0f, 0.4f, 320.0f, 90.0f, 0.62f, 0.0f, 14.0f, 1.6f, 2.93f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.2f, -2.0f, 0.4f, 2500.0f, 1.4f},
+    {"Uplifting / Silk Fans", NoiseType::White, ClickType::Thump, DistortionType::Tape, 3, 10.0f, 6.5f, 0.1f, 0.75f, 0.74f, 0.24f, 0.75f, 80.0f, 0.5f, 16.0f, 220.0f, 7687.851812f, 0.08f, 0.72f, 2.0f, 280.0f, -0.28f, 701.54046f, 6406.543176f, 1.35f, 0.0f, 2000.0f, 0.22f, 1.2f, 0.06f, 0.0f, 0.1f, 0.16f, 0.8f, 1000.0f, 230.0f, 0.72f, 0.0f, 5.0f, 1.0f, 6.59f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, 0.2f, -1.0f, 1600.0f, -0.6f},
+    {"Uplifting / Skyward", NoiseType::White, ClickType::Needle, DistortionType::Tape, 4, 12.0f, 8.0f, 0.16f, 0.8f, 0.7f, 0.32f, 1.25f, 34.0f, 7.0f, 16.0f, 220.0f, 3165.504097f, 0.24f, 0.88f, 4.0f, 420.0f, -0.12f, 272.897789f, 2637.92008f, 1.4f, 0.4f, 8500.0f, 0.5f, 0.35f, 0.16f, 0.35f, 0.22f, 0.26f, 0.75f, 900.0f, 380.0f, 0.55f, 0.12f, 5.0f, 1.3f, 4.14f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, -2.2f, 1.0f, 4000.0f, 2.6f},
+    {"Uplifting / Glass Ceiling", NoiseType::Velvet, ClickType::Needle, DistortionType::Tube, 5, 18.0f, 7.0f, 0.22f, 0.45f, 0.8f, 0.62f, 3.4f, 24.0f, 12.0f, 10.0f, 400.0f, 2361.39275f, 0.0f, 0.48f, 0.0f, 150.0f, -0.55f, 379.291809f, 1967.827291f, 1.2f, 0.0f, 10500.0f, 0.4f, 0.28f, 0.0f, 0.0f, 0.0f, 0.0f, 0.35f, 320.0f, 80.0f, 0.3f, 0.2f, 0.0f, 0.9f, 5.1f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.0f, -3.0f, 1.5f, 5500.0f, 2.4f},
+    {"Uplifting / Starlight", NoiseType::Velvet, ClickType::Crack, DistortionType::Tape, 3, 14.0f, 11.0f, 0.2f, 0.65f, 0.55f, 0.3f, 1.5f, 32.0f, 4.0f, 16.0f, 220.0f, 11317.067308f, 0.14f, 0.66f, 8.0f, 360.0f, 0.0f, 2280.975546f, 9430.889423f, 1.25f, 3.5f, 6400.0f, 0.38f, 0.45f, 0.12f, 0.0f, 0.18f, 0.18f, 0.5f, 320.0f, 340.0f, 0.68f, 0.0f, 5.0f, 1.0f, 6.91f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, -1.8f, 0.6f, 2500.0f, 1.6f},
+    {"Uplifting / Afterglow", NoiseType::Pink, ClickType::Thump, DistortionType::Tape, 2, 7.0f, 4.0f, 0.04f, 0.6f, 0.62f, 0.4f, 0.85f, 90.0f, -1.0f, 16.0f, 150.0f, 6191.597663f, 0.3f, 0.82f, 0.0f, 145.0f, -0.85f, 723.944833f, 5159.664719f, 1.2f, 0.0f, 1700.0f, 0.3f, 1.5f, 0.12f, 0.0f, 0.18f, 0.0f, 0.88f, 1200.0f, 90.0f, 0.68f, 0.0f, 5.0f, 1.18f, 3.03f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, 1.2f, -0.6f, 2500.0f, -0.2f},
+    {"Rolling / Two Hands", NoiseType::Pink, ClickType::Crack, DistortionType::Tape, 3, 10.0f, 6.5f, 0.1f, 0.55f, 0.74f, 0.36f, 1.0f, 30.0f, 2.0f, 16.0f, 220.0f, 9000.461942f, 0.28f, 0.8f, 2.0f, 280.0f, -0.28f, 994.177738f, 7500.384952f, 0.85f, 0.0f, 3400.0f, 0.42f, 0.7f, 0.14f, 0.0f, 0.2f, 0.16f, 0.4f, 320.0f, 230.0f, 0.62f, 0.0f, 5.0f, 0.9f, 4.59f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, -0.4f, 0.8f, 2500.0f, 0.6f},
+    {"Rolling / Sixteenth", NoiseType::White, ClickType::Needle, DistortionType::Tape, 4, 12.0f, 8.0f, 0.16f, 0.15f, 0.7f, 0.22f, 1.2f, 16.0f, 8.0f, 16.0f, 220.0f, 3749.08272f, 0.1f, 0.78f, 4.0f, 420.0f, -0.12f, 386.733085f, 3124.2356f, 0.7f, 0.4f, 8000.0f, 0.5f, 0.28f, 0.1f, 0.0f, 0.14f, 0.26f, 0.75f, 900.0f, 380.0f, 0.55f, 0.12f, 5.0f, 0.8f, 8.4f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.15f, -2.5f, 1.0f, 4000.0f, 1.8f},
+    {"Rolling / Pocket Drag", NoiseType::LoFi, ClickType::Thump, DistortionType::HardClip, 3, 18.0f, 7.0f, 0.22f, 0.6f, 0.8f, 0.32f, 0.8f, 40.0f, -3.0f, 16.0f, 220.0f, 3120.0f, 0.2f, 0.74f, 0.0f, 220.0f, -0.35f, 280.0f, 2600.0f, 1.15f, 0.0f, 1400.0f, 0.34f, 1.3f, 0.28f, -0.25f, 0.34f, 0.0f, 0.4f, 320.0f, 120.0f, 0.62f, 0.2f, 16.0f, 1.0f, 3.91f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, 0.6f, -0.8f, 2000.0f, -2.2f},
+    {"Rolling / Offbeat", NoiseType::White, ClickType::Crack, DistortionType::Tape, 3, 14.0f, 11.0f, 0.2f, 0.4f, 0.55f, 0.3f, 1.1f, 24.0f, 3.0f, 16.0f, 220.0f, 3835.464083f, 0.22f, 0.82f, 8.0f, 360.0f, 0.0f, 595.067182f, 3196.220069f, 0.95f, 3.5f, 5000.0f, 0.4f, 0.5f, 0.12f, 0.0f, 0.18f, 0.18f, 0.4f, 320.0f, 340.0f, 0.68f, 0.0f, 5.0f, 1.0f, 7.71f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, -1.5f, 1.2f, 2600.0f, 0.6f},
+    {"Rolling / Brush Cut", NoiseType::Velvet, ClickType::Crack, DistortionType::Tape, 2, 7.0f, 4.0f, 0.04f, 0.3f, 0.62f, 0.26f, 1.3f, 20.0f, 4.0f, 16.0f, 220.0f, 17362.022832f, 0.08f, 0.68f, 0.0f, 145.0f, -0.85f, 1453.878432f, 14468.35236f, 0.8f, 0.0f, 4200.0f, 0.36f, 0.4f, 0.08f, 0.0f, 0.12f, 0.0f, 0.4f, 320.0f, 90.0f, 0.62f, 0.0f, 5.0f, 1.0f, 5.55f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, -1.0f, 0.4f, 2500.0f, -0.8f},
+    {"Rolling / Slipstream", NoiseType::White, ClickType::Crack, DistortionType::Tape, 3, 10.0f, 6.5f, 0.1f, 0.5f, 0.74f, 0.34f, 1.0f, 36.0f, 2.0f, 16.0f, 220.0f, 10070.443681f, 0.18f, 0.8f, 2.0f, 280.0f, -0.28f, 1408.884348f, 8392.0364f, 1.15f, 0.0f, 4600.0f, 0.38f, 0.6f, 0.12f, 0.0f, 0.18f, 0.16f, 0.4f, 320.0f, 230.0f, 0.55f, 0.0f, 5.0f, 1.0f, 2.96f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, -1.5f, 0.4f, 2500.0f, 0.4f},
+    {"Rolling / Soft Shoe", NoiseType::Pink, ClickType::Thump, DistortionType::Tape, 4, 12.0f, 8.0f, 0.16f, 0.25f, 0.7f, 0.44f, 0.75f, 48.0f, -1.0f, 16.0f, 140.0f, 2200.0f, 0.3f, 0.76f, 4.0f, 420.0f, -0.12f, 315.535972f, 1431.547504f, 0.7f, 0.4f, 1300.0f, 0.32f, 1.6f, 0.1f, 0.0f, 0.16f, 0.26f, 0.75f, 900.0f, 380.0f, 0.55f, 0.12f, 5.0f, 1.0f, 7.28f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, 1.0f, -1.0f, 3000.0f, -1.8f},
+    {"Rolling / Clock Hands", NoiseType::White, ClickType::Needle, DistortionType::Tape, 5, 18.0f, 7.0f, 0.22f, 0.45f, 0.8f, 0.28f, 1.4f, 18.0f, 5.0f, 16.0f, 220.0f, 8879.189704f, 0.14f, 0.86f, 0.0f, 150.0f, -0.55f, 1529.743816f, 7399.324753f, 1.05f, 0.0f, 7500.0f, 0.48f, 0.32f, 0.18f, 0.0f, 0.22f, 0.0f, 0.4f, 320.0f, 120.0f, 0.62f, 0.2f, 0.0f, 0.75f, 4.73f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.4f, -1.5f, 1.4f, 3500.0f, 1.0f},
+    {"Progressive / Cupped Palm", NoiseType::Pink, ClickType::Thump, DistortionType::Tape, 3, 14.0f, 11.0f, 0.2f, 0.15f, 0.55f, 0.55f, 0.7f, 50.0f, -2.0f, 16.0f, 110.0f, 9900.294171f, 0.42f, 0.7f, 8.0f, 360.0f, 0.0f, 843.290699f, 8250.245142f, 0.55f, 3.5f, 1200.0f, 0.38f, 1.8f, 0.12f, 0.0f, 0.2f, 0.18f, 0.4f, 320.0f, 340.0f, 0.68f, 0.0f, 5.0f, 0.65f, 5.59f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, 1.6f, -1.4f, 2800.0f, -3.0f},
+    {"Progressive / Soft Heel", NoiseType::Pink, ClickType::Thump, DistortionType::Tape, 2, 7.0f, 4.0f, 0.04f, 0.3f, 0.62f, 0.4f, 0.8f, 60.0f, 0.0f, 16.0f, 220.0f, 5552.441228f, 0.2f, 0.78f, 0.0f, 145.0f, -0.85f, 470.490437f, 4627.034356f, 0.9f, 0.0f, 1600.0f, 0.26f, 1.4f, 0.12f, 0.0f, 0.18f, 0.0f, 0.55f, 320.0f, 90.0f, 0.7f, 0.0f, 5.0f, 1.0f, 5.3f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, 0.8f, -0.6f, 2500.0f, -1.2f},
+    {"Progressive / Archway", NoiseType::White, ClickType::Crack, DistortionType::Tape, 3, 10.0f, 6.5f, 0.1f, 0.6f, 0.74f, 0.36f, 1.05f, 46.0f, 2.0f, 16.0f, 220.0f, 10466.982721f, 0.18f, 0.82f, 2.0f, 280.0f, -0.28f, 1996.579717f, 8722.485601f, 1.2f, 0.0f, 4000.0f, 0.36f, 0.7f, 0.12f, 0.0f, 0.18f, 0.16f, 0.8f, 900.0f, 230.0f, 0.52f, 0.0f, 5.0f, 1.15f, 1.6f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, -1.5f, 0.6f, 2500.0f, 0.8f},
+    {"Progressive / Shoulder Room", NoiseType::Pink, ClickType::Crack, DistortionType::Tape, 4, 12.0f, 8.0f, 0.16f, 0.7f, 0.7f, 0.42f, 0.95f, 55.0f, 1.0f, 16.0f, 220.0f, 5908.063648f, 0.32f, 0.8f, 4.0f, 420.0f, -0.12f, 1113.935758f, 4923.386373f, 1.15f, 0.4f, 2800.0f, 0.34f, 0.9f, 0.12f, 0.0f, 0.18f, 0.26f, 0.75f, 900.0f, 380.0f, 0.55f, 0.12f, 5.0f, 1.0f, 9.53f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, 0.6f, 0.2f, 2500.0f, 0.6f},
+    {"Progressive / Felt Pad", NoiseType::LoFi, ClickType::Thump, DistortionType::Tape, 5, 18.0f, 7.0f, 0.22f, 0.45f, 0.8f, 0.36f, 0.65f, 40.0f, -4.0f, 16.0f, 220.0f, 2589.051383f, 0.16f, 0.64f, 0.0f, 150.0f, -0.55f, 281.613044f, 2157.542819f, 0.9f, 0.0f, 1100.0f, 0.3f, 1.5f, 0.14f, -0.4f, 0.22f, 0.0f, 0.35f, 320.0f, 140.0f, 0.8f, 0.2f, 5.0f, 0.6f, 6.44f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, 0.4f, -1.8f, 2500.0f, -3.2f},
+    {"Progressive / Booth Air", NoiseType::White, ClickType::Crack, DistortionType::Tape, 3, 14.0f, 11.0f, 0.2f, 0.45f, 0.55f, 0.32f, 1.1f, 38.0f, 3.0f, 16.0f, 220.0f, 11753.045236f, 0.16f, 0.8f, 8.0f, 360.0f, 0.0f, 1195.057002f, 9794.204364f, 1.2f, 3.5f, 5200.0f, 0.4f, 0.55f, 0.12f, 0.0f, 0.18f, 0.18f, 0.6f, 320.0f, 340.0f, 0.68f, 0.0f, 5.0f, 1.0f, 3.35f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, -1.5f, 0.8f, 3200.0f, 1.2f},
+    {"Progressive / Side Street", NoiseType::LoFi, ClickType::Crack, DistortionType::Tape, 2, 7.0f, 4.0f, 0.04f, 0.8f, 0.62f, 0.3f, 0.9f, 34.0f, 1.0f, 16.0f, 220.0f, 18000.0f, 0.14f, 0.76f, 0.0f, 145.0f, -0.85f, 1660.97107f, 16140.36651f, 1.25f, 0.0f, 2600.0f, 0.36f, 0.8f, 0.2f, 0.0f, 0.28f, 0.0f, 0.5f, 320.0f, 90.0f, 0.6f, 0.0f, 18.0f, 1.0f, 1.14f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, -1.5f, -0.4f, 2500.0f, -0.6f},
+    {"Progressive / Low Roof", NoiseType::Pink, ClickType::Thump, DistortionType::Tape, 3, 10.0f, 6.5f, 0.1f, 0.4f, 0.74f, 0.48f, 0.8f, 75.0f, -2.0f, 16.0f, 120.0f, 3296.462247f, 0.4f, 0.84f, 2.0f, 280.0f, -0.28f, 646.114313f, 2747.051872f, 0.95f, 0.0f, 1400.0f, 0.36f, 1.7f, 0.12f, 0.0f, 0.18f, 0.16f, 0.45f, 700.0f, 230.0f, 0.74f, 0.0f, 5.0f, 1.0f, 6.81f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, 1.8f, -1.2f, 2200.0f, -2.0f},
+    {"Psy / Fingertips", NoiseType::Velvet, ClickType::Needle, DistortionType::Tape, 4, 12.0f, 8.0f, 0.16f, 0.25f, 0.7f, 0.18f, 1.3f, 16.0f, 9.0f, 16.0f, 220.0f, 6392.073822f, 0.0f, 0.72f, 4.0f, 420.0f, -0.12f, 1272.606448f, 5326.728185f, 0.85f, 0.4f, 10000.0f, 0.52f, 0.22f, 0.06f, 0.0f, 0.1f, 0.26f, 0.75f, 900.0f, 380.0f, 0.55f, 0.12f, 5.0f, 0.85f, 9.01f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.1f, -3.5f, 1.6f, 4800.0f, 2.4f},
+    {"Psy / Tripwire", NoiseType::White, ClickType::Needle, DistortionType::Tape, 5, 18.0f, 7.0f, 0.22f, 0.8f, 0.8f, 0.24f, 1.4f, 18.0f, 7.0f, 16.0f, 220.0f, 2908.638752f, 0.08f, 0.8f, 0.0f, 150.0f, -0.55f, 399.08378f, 2423.865627f, 1.55f, 0.0f, 8800.0f, 0.48f, 0.3f, 0.12f, 0.0f, 0.18f, 0.0f, 0.4f, 320.0f, 70.0f, 0.35f, 0.2f, 5.0f, 1.0f, 7.54f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, -2.8f, 1.2f, 4200.0f, 2.0f},
+    {"Psy / Pinwheel", NoiseType::White, ClickType::Crack, DistortionType::Tape, 4, 13.0f, 11.0f, 0.2f, 1.0f, 0.55f, 0.2f, 1.2f, 18.0f, 6.0f, 16.0f, 220.0f, 5040.0f, 0.05f, 0.76f, 6.0f, 400.0f, -0.1f, 500.0f, 4200.0f, 1.6f, 3.5f, 7000.0f, 0.42f, 0.35f, 0.12f, 0.0f, 0.18f, 0.3f, 0.4f, 320.0f, 400.0f, 0.68f, 0.0f, 5.0f, 1.45f, 4.97f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, -2.2f, 0.4f, 2500.0f, 1.6f},
+    {"Psy / Ratchet", NoiseType::White, ClickType::Needle, DistortionType::HardClip, 5, 5.5f, 4.0f, 0.04f, 0.4f, 0.62f, 0.16f, 1.5f, 14.0f, 4.0f, 16.0f, 220.0f, 18000.0f, 0.06f, 0.62f, 0.0f, 160.0f, -0.8f, 2200.0f, 16000.0f, 0.9f, 0.0f, 9500.0f, 0.58f, 0.22f, 0.12f, 0.3f, 0.16f, 0.0f, 0.4f, 320.0f, 90.0f, 0.62f, 0.0f, 0.0f, 0.85f, -1.11f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.3f, -3.0f, 0.8f, 3800.0f, 1.4f},
+    {"Psy / Split Second", NoiseType::White, ClickType::Crack, DistortionType::Tape, 3, 10.0f, 6.5f, 0.1f, 0.7f, 0.74f, 0.26f, 1.25f, 22.0f, 5.0f, 16.0f, 220.0f, 2837.935841f, 0.12f, 0.8f, 2.0f, 280.0f, -0.28f, 238.872438f, 2364.946534f, 1.25f, 0.0f, 6200.0f, 0.44f, 0.4f, 0.12f, 0.0f, 0.18f, 0.16f, 0.4f, 320.0f, 230.0f, 0.4f, 0.0f, 5.0f, 1.0f, 5.78f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, -1.5f, 0.6f, 2500.0f, 1.2f},
+    {"Psy / Broken Pair", NoiseType::LoFi, ClickType::Crack, DistortionType::Tape, 4, 12.0f, 8.0f, 0.16f, 0.85f, 0.7f, 0.22f, 0.9f, 22.0f, 2.0f, 16.0f, 220.0f, 2200.0f, 0.1f, 0.7f, 4.0f, 420.0f, -0.12f, 234.276205f, 1642.296766f, 1.3f, 0.4f, 3600.0f, 0.34f, 0.55f, 0.22f, 0.0f, 0.3f, 0.26f, 0.75f, 900.0f, 380.0f, 0.55f, 0.12f, 20.0f, 1.0f, 7.78f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, -1.5f, 0.2f, 2500.0f, -0.4f},
+    {"Psy / Frosted Tile", NoiseType::Velvet, ClickType::Needle, DistortionType::Tube, 5, 18.0f, 7.0f, 0.22f, 0.75f, 0.8f, 0.28f, 1.8f, 20.0f, 8.0f, 16.0f, 220.0f, 3044.348742f, 0.04f, 0.68f, 0.0f, 150.0f, -0.55f, 565.555705f, 2536.957285f, 1.6f, 0.0f, 9800.0f, 0.4f, 0.26f, 0.12f, 0.0f, 0.18f, 0.0f, 0.3f, 240.0f, 90.0f, 0.25f, 0.2f, 5.0f, 1.0f, 9.21f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, -2.6f, 1.4f, 5200.0f, 2.2f},
+    {"Psy / Five Across", NoiseType::White, ClickType::Crack, DistortionType::Tape, 3, 14.0f, 11.0f, 0.2f, 0.95f, 0.55f, 0.24f, 1.15f, 24.0f, 4.0f, 16.0f, 220.0f, 15032.846837f, 0.14f, 0.82f, 8.0f, 360.0f, 0.0f, 1381.775479f, 12527.372364f, 1.45f, 3.5f, 5400.0f, 0.46f, 0.42f, 0.12f, 0.0f, 0.18f, 0.18f, 0.4f, 320.0f, 340.0f, 0.68f, 0.0f, 5.0f, 1.35f, -0.14f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, -1.5f, 0.8f, 3000.0f, 1.0f},
+    {"Tech / Dry Chalk", NoiseType::White, ClickType::Crack, DistortionType::Tape, 2, 7.0f, 4.0f, 0.04f, 0.2f, 0.62f, 0.4f, 1.2f, 26.0f, 4.0f, 16.0f, 220.0f, 6901.843155f, 0.34f, 0.9f, 0.0f, 145.0f, -0.85f, 614.071228f, 5751.535962f, 0.7f, 0.0f, 5000.0f, 0.5f, 0.5f, 0.26f, 0.0f, 0.34f, 0.0f, 0.4f, 320.0f, 90.0f, 0.62f, 0.0f, 5.0f, 0.8f, 6.41f, -10.0f, 2.8f, 6.0f, 90.0f, 0.0f, 0.5f, -1.0f, 1.6f, 2400.0f, 0.4f},
+    {"Tech / Concrete", NoiseType::LoFi, ClickType::Thump, DistortionType::HardClip, 3, 10.0f, 6.5f, 0.1f, 0.35f, 0.74f, 0.46f, 0.85f, 48.0f, -2.0f, 16.0f, 160.0f, 3376.74772f, 0.48f, 0.8f, 2.0f, 280.0f, -0.28f, 338.51456f, 2813.956433f, 1.0f, 0.0f, 1500.0f, 0.4f, 1.4f, 0.34f, -0.15f, 0.4f, 0.16f, 0.55f, 600.0f, 230.0f, 0.7f, 0.0f, 5.0f, 1.0f, 3.39f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, 0.4f, -0.6f, 2000.0f, -1.6f},
+    {"Tech / Front Row", NoiseType::White, ClickType::Needle, DistortionType::Tape, 4, 12.0f, 8.0f, 0.16f, 0.4f, 0.7f, 0.3f, 1.3f, 24.0f, 6.0f, 16.0f, 220.0f, 6841.171417f, 0.2f, 0.86f, 4.0f, 420.0f, -0.12f, 827.064628f, 5700.97618f, 1.05f, 0.4f, 7800.0f, 0.52f, 0.32f, 0.18f, 0.25f, 0.24f, 0.26f, 0.75f, 900.0f, 380.0f, 0.55f, 0.12f, 5.0f, 1.0f, 6.13f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, -1.8f, 1.4f, 3600.0f, 2.0f},
+    {"Tech / Mono Print", NoiseType::Pink, ClickType::Crack, DistortionType::Tape, 5, 18.0f, 7.0f, 0.22f, 0.25f, 0.8f, 0.44f, 1.05f, 28.0f, 2.0f, 16.0f, 220.0f, 8557.745464f, 0.36f, 0.88f, 0.0f, 150.0f, -0.55f, 801.468942f, 7131.454553f, 0.4f, 0.0f, 3600.0f, 0.46f, 0.6f, 0.2f, 0.0f, 0.3f, 0.0f, 0.4f, 320.0f, 120.0f, 0.62f, 0.2f, 0.0f, 0.0f, 3.98f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.45f, -0.5f, 1.0f, 2500.0f, 0.6f},
+    {"Tech / Short Plate", NoiseType::White, ClickType::Crack, DistortionType::Tape, 2, 6.0f, 11.0f, 0.2f, 0.45f, 0.55f, 0.28f, 1.2f, 22.0f, 4.0f, 16.0f, 220.0f, 8640.0f, 0.12f, 0.78f, 0.0f, 200.0f, -0.7f, 2400.0f, 7200.0f, 1.2f, 3.5f, 6400.0f, 0.4f, 0.4f, 0.12f, 0.0f, 0.18f, 0.0f, 0.4f, 280.0f, 90.0f, 0.68f, 0.0f, 5.0f, 1.0f, 7.53f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, -2.0f, 0.4f, 2500.0f, 1.8f},
+    {"Tech / Four Corners", NoiseType::White, ClickType::Crack, DistortionType::Tape, 2, 7.0f, 4.0f, 0.04f, 0.9f, 0.62f, 0.34f, 1.15f, 26.0f, 3.0f, 16.0f, 220.0f, 2803.857888f, 0.3f, 0.84f, 0.0f, 145.0f, -0.85f, 495.041278f, 2336.54824f, 1.3f, 0.0f, 4800.0f, 0.44f, 0.5f, 0.22f, 0.0f, 0.28f, 0.0f, 0.4f, 320.0f, 90.0f, 0.62f, 0.0f, 5.0f, 1.2f, 9.33f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, -1.5f, 1.2f, 2500.0f, 0.6f},
+    {"Tech / Loose Knuckle", NoiseType::LoFi, ClickType::Thump, DistortionType::HardClip, 3, 10.0f, 6.5f, 0.1f, 0.5f, 0.74f, 0.38f, 0.8f, 36.0f, -3.0f, 16.0f, 220.0f, 3871.268422f, 0.26f, 0.74f, 2.0f, 280.0f, -0.28f, 479.720926f, 3226.057019f, 0.9f, 0.0f, 1300.0f, 0.38f, 1.5f, 0.36f, -0.2f, 0.42f, 0.16f, 0.4f, 320.0f, 230.0f, 0.62f, 0.0f, 18.0f, 1.0f, 3.1f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, 0.2f, -0.8f, 2500.0f, -2.4f},
+    {"Tech / Corner Pocket", NoiseType::LoFi, ClickType::Crack, DistortionType::Tape, 4, 12.0f, 8.0f, 0.16f, 0.65f, 0.7f, 0.36f, 0.95f, 32.0f, 1.0f, 16.0f, 220.0f, 2200.0f, 0.28f, 0.8f, 4.0f, 420.0f, -0.12f, 267.646861f, 1813.564377f, 1.05f, 0.4f, 3000.0f, 0.4f, 0.75f, 0.24f, 0.0f, 0.32f, 0.26f, 0.75f, 900.0f, 380.0f, 0.55f, 0.12f, 5.0f, 1.0f, 5.5f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, -1.5f, 0.2f, 2500.0f, -0.4f},
+    {"Classic / Paper Fold", NoiseType::LoFi, ClickType::Crack, DistortionType::Tape, 4, 18.0f, 7.0f, 0.22f, 0.65f, 0.8f, 0.4f, 1.3f, 30.0f, 3.0f, 16.0f, 220.0f, 4080.0f, 0.22f, 0.82f, 0.0f, 280.0f, -0.2f, 400.0f, 3400.0f, 1.35f, 0.0f, 2800.0f, 0.4f, 0.7f, 0.16f, 0.0f, 0.24f, 0.22f, 0.4f, 320.0f, 260.0f, 0.6f, 0.2f, 5.0f, 1.0f, 3.83f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, -1.5f, 0.8f, 1800.0f, -0.8f},
+    {"Classic / Wood Block", NoiseType::White, ClickType::Needle, DistortionType::Tape, 1, 4.0f, 3.0f, 0.0f, 0.0f, 0.2f, 0.95f, 8.5f, 46.0f, 5.0f, 22.0f, 280.0f, 6000.0f, 0.2f, 0.55f, 0.0f, 150.0f, -0.55f, 360.481392f, 1551.060511f, 0.3f, 0.0f, 2200.0f, 0.55f, 0.45f, 0.0f, 0.0f, 0.0f, 0.0f, 0.4f, 320.0f, 120.0f, 0.62f, 0.0f, 0.0f, 0.55f, 10.03f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.0f, -2.0f, 2.2f, 900.0f, -1.5f},
+    {"Classic / Lean Back", NoiseType::Pink, ClickType::Thump, DistortionType::Tape, 2, 7.0f, 4.0f, 0.04f, 0.45f, 0.62f, 0.4f, 0.85f, 58.0f, -1.0f, 16.0f, 220.0f, 9652.948388f, 0.24f, 0.78f, 0.0f, 145.0f, -0.85f, 1747.642834f, 8044.123657f, 1.05f, 0.0f, 1600.0f, 0.3f, 1.4f, 0.12f, 0.0f, 0.18f, 0.0f, 0.6f, 320.0f, 90.0f, 0.66f, 0.0f, 5.0f, 1.0f, 8.1f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, 0.8f, 0.4f, 2500.0f, -0.6f},
+    {"Classic / Palm Circle", NoiseType::Pink, ClickType::Crack, DistortionType::Tape, 3, 10.0f, 6.5f, 0.1f, 0.75f, 0.74f, 0.42f, 1.0f, 42.0f, 2.0f, 16.0f, 220.0f, 4190.792863f, 0.3f, 0.86f, 2.0f, 280.0f, -0.28f, 679.82945f, 3492.327386f, 1.3f, 0.0f, 3200.0f, 0.4f, 0.75f, 0.14f, 0.0f, 0.22f, 0.16f, 0.65f, 320.0f, 230.0f, 0.55f, 0.0f, 5.0f, 1.15f, 4.72f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, 0.2f, 0.6f, 2500.0f, 0.6f},
+    {"Classic / Staggered Line", NoiseType::LoFi, ClickType::Crack, DistortionType::Tape, 4, 12.0f, 8.0f, 0.16f, 0.85f, 0.7f, 0.28f, 0.95f, 28.0f, 1.0f, 16.0f, 220.0f, 7550.172764f, 0.12f, 0.76f, 4.0f, 420.0f, -0.12f, 944.872962f, 6291.810637f, 1.3f, 0.4f, 3000.0f, 0.34f, 0.65f, 0.18f, 0.0f, 0.26f, 0.26f, 0.75f, 900.0f, 380.0f, 0.55f, 0.12f, 16.0f, 1.0f, 2.77f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, -1.5f, 0.4f, 2500.0f, -0.6f},
+    {"Classic / Upper Deck", NoiseType::White, ClickType::Crack, DistortionType::Tape, 5, 18.0f, 7.0f, 0.22f, 1.0f, 0.8f, 0.34f, 1.1f, 40.0f, 4.0f, 16.0f, 220.0f, 3558.63004f, 0.26f, 0.88f, 0.0f, 150.0f, -0.55f, 738.147811f, 2965.525033f, 1.8f, 0.0f, 5000.0f, 0.46f, 0.5f, 0.16f, 0.0f, 0.22f, 0.0f, 0.85f, 1000.0f, 420.0f, 0.5f, 0.2f, 5.0f, 1.28f, 4.79f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.25f, -1.2f, 1.0f, 2800.0f, 1.4f},
+    {"Classic / Ghost Palm", NoiseType::Pink, ClickType::Thump, DistortionType::Tape, 3, 14.0f, 11.0f, 0.2f, 0.2f, 0.55f, 0.22f, 0.7f, 26.0f, 0.0f, 16.0f, 220.0f, 2200.0f, 0.06f, 0.62f, 8.0f, 360.0f, 0.0f, 411.828906f, 1675.575243f, 0.55f, 3.5f, 1800.0f, 0.18f, 0.9f, 0.04f, 0.0f, 0.08f, 0.18f, 0.4f, 320.0f, 340.0f, 0.68f, 0.0f, 5.0f, 0.7f, 12.0f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.1f, -1.5f, -0.8f, 2500.0f, -1.4f},
+    {"Classic / Last Accent", NoiseType::White, ClickType::Crack, DistortionType::Tape, 2, 7.0f, 4.0f, 0.04f, 0.5f, 0.62f, 0.4f, 1.15f, 34.0f, 3.0f, 16.0f, 220.0f, 2455.978284f, 0.28f, 0.86f, 0.0f, 145.0f, -0.85f, 227.025913f, 2046.64857f, 1.1f, 0.0f, 4600.0f, 0.44f, 0.55f, 0.18f, 0.0f, 0.26f, 0.0f, 0.55f, 320.0f, 90.0f, 0.52f, 0.0f, 5.0f, 1.05f, 9.75f, -14.0f, 2.0f, 6.0f, 90.0f, 0.0f, 0.4f, -0.8f, 1.0f, 2400.0f, 0.6f},
 };
 
 FactoryPreset makePreset(const Clap& clap) {
-    const auto& m = clap.material;
     auto values = std::vector<std::pair<juce::String, float>>{
         {kPreBursts, static_cast<float>(clap.bursts)}, {kPreSpread, clap.spacingMs}, {kPreDecay, clap.burstDecayMs},
         {kPreJitter, clap.jitter}, {kFlamSpread, clap.pan}, {kPreLevel, clap.preLevel},
-        {kToneQ, m.resonance}, {kToneDecay, clap.bodyMs},
-        {kTonePitchEnv, m.pitchSweep}, {kTonePitchDecay, 14}, {kToneHPF, 120},
-        {kToneLPF, std::clamp(clap.highCutHz * 1.25f, 9500.0f, 19000.0f)}, {kToneLevel, m.bodyLevel},
-        {kImpactPunch, clap.impact},
-        {kNoiseType, static_cast<float>(m.noise)}, {kNoiseAttack, 0.2f}, {kNoiseHold, clap.noiseHoldMs}, {kNoiseDecay, clap.noiseMs},
-        {kNoiseCurve, clap.noiseCurve}, {kNoiseHPF, clap.lowCutHz}, {kNoiseLPF, clap.highCutHz}, {kNoiseStereoWidth, clap.width}, {kNoiseLevel, m.noiseLevel},
-        {kClickType, static_cast<float>(m.click)}, {kClickFreq, m.clickHz}, {kClickLevel, m.clickLevel}, {kClickDecay, m.clickDecayMs},
-        {kDistType, static_cast<float>(m.dist)}, {kDistDrive, clap.drive}, {kDistTone, 0.1f}, {kDistMix, clap.driveMix},
-        {kCompThresh, -15}, {kCompRatio, 3.4f}, {kCompAttack, 6}, {kCompRelease, 48}, {kCompMakeup, 3.6f}, {kCompMix, 0.85f},
-        {kLimiterEnabled, 1}, {kLimiterCeiling, -0.5f}, {kLimiterRelease, 24}, {kReverbSize, clap.roomSize},
-        {kReverbDecay, clap.roomMs}, {kReverbDamp, 0.34f}, {kReverbGate, clap.gateMs}, {kReverbMix, clap.roomMix},
+        {kToneQ, clap.resonance}, {kToneDecay, clap.bodyMs}, {kTonePitchEnv, clap.pitchSweep},
+        {kTonePitchDecay, clap.pitchMs}, {kToneHPF, clap.toneHpf}, {kToneLPF, clap.toneLpf},
+        {kToneLevel, clap.toneLevel}, {kImpactPunch, clap.impact},
+        {kNoiseType, static_cast<float>(clap.noise)}, {kNoiseAttack, clap.noiseAttackMs},
+        {kNoiseHold, clap.noiseHoldMs}, {kNoiseDecay, clap.noiseMs}, {kNoiseCurve, clap.noiseCurve},
+        {kNoiseHPF, clap.lowCutHz}, {kNoiseLPF, clap.highCutHz}, {kNoiseStereoWidth, clap.width},
+        {kNoiseLevel, clap.noiseLevel},
+        {kClickType, static_cast<float>(clap.click)}, {kClickFreq, clap.clickHz},
+        {kClickLevel, clap.clickLevel}, {kClickDecay, clap.clickDecayMs},
+        {kDistType, static_cast<float>(clap.dist)}, {kDistDrive, clap.drive},
+        {kDistTone, clap.driveTone}, {kDistMix, clap.driveMix},
+        {kCompThresh, clap.compThresh}, {kCompRatio, clap.compRatio}, {kCompAttack, clap.compAttack},
+        {kCompRelease, clap.compRelease}, {kCompMakeup, clap.compMakeup}, {kCompMix, clap.compMix},
+        {kLimiterEnabled, 1}, {kLimiterCeiling, -1.0f}, {kLimiterRelease, 48},
+        {kReverbSize, clap.roomSize}, {kReverbDecay, clap.roomMs}, {kReverbDamp, clap.damp},
+        {kReverbGate, clap.gateMs}, {kReverbMix, clap.roomMix},
         {kSlapbackDivision, static_cast<float>(SlapbackDivision::Off)}, {kSlapbackMix, 0}, {kSlapbackFeedback, 0},
-        {kClapDoubler, clap.doubler}, {kPitchHumanize, 8.0f},
+        {kClapDoubler, clap.doubler}, {kPitchHumanize, clap.humanize},
         {kReverseMode, static_cast<float>(ReverseSyncMode::Off)}, {kReverseMix, 0},
-        {kEqLowFreq, 80.0f}, {kEqLowDb, 0.0f}, {kEqMidFreq, 1000.0f}, {kEqMidDb, 0.0f},
-        {kEqHighFreq, 7500.0f}, {kEqHighDb, 0.0f}, {kStereoWidth, 1.08f}, {kOutputGain, clap.outDb}
+        {kEqLowFreq, 110.0f}, {kEqLowDb, clap.eqLowDb}, {kEqMidFreq, clap.eqMidHz}, {kEqMidDb, clap.eqMidDb},
+        {kEqHighFreq, 8000.0f}, {kEqHighDb, clap.eqHighDb}, {kStereoWidth, clap.masterWidth}, {kOutputGain, clap.outDb}
     };
     std::ranges::for_each(kPerformanceParameters, [&](const auto& parameter) {
         values.emplace_back(parameter.id, parameter.initial);
