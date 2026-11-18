@@ -4,7 +4,7 @@
 
 openClapper is a pitched, four-layer clap synthesizer. Play the resonant body from a MIDI keyboard, add a flam of up to five hands, and set how much noise follows the strike. **Audition A4** previews the current sound from any page.
 
-![Clap editor with a rendered waveform marking the main strike, the preset browser, and controls for hand spacing, tuned body, noise tail and output](assets/openClapper-screenshot.png)
+![Clap editor with a rendered waveform marking the main strike, the preset browser, and controls for hand spacing, tuned body, noise tail and output](docs/screenshots/preview.png)
 
 ## Choose a clap
 
