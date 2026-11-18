@@ -23,9 +23,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
         juce::ParameterID{ kPreLevel, 1 }, "Pre-Clap Level", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.85f));
 
     // Resonant Body / Tone
-    juce::StringArray toneModes{ "Bandpass", "Sub Thump", "Saturated Tri", "Cyber Square" };
-    params.push_back(std::make_unique<juce::AudioParameterChoice>(
-        juce::ParameterID{ kToneMode, 1 }, "Tone Mode", toneModes, 0));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kToneQ, 1 }, "Tone Q", juce::NormalisableRange<float>(0.5f, 12.0f, 0.1f), 3.2f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
@@ -213,9 +210,6 @@ openclapper::core::EngineSettings readSettings(const juce::AudioProcessorValueTr
     s.synth.preClapLevel = *apvts.getRawParameterValue(kPreLevel);
 
     // Resonant Body / Tone
-    if (const auto* pToneMode = apvts.getRawParameterValue(kToneMode)) {
-        s.synth.toneMode = static_cast<openclapper::core::ToneMode>(static_cast<int>(*pToneMode));
-    }
     s.synth.toneQ = *apvts.getRawParameterValue(kToneQ);
     s.synth.toneDecayMs = *apvts.getRawParameterValue(kToneDecay);
     s.synth.tonePitchEnv = *apvts.getRawParameterValue(kTonePitchEnv);

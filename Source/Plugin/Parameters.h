@@ -14,7 +14,6 @@ inline constexpr const char* kFlamSpread = "flam_spread";
 inline constexpr const char* kPreLevel = "pre_level";
 
 // Resonant Body / Tone
-inline constexpr const char* kToneMode = "tone_mode";
 inline constexpr const char* kToneQ = "tone_q";
 inline constexpr const char* kToneDecay = "tone_decay";
 inline constexpr const char* kTonePitchEnv = "tone_pitch_env";

@@ -308,19 +308,17 @@ void ClapEngine::process(
         }
 
         // 3. Shared effects processing
-        if (!doublerBufferL_.empty()) {
+        const float doubler = std::clamp(settings.effects.doublerAmount, 0.0f, 1.0f);
+        if (!doublerBufferL_.empty() && doubler > 0.001f) {
             const size_t bufSize = doublerBufferL_.size();
             doublerBufferL_[doublerWriteIndex_] = sL;
             doublerBufferR_[doublerWriteIndex_] = sR;
-            const float doubler = std::clamp(settings.effects.doublerAmount, 0.0f, 1.0f);
-            if (doubler > 0.001f) {
-                const size_t tapL = std::clamp<size_t>(static_cast<size_t>(sampleRate_ * 0.0042), 1, bufSize - 1);
-                const size_t tapR = std::clamp<size_t>(static_cast<size_t>(sampleRate_ * 0.0115), 1, bufSize - 1);
-                const float delayedL = doublerBufferL_[(doublerWriteIndex_ + bufSize - tapL) % bufSize];
-                const float delayedR = doublerBufferR_[(doublerWriteIndex_ + bufSize - tapR) % bufSize];
-                sL += delayedR * doubler * 0.45f;
-                sR -= delayedL * doubler * 0.45f;
-            }
+            const size_t tapL = std::clamp<size_t>(static_cast<size_t>(sampleRate_ * 0.0042), 1, bufSize - 1);
+            const size_t tapR = std::clamp<size_t>(static_cast<size_t>(sampleRate_ * 0.0115), 1, bufSize - 1);
+            const float delayedL = doublerBufferL_[(doublerWriteIndex_ + bufSize - tapL) % bufSize];
+            const float delayedR = doublerBufferR_[(doublerWriteIndex_ + bufSize - tapR) % bufSize];
+            sL += delayedR * doubler * 0.45f;
+            sR -= delayedL * doubler * 0.45f;
             doublerWriteIndex_ = (doublerWriteIndex_ + 1) % bufSize;
         }
 
@@ -336,17 +334,19 @@ void ClapEngine::process(
             reverb_.triggerGate();
         }
 
-        const auto reverbFrame = reverb_.process(
-            sL,
-            sR,
-            settings.effects.reverbSize,
-            settings.effects.reverbDecayMs,
-            settings.effects.reverbDamp,
-            settings.effects.reverbGateMs,
-            sampleRate_);
         const float reverbMix = std::clamp(settings.effects.reverbMix, 0.0f, 1.0f);
-        sL = sL * (1.0f - reverbMix * 0.5f) + reverbFrame.left * reverbMix;
-        sR = sR * (1.0f - reverbMix * 0.5f) + reverbFrame.right * reverbMix;
+        if (reverbMix > 0.001f) {
+            const auto reverbFrame = reverb_.process(
+                sL,
+                sR,
+                settings.effects.reverbSize,
+                settings.effects.reverbDecayMs,
+                settings.effects.reverbDamp,
+                settings.effects.reverbGateMs,
+                sampleRate_);
+            sL = sL * (1.0f - reverbMix * 0.5f) + reverbFrame.left * reverbMix;
+            sR = sR * (1.0f - reverbMix * 0.5f) + reverbFrame.right * reverbMix;
+        }
 
         // Distortion impact shaper
         if (settings.effects.distMix > 0.001f) {

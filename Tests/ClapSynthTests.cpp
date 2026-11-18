@@ -23,7 +23,6 @@ TEST_CASE("ClapSynth Bandpass body follows its selected noise type", "[core][syn
     whiteSettings.noiseLevel = 0.0f;
     whiteSettings.clickLevel = 0.0f;
     whiteSettings.toneLevel = 0.8f;
-    whiteSettings.toneMode = ToneMode::Bandpass;
 
     auto pinkSettings = whiteSettings;
     pinkSettings.noiseType = NoiseType::Pink;
@@ -38,6 +37,39 @@ TEST_CASE("ClapSynth Bandpass body follows its selected noise type", "[core][syn
         difference += std::abs(whiteLeft[i] - pinkLeft[i]);
 
     REQUIRE(difference > 1.0f);
+}
+
+TEST_CASE("ClapSynth Bandpass body produces bright high-frequency energy when opened", "[core][synth]") {
+    ClapSynth darkSynth;
+    ClapSynth brightSynth;
+    darkSynth.prepare(48000.0);
+    brightSynth.prepare(48000.0);
+
+    ClapSynthSettings darkSettings;
+    darkSettings.preClapCount = 0;
+    darkSettings.noiseLevel = 0.0f;
+    darkSettings.clickLevel = 0.0f;
+    darkSettings.toneLevel = 0.9f;
+    darkSettings.toneHPF = 250.0f;
+    darkSettings.toneLPF = 2500.0f;
+
+    auto brightSettings = darkSettings;
+    brightSettings.toneLPF = 18000.0f;
+
+    std::vector<float> darkL, darkR, brightL, brightR;
+    darkSynth.renderBlock(darkL, darkR, darkSettings, 1.0f, 60);
+    brightSynth.renderBlock(brightL, brightR, brightSettings, 1.0f, 60);
+
+    auto highFreqEnergy = [](const std::vector<float>& buf) {
+        double energy = 0.0;
+        for (size_t i = 1; i < buf.size(); ++i) {
+            const double diff = static_cast<double>(buf[i]) - static_cast<double>(buf[i - 1]);
+            energy += diff * diff;
+        }
+        return energy;
+    };
+
+    REQUIRE(highFreqEnergy(brightL) > highFreqEnergy(darkL) * 2.0);
 }
 
 TEST_CASE("ClapSynth produces valid audio block without NaNs", "[core][synth]") {
@@ -110,17 +142,17 @@ TEST_CASE("GatedStereoReverb respects gate cutoff", "[core][synth]") {
     REQUIRE(gatedFrame.right == 0.0f);
 }
 
-TEST_CASE("ClapSynth renders across all ToneModes and ClickTypes without errors", "[core][synth]") {
+TEST_CASE("ClapSynth renders across all NoiseTypes and ClickTypes without errors", "[core][synth]") {
     ClapSynth synth;
     synth.prepare(48000.0);
 
-    const ToneMode modes[] = { ToneMode::Bandpass, ToneMode::SubThump, ToneMode::SaturatedTri, ToneMode::CyberSquare };
+    const NoiseType noises[] = { NoiseType::White, NoiseType::Pink, NoiseType::Velvet, NoiseType::LoFi };
     const ClickType clicks[] = { ClickType::Needle, ClickType::Crack, ClickType::Thump };
 
-    for (auto mode : modes) {
+    for (auto noise : noises) {
         for (auto click : clicks) {
             ClapSynthSettings settings;
-            settings.toneMode = mode;
+            settings.noiseType = noise;
             settings.clickType = click;
             settings.toneLevel = 0.8f;
             settings.clickLevel = 0.5f;
@@ -288,7 +320,6 @@ TEST_CASE("ClapSynth body filters isolate low and high content independently", "
         synth.prepare(48000.0);
         ClapSynthSettings settings;
         settings.preClapCount = 0;
-        settings.toneMode = ToneMode::CyberSquare;
         settings.toneLevel = 1.0f;
         settings.toneHPF = highpass;
         settings.toneLPF = lowpass;
@@ -341,7 +372,6 @@ TEST_CASE("Full ADSR follows attack decay sustain and a complete twenty second r
     reference.prepare(1000);
     ClapSynthSettings settings;
     settings.preClapCount = 0;
-    settings.toneMode = ToneMode::SubThump;
     settings.layers[0].solo = true;
     settings.ampEnabled = true;
     settings.ampAttackMs = 100;

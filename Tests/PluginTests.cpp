@@ -66,7 +66,6 @@ TEST_CASE("OpenClapperProcessor instantiates with valid parameters", "[plugin]")
 
     REQUIRE(processor.parameters.getParameter(openclapper::params::kPreBursts) != nullptr);
     REQUIRE(processor.parameters.getParameter(openclapper::params::kFlamSpread) != nullptr);
-    REQUIRE(processor.parameters.getParameter(openclapper::params::kToneMode) != nullptr);
     REQUIRE(processor.parameters.getParameter(openclapper::params::kClickType) != nullptr);
     REQUIRE(processor.parameters.getParameter(openclapper::params::kNoiseType) != nullptr);
     REQUIRE(processor.parameters.getParameter(openclapper::params::kDistDrive) != nullptr);
@@ -137,11 +136,10 @@ TEST_CASE("OpenClapperProcessor retains 44 host programs and offers 45 editor pr
     }
 }
 
-TEST_CASE("All factory presets render and Bandpass patches use tuned noise", "[plugin][presets]") {
+TEST_CASE("All factory presets render and use tuned noise", "[plugin][presets]") {
     OpenClapperProcessor processor;
     processor.prepareToPlay(48000.0, 8192);
     juce::AudioBuffer<float> buffer(2, 8192);
-    bool foundBandpass = false;
 
     for (int index = 0; index < processor.getNumPrograms(); ++index) {
         processor.setCurrentProgram(index);
@@ -161,10 +159,6 @@ TEST_CASE("All factory presets render and Bandpass patches use tuned noise", "[p
         REQUIRE(peak > 0.00001f);
 
         auto settings = openclapper::params::readSettings(processor.parameters).synth;
-        if (settings.toneMode != openclapper::core::ToneMode::Bandpass)
-            continue;
-
-        foundBandpass = true;
         settings.preClapCount = 0;
         settings.noiseLevel = 0.0f;
         settings.clickLevel = 0.0f;
@@ -186,7 +180,6 @@ TEST_CASE("All factory presets render and Bandpass patches use tuned noise", "[p
         REQUIRE(difference > 0.01f);
     }
 
-    REQUIRE(foundBandpass);
 }
 
 TEST_CASE("Factory claps leave headroom and finish inside a trance backbeat", "[plugin][bank]") {

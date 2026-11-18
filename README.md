@@ -1,4 +1,4 @@
-# openClapper v3.4.0
+# openClapper v3.5.0
 
 [Install with OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest)
 
@@ -24,7 +24,7 @@ The **Clap** page shows a dry A4 preview. The peach section contains the pre-cla
 
 ## Shape the layers
 
-On **Layers**, set the timing, decay and stereo placement of the pre-claps. Choose a pitched body voice and adjust its pitch sweep and filters. Noise has its own attack, hold, decay, curve and stereo width. The transient has its own shape, frequency and decay.
+On **Layers**, set the timing, decay and stereo placement of the pre-claps. Shape the tuned clap body with its resonance, pitch sweep and filters. Noise has its own attack, hold, decay, curve and stereo width. The transient has its own shape, frequency and decay.
 
 In v3.3, each flam contact takes 0.35 ms to rise, and successive contacts build toward the main strike. Pink noise uses independent left and right filters. Lo-fi noise samples the two channels independently on a shared 12 kHz clock, keeping its texture consistent across host sample rates.
 
@@ -47,6 +47,10 @@ On **Effects**, adjust drive, compression, gated stereo reverb, one-repeat slapb
 ![Effects page showing drive, compressor, gated room, echo, reverse, and output controls](assets/openClapper-effects.png)
 
 MIDI CC 7 adjusts master level and CC 74 controls noise brightness. CC 120 stops sound and effect tails, CC 121 resets the two controller overrides, and CC 123 releases held notes.
+
+## Changes in 3.5
+
+The Sub Thump, Saturated Tri and Cyber Square body voices are removed. They were stacked sine harmonics, which sounded like a synth tone rather than a clap. The tuned body is now always the resonant band-pass voice, and the **Voice** control is gone. Factory presets that used a removed voice now use the band-pass body. Earlier sessions keep every other setting.
 
 ## Formats and compatibility
 
