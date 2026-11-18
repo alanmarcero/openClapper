@@ -9,9 +9,22 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& instrument)
     : AudioProcessorEditor(&instrument), processor_(instrument), waveform_(instrument) {
     hand_ = juce::Drawable::createFromImageData(BinaryData::claphand_svg, BinaryData::claphand_svgSize);
     const auto& bank = presets::factoryPresets();
-    for (size_t i = 0; i < bank.size(); ++i) presets_.addItem(bank[i].name, static_cast<int>(i + 1));
+    juce::String family;
+    juce::PopupMenu sounds;
+    int id = 1;
+    std::ranges::for_each(bank, [&](const auto& preset) {
+        const juce::String name(preset.name);
+        const auto nextFamily = name.upToFirstOccurrenceOf(" / ", false, false);
+        if (family != nextFamily && sounds.getNumItems() > 0) {
+            presets_.getRootMenu()->addSubMenu(family, sounds);
+            sounds.clear();
+        }
+        family = nextFamily;
+        sounds.addItem(id++, name);
+    });
+    if (sounds.getNumItems() > 0) presets_.getRootMenu()->addSubMenu(family, sounds);
     presets_.setName("Factory preset");
-    presets_.setTooltip("Choose a factory clap by family and name.");
+    presets_.setTooltip("Choose a factory clap across six dance styles.");
     presets_.setTextWhenNothingSelected("Custom sound");
     presets_.onChange = [this] {
         if (presets_.getSelectedId() > 0) {

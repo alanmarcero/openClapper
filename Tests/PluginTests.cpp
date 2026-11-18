@@ -124,10 +124,10 @@ TEST_CASE("Slapback feedback, stereo doubler, and pitch humanize shape output", 
     REQUIRE(diff > 0.1f);
 }
 
-TEST_CASE("OpenClapperProcessor retains 44 host programs and offers 45 editor presets", "[plugin]") {
+TEST_CASE("OpenClapperProcessor retains 44 host programs and offers 56 editor presets", "[plugin]") {
     OpenClapperProcessor processor;
     REQUIRE(processor.getNumPrograms() == 44);
-    REQUIRE(openclapper::presets::factoryPresets().size() == 45);
+    REQUIRE(openclapper::presets::factoryPresets().size() == 56);
 
     for (int i = 0; i < 44; ++i) {
         processor.setCurrentProgram(i);
@@ -282,10 +282,11 @@ TEST_CASE("Native editor browses, auditions and edits clap layers and held notes
     editor->setVisible(true);
     auto* browser = findVisible<juce::ComboBox>(*editor, [](const auto& b) { return b.getName() == "Factory preset"; });
     REQUIRE(browser != nullptr);
-    REQUIRE(browser->getNumItems() == 45);
+    REQUIRE(browser->getNumItems() == 56);
+    CHECK(browser->getRootMenu()->getNumItems() == 6);
     snapshot(*editor, "openClapper-screenshot.png");
     click(*editor, "Previous");
-    REQUIRE(processor.getSelectedPresetIndex() == 44);
+    REQUIRE(processor.getSelectedPresetIndex() == 55);
     REQUIRE(processor.getCurrentProgram() == 0);
     click(*editor, "Next");
     REQUIRE(processor.getSelectedPresetIndex() == 0);
@@ -584,16 +585,16 @@ TEST_CASE("Legacy preset automation preserves all original normalized program va
             == Catch::Approx(legacyAutomation));
     }
     processor.setCurrentProgram(43);
-    processor.selectPreset(44);
+    processor.selectPreset(55);
     REQUIRE(processor.getCurrentProgram() == 43);
-    REQUIRE(processor.getSelectedPresetIndex() == 44);
-    REQUIRE(processor.getProgramName(44) == "Roll / Last Accent");
+    REQUIRE(processor.getSelectedPresetIndex() == 55);
+    REQUIRE(processor.getProgramName(55) == "Classic / Last Accent");
     REQUIRE(selector->getValue() == Catch::Approx(1.0f));
     REQUIRE(processor.parameters.getRawParameterValue(openclapper::params::kPreset)->load() == Catch::Approx(43.0f));
     juce::MemoryBlock impactState;
     processor.getStateInformation(impactState);
     restored.setStateInformation(impactState.getData(), static_cast<int>(impactState.getSize()));
     REQUIRE(restored.getCurrentProgram() == 43);
-    REQUIRE(restored.getSelectedPresetIndex() == 44);
+    REQUIRE(restored.getSelectedPresetIndex() == 55);
     REQUIRE(restored.parameters.getRawParameterValue("amp_enabled")->load() == Catch::Approx(0.0f));
 }

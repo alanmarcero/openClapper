@@ -205,7 +205,7 @@ void OpenClapperProcessor::selectPreset(int index) {
 void OpenClapperProcessor::getStateInformation(juce::MemoryBlock& destData) {
     auto state = parameters.copyState();
     state.setProperty("selected_preset", selectedPreset_.load(), nullptr);
-    state.setProperty("clap_bank", 1, nullptr);
+    state.setProperty("clap_bank", 2, nullptr);
     std::unique_ptr<juce::XmlElement> xml(state.createXml());
     copyXmlToBinary(*xml, destData);
 }
@@ -218,7 +218,7 @@ void OpenClapperProcessor::setStateInformation(const void* data, int sizeInBytes
         parameters.replaceState(state);
         currentProgram_ = std::clamp(static_cast<int>(parameters.getRawParameterValue(openclapper::params::kPreset)->load()),
             0, getNumPrograms() - 1);
-        selectedPreset_ = static_cast<int>(state.getProperty("clap_bank", 0)) == 1
+        selectedPreset_ = static_cast<int>(state.getProperty("clap_bank", 0)) == 2
             ? std::clamp(static_cast<int>(state.getProperty("selected_preset", currentProgram_.load())),
                          -1, static_cast<int>(openclapper::presets::factoryPresets().size()) - 1)
             : -1;

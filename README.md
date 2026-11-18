@@ -8,15 +8,16 @@ openClapper is a pitched, four-layer clap synthesizer. Play the resonant body fr
 
 ## Choose a clap
 
-The 45 factory sounds are arranged in five families of nine. **Previous** and **Next** step through the bank. All factory sounds play as one-shots.
+The 56 factory sounds span six dance styles: 16 Uplifting and eight each of Rolling, Progressive, Psy, Tech, and Classic. **Previous** and **Next** step through the bank. All factory sounds play as one-shots.
 
-| Family | Try | Sound |
+| Style | Try | Sound |
 | --- | --- | --- |
-| Close | Downbeat, Cupped Palm, Mono Print | Short, focused hands for the backbeat, including a fully mono clap. |
-| Flam | Two Hands, Pocket Drag, Five Across | Spaced strikes with different timing, pan, and amounts of humanization. |
-| Wide | Balcony, Palm Circle, Opposite Walls | Staggered hands and a wider noise layer for ensemble claps. |
-| Gate | Short Plate, Concrete, High Gallery | Early room reflections with 70–125 ms gates. |
-| Roll | Sixteenth, Ratchet, Ghost Palm | Compact hits for fast patterns and fills. |
+| Uplifting | Downbeat, Euphoria, High Gallery | Airy, wide ensemble claps and gated stadium claps for uplifting drops. |
+| Rolling | Two Hands, Sixteenth, Pocket Drag | Tight groove claps and rhythmic flams for rolling basslines. |
+| Progressive | Cupped Palm, Archway, Booth Air | Warm, rounded claps with soft body weight and controlled rooms. |
+| Psy | Fingertips, Tripwire, Five Across | Razor-crisp transients and snappy flams for fast psy patterns. |
+| Tech | Dry Chalk, Concrete, Mono Print | Focused, dry club hits and concrete-gated backbeats. |
+| Classic | Paper Fold, Palm Circle, Last Accent | Analog-inspired hand spreads and vintage studio rooms. |
 
 The animated hands beside the page tabs meet on each host beat and follow tempo changes and seeks. They rest when playback stops. Standalone and hosts without transport timing use the internal 138 BPM clock.
 
@@ -54,6 +55,6 @@ The Sub Thump, Saturated Tri and Cyber Square body voices are removed. They were
 
 ## Formats and compatibility
 
-macOS includes AU, VST3, LV2, and Standalone. Windows and Linux include VST3, LV2, and Standalone. Older sessions restore their saved parameter values and appear as **Custom sound**. The original 44 host program positions and automation ranges are preserved. The editor offers all 45 sounds.
+macOS includes AU, VST3, LV2, and Standalone. Windows and Linux include VST3, LV2, and Standalone. Older sessions restore their saved parameter values and appear as **Custom sound**. The original 44 host program positions and automation ranges are preserved. The editor offers all 56 sounds.
 
 MIT License. See [LICENSE](LICENSE).
