@@ -1,4 +1,4 @@
-# openClapper v3.5.0
+# openClapper v3.6.0
 
 [Install with OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest)
 
