@@ -333,7 +333,12 @@ void ClapSynth::trigger(const ClapSynthSettings& settings, int midiNote, float v
         burstPans_[i] = std::clamp(dir * settings.preClapFlamSpread * spreadFrac, -1.0f, 1.0f);
     }
 
-    const float fundamentalHz = midiNoteToHz(midiNote_);
+    const float pitchDetuneSemitones = (settings.pitchHumanizeCents > 0.0f)
+        ? nextRandomFloat(prngState_) * (std::clamp(settings.pitchHumanizeCents, 0.0f, 100.0f) / 100.0f)
+        : 0.0f;
+    pitchHumanizeRatio_ = std::exp2(pitchDetuneSemitones / 12.0f);
+
+    const float fundamentalHz = midiNoteToHz(midiNote_) * pitchHumanizeRatio_;
     for (size_t i = 0; i < partialFrequencies_.size(); ++i) {
         const float partialHz = fundamentalHz * static_cast<float>(i + 1);
         partialFrequencies_[i] = partialHz < static_cast<float>(sampleRate_) * 0.48f ? partialHz : 0.0f;
@@ -544,7 +549,7 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
             * std::exp(-std::max(0.0f, mainAge) / pitchDecaySamples);
         const float pitchRatio = std::exp2(pitchSemitones / 12.0f);
         if (settings.toneMode == ToneMode::Bandpass) {
-            const float fundamental = std::clamp(midiNoteToHz(midiNote_) * pitchRatio, 20.0f, static_cast<float>(sampleRate_) * 0.48f);
+            const float fundamental = std::clamp(midiNoteToHz(midiNote_) * pitchHumanizeRatio_ * pitchRatio, 20.0f, static_cast<float>(sampleRate_) * 0.48f);
             if (std::abs(fundamental - lastToneFrequency_) > 2.0f || std::abs(settings.toneQ - lastToneQ_) > 0.01f) {
                 lastToneFrequency_ = fundamental;
                 lastToneQ_ = settings.toneQ;

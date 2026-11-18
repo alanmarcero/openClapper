@@ -97,7 +97,8 @@ FactoryPreset makePreset(const Clap& clap) {
         {kCompThresh, -13}, {kCompRatio, 2.3f}, {kCompAttack, 6}, {kCompRelease, 45}, {kCompMakeup, 1.5f}, {kCompMix, 0.70f},
         {kLimiterEnabled, 1}, {kLimiterCeiling, -1}, {kLimiterRelease, 18}, {kReverbSize, 0.47f},
         {kReverbDecay, 240}, {kReverbDamp, 0.46f}, {kReverbGate, clap.gateMs}, {kReverbMix, clap.roomMix},
-        {kSlapbackDivision, static_cast<float>(SlapbackDivision::Off)}, {kSlapbackMix, 0},
+        {kSlapbackDivision, static_cast<float>(SlapbackDivision::Off)}, {kSlapbackMix, 0}, {kSlapbackFeedback, 0},
+        {kClapDoubler, 0}, {kPitchHumanize, 0},
         {kReverseMode, static_cast<float>(ReverseSyncMode::Off)}, {kReverseMix, 0}, {kStereoWidth, 1}, {kOutputGain, -1}
     };
     for (const auto& parameter : kPerformanceParameters) values.emplace_back(parameter.id, parameter.initial);

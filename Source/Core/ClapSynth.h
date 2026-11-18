@@ -79,6 +79,7 @@ struct ClapSynthSettings {
     float clickLevel = 0.4f;      // 0..1
     float clickFreqHz = 4500.0f;  // 1000..12000 Hz
     float clickDecayMs = 0.8f;    // 0.2..20 ms transient time constant
+    float pitchHumanizeCents = 0.0f; // 0..100 cents per-hit pitch variation
 
     bool operator==(const ClapSynthSettings&) const noexcept = default;
 };
@@ -195,6 +196,7 @@ private:
     double sampleRate_ = 48000.0;
     bool isPlaying_ = false;
     float velocity_ = 1.0f;
+    float pitchHumanizeRatio_ = 1.0f;
     int midiNote_ = 69;
     uint32_t triggerCount_ = 0;
 

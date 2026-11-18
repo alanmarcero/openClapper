@@ -77,17 +77,17 @@ ControlPage::ControlPage(Apvts& state, Page page) : page_(page) {
             group("Transient", 4, {{kClickType,"Shape"}, {kClickFreq,"Frequency"}, {kClickDecay,"Decay"}, {kClickLevel,"Level"}});
             break;
         case Page::effects:
-            group("Drive", 4, {{kDistType,"Type"}, {kDistDrive,"Drive"}, {kDistTone,"Tone"}, {kDistMix,"Mix"}});
+            group("Drive", 5, {{kDistType,"Type"}, {kDistDrive,"Drive"}, {kDistTone,"Tone"}, {kDistMix,"Mix"}, {kClapDoubler,"Doubler"}});
             group("Compressor", 3, {{kCompThresh,"Threshold"}, {kCompRatio,"Ratio"}, {kCompMakeup,"Makeup"},
                 {kCompAttack,"Attack"}, {kCompRelease,"Release"}, {kCompMix,"Mix"}});
             group("Gated room", 5, {{kReverbSize,"Size"}, {kReverbDecay,"Decay"}, {kReverbDamp,"Damping"}, {kReverbGate,"Gate time"}, {kReverbMix,"Mix"}});
-            group("Echo & reverse", 4, {{kSlapbackDivision,"Slapback time"}, {kSlapbackMix,"Slapback mix"}, {kReverseMode,"Reverse timing"}, {kReverseMix,"Reverse mix"}});
+            group("Echo & reverse", 5, {{kSlapbackDivision,"Slapback time"}, {kSlapbackMix,"Slapback mix"}, {kSlapbackFeedback,"Feedback"}, {kReverseMode,"Reverse timing"}, {kReverseMix,"Reverse mix"}});
             group("Output", 5, {{kLimiterEnabled,"Limiter"}, {kLimiterCeiling,"Ceiling"}, {kLimiterRelease,"Recovery"}, {kStereoWidth,"Stereo width"}, {kOutputGain,"Output gain"}});
             break;
         case Page::midi:
             group("Note envelope", 5, {{"amp_enabled",""}, {"amp_attack","Attack"}, {"amp_decay","Decay"}, {"amp_sustain","Sustain"}, {"amp_release","Release"}});
             group("Trigger zone", 5, {{"key_low","Lowest note"}, {"key_high","Highest note"}, {"velocity_low","Min velocity"}, {"velocity_high","Max velocity"}, {"choke_group","Choke group"}});
-            group("Roll & fill", 2, {{"roll_division","Subdivision"}, {"roll_hits","Hit count"}});
+            group("Roll & fill", 3, {{"roll_division","Subdivision"}, {"roll_hits","Hit count"}, {kPitchHumanize,"Pitch humanize"}});
             for (size_t layer = 0; layer < kLayerNames.size(); ++layer) {
                 if (layer < kLayerVelocity.size())
                     group(kLayerNames[layer], 3, {{kLayerMute[layer],"Mute"}, {kLayerSolo[layer],"Solo"}, {kLayerVelocity[layer],"Velocity response"}});

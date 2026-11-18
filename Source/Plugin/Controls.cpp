@@ -56,7 +56,7 @@ Control::Control(Apvts& state, const char* id, const char* caption) {
 void Control::resized() {
     auto area = getLocalBounds().reduced(5, 1);
     if (toggleAttachment_) {
-        toggle_->setBounds(area.withSizeKeepingCentre(area.getWidth(), juce::jmin(36, area.getHeight())));
+        toggle_->setBounds(area.withSizeKeepingCentre(juce::jmin(148, area.getWidth()), juce::jmin(36, area.getHeight())));
         return;
     }
     const int contentHeight = choiceAttachment_ ? 54 : 44;

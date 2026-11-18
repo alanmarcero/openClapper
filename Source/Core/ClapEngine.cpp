@@ -32,6 +32,9 @@ void ClapEngine::prepare(double sampleRate) {
     const int maxReverseSamples = static_cast<int>(sampleRate * 2.0);
     reverseBufferL_.assign(maxReverseSamples, 0.0f);
     reverseBufferR_.assign(maxReverseSamples, 0.0f);
+    const size_t maxDoublerSamples = std::max<size_t>(16, static_cast<size_t>(sampleRate * 0.025));
+    doublerBufferL_.assign(maxDoublerSamples, 0.0f);
+    doublerBufferR_.assign(maxDoublerSamples, 0.0f);
     reset();
 }
 
@@ -52,6 +55,9 @@ void ClapEngine::reset() noexcept {
     distR_.reset();
     compressor_.reset();
     limiter_.reset();
+    std::fill(doublerBufferL_.begin(), doublerBufferL_.end(), 0.0f);
+    std::fill(doublerBufferR_.begin(), doublerBufferR_.end(), 0.0f);
+    doublerWriteIndex_ = 0;
     reversePlayHead_ = -1;
     reverseDuration_ = 0;
     isReversing_ = false;
@@ -302,13 +308,30 @@ void ClapEngine::process(
         }
 
         // 3. Shared effects processing
+        if (!doublerBufferL_.empty()) {
+            const size_t bufSize = doublerBufferL_.size();
+            doublerBufferL_[doublerWriteIndex_] = sL;
+            doublerBufferR_[doublerWriteIndex_] = sR;
+            const float doubler = std::clamp(settings.effects.doublerAmount, 0.0f, 1.0f);
+            if (doubler > 0.001f) {
+                const size_t tapL = std::clamp<size_t>(static_cast<size_t>(sampleRate_ * 0.0042), 1, bufSize - 1);
+                const size_t tapR = std::clamp<size_t>(static_cast<size_t>(sampleRate_ * 0.0115), 1, bufSize - 1);
+                const float delayedL = doublerBufferL_[(doublerWriteIndex_ + bufSize - tapL) % bufSize];
+                const float delayedR = doublerBufferR_[(doublerWriteIndex_ + bufSize - tapR) % bufSize];
+                sL += delayedR * doubler * 0.45f;
+                sR -= delayedL * doubler * 0.45f;
+            }
+            doublerWriteIndex_ = (doublerWriteIndex_ + 1) % bufSize;
+        }
+
         const bool delayedTrigger = slapback_.process(
             sL,
             sR,
             settings.effects.slapbackDivision,
             settings.effects.slapbackMix,
             bpm,
-            triggerAtSample || mainHitAtSample);
+            triggerAtSample || mainHitAtSample,
+            settings.effects.slapbackFeedback);
         if (delayedTrigger) {
             reverb_.triggerGate();
         }
