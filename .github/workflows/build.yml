@@ -137,12 +137,32 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Notes come from the tagged CHANGELOG section, or from the tag message
+      # when that section is absent. A lightweight tag uses its commit message.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref }}
+
+      - name: Write release body
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          notes=$(python3 scripts/release_notes.py "$TAG")
+          screenshot="![openClapper editor](https://raw.githubusercontent.com/alanmarcero/openClapper/${TAG}/docs/screenshots/preview.png)"
+          {
+            if [ -n "$notes" ]; then
+              printf '%s\n\n' "$notes"
+            fi
+            printf '%s\n' "$screenshot"
+          } > "$RUNNER_TEMP/release-body.md"
+
       - uses: actions/download-artifact@v4
         with:
           merge-multiple: true
 
       - uses: softprops/action-gh-release@v2
         with:
-          body: '![openClapper editor](https://raw.githubusercontent.com/alanmarcero/openClapper/${{ github.ref_name }}/docs/screenshots/preview.png)'
+          body_path: ${{ runner.temp }}/release-body.md
           files: openClapper-*.zip
           generate_release_notes: true
