@@ -303,33 +303,37 @@ TEST_CASE("Factory claps use the limiter as a ceiling and stay distinct", "[plug
         REQUIRE(onset <= static_cast<int>(rate * 0.001));
         REQUIRE(peakIndex <= static_cast<int>(rate * 0.004));
 
-        constexpr int nfft = 2048;
-        double power = 0.0;
+        constexpr int nfft = 4096;
         double weighted = 0.0;
-        double high = 0.0;
-        double total = 0.0;
+        double magSum = 0.0;
+        double body = 0.0;
+        double air = 0.0;
+        double weight = 0.0;
         for (int k = 1; k <= nfft / 2; ++k) {
             double re = 0.0;
             double im = 0.0;
-            for (int n = 0; n < nfft; ++n) {
+            for (int n = 0; n < nfft && n < samples; ++n) {
                 const double window = 0.5 - 0.5 * std::cos(2.0 * 3.141592653589793 * n / (nfft - 1));
                 const double sample = 0.5 * (audio.getSample(0, n) + audio.getSample(1, n)) * window;
                 const double angle = 2.0 * 3.141592653589793 * k * n / nfft;
                 re += sample * std::cos(angle);
                 im -= sample * std::sin(angle);
             }
-            const double mag = std::sqrt(re * re + im * im);
+            const double powerBin = re * re + im * im;
             const double freq = rate * k / nfft;
-            if (freq >= 200.0 && freq < 20000.0) {
-                total += mag;
-                weighted += freq * mag;
-                if (freq >= 8000.0) high += mag;
-            }
-            (void)power;
+            const double mag = std::sqrt(powerBin);
+            magSum += mag;
+            weighted += freq * mag;
+            if (freq >= 200.0 && freq < 500.0) weight += powerBin;
+            if (freq >= 800.0 && freq < 2500.0) body += powerBin;
+            if (freq >= 8000.0 && freq < 20000.0) air += powerBin;
         }
-        const double centroid = weighted / (total + 1.0e-12);
-        REQUIRE(centroid > 5500.0);
-        REQUIRE(high / (total + 1.0e-12) > 0.22);
+        const double centroid = weighted / (magSum + 1.0e-12);
+        // Body smack has to carry the clap, and the top end still has to be open.
+        REQUIRE(body / (body + air + weight + 1.0e-12) > 0.18);
+        REQUIRE(body >= air);
+        REQUIRE(centroid > 2800.0);
+        REQUIRE(air / (body + air + 1.0e-12) > 0.05);
 
         REQUIRE(peak > 0.36f);
         REQUIRE(peak < 0.72f);

@@ -600,9 +600,9 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
         processBiquad(filteredHP_R, noiseLPF_R_, b0_l_, b1_l_, b2_l_, a1_l_, a2_l_),
         noiseLPF2_R_, b0_l_, b1_l_, b2_l_, a1_l_, a2_l_);
     if (!ampEnabled_ && mainAge >= 0.0f) {
-        const float snapSamples = 0.0012f * static_cast<float>(sampleRate_);
+        const float snapSamples = 0.0022f * static_cast<float>(sampleRate_);
         if (mainAge < snapSamples) {
-            const float snap = 1.0f + 1.15f * (1.0f - mainAge / snapSamples);
+            const float snap = 1.0f + 2.0f * (1.0f - mainAge / snapSamples);
             filteredNoiseL *= snap;
             filteredNoiseR *= snap;
         }
@@ -623,8 +623,9 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
             lastToneQ_ = toneQ;
             computeBandpassCoeffs(lastToneFrequency_, toneQ, sampleRate_, b0_t_, b1_t_, b2_t_, a1_t_, a2_t_);
             // Broad presence, not a tuned harmonic. A narrow 1.6x/3.8x stack rang like a bell.
-            const float bloomHz = std::clamp(1100.0f + fundamental * 0.55f, 900.0f, 2800.0f);
-            computeBandpassCoeffs(bloomHz, 0.55f, sampleRate_, b0_tb_, b1_tb_, b2_tb_, a1_tb_, a2_tb_);
+            // Wide smack around 1-1.5 kHz. Kept broad so it is a hand body, not a ring.
+            const float bloomHz = std::clamp(980.0f + fundamental * 0.28f, 900.0f, 1700.0f);
+            computeBandpassCoeffs(bloomHz, 0.72f, sampleRate_, b0_tb_, b1_tb_, b2_tb_, a1_tb_, a2_tb_);
         }
         const float sr = static_cast<float>(sampleRate_);
         const float impulse = mainAge < 1.0f ? 1.0f : 0.0f;
@@ -633,13 +634,13 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
         const float knock = processBiquad(impulse + rawNoiseL * knockEnv, toneFilterL_, b0_t_, b1_t_, b2_t_, a1_t_, a2_t_);
         const float bloomMix = 1.0f / (1.0f + 0.12f * std::max(0.0f, toneQ - 2.0f));
         const float bloom = processBiquad(rawNoiseL, toneBloomFilterL_, b0_tb_, b1_tb_, b2_tb_, a1_tb_, a2_tb_)
-            * (0.28f * bloomMix);
+            * (0.70f * bloomMix);
         float thump = 0.0f;
         if (impact > 0.001f && mainAge < 0.050f * sr) {
-            const float lpCoeff = 1.0f - std::exp(-2.0f * pi() * 180.0f / sr);
+            const float lpCoeff = 1.0f - std::exp(-2.0f * pi() * 340.0f / sr);
             impactLp_ += lpCoeff * (rawNoiseL - impactLp_);
-            const float thumpEnv = std::exp(-mainAge / (0.011f * sr));
-            thump = impactLp_ * thumpEnv * impact * 1.6f;
+            const float thumpEnv = std::exp(-mainAge / (0.016f * sr));
+            thump = impactLp_ * thumpEnv * impact * 2.1f;
         }
         toneSample = knock * (1.15f + 0.35f * std::min(toneQ, 6.0f) / 6.0f) + bloom + thump;
         if (impact > 0.001f && knockEnv > 0.08f) {
