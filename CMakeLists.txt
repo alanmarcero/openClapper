@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(OpenClapper VERSION 3.10.0 LANGUAGES C CXX)
+project(OpenClapper VERSION 3.11.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -57,11 +57,16 @@ if(OC_BUILD_PLUGIN)
         Source/Plugin/Controls.cpp
         Source/Plugin/Panels.cpp
         Source/Plugin/PluginProcessor.cpp
-        Source/Plugin/PluginEditor.cpp)
+        Source/Plugin/PluginEditor.cpp
+        Source/suite/ParameterUndo.cpp
+        Source/suite/UserPresets.cpp
+        Source/suite/PresetBrowser.cpp
+        Source/suite/SuiteBar.cpp)
 
     target_include_directories(OpenClapper PRIVATE
         Source/Core
-        Source/Plugin)
+        Source/Plugin
+        Source)
 
     target_compile_definitions(OpenClapper PUBLIC
         JUCE_WEB_BROWSER=0
@@ -101,8 +106,8 @@ if(OC_BUILD_TESTS)
     catch_discover_tests(openclapper_tests)
 
     if(OC_BUILD_PLUGIN)
-        add_executable(openclapper_plugin_tests Tests/PluginTests.cpp)
-        target_include_directories(openclapper_plugin_tests PRIVATE Source/Plugin Source/Core)
+        add_executable(openclapper_plugin_tests Tests/PluginTests.cpp Tests/SuiteTests.cpp)
+        target_include_directories(openclapper_plugin_tests PRIVATE Source/Plugin Source/Core Source)
         target_compile_definitions(openclapper_plugin_tests PRIVATE
             OPENCLAPPER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
             $<TARGET_PROPERTY:OpenClapper,COMPILE_DEFINITIONS>)

@@ -127,16 +127,19 @@ TEST_CASE("Slapback feedback, stereo doubler, and pitch humanize shape output", 
     REQUIRE(diff > 0.1f);
 }
 
-TEST_CASE("OpenClapperProcessor retains 44 host programs and offers 56 editor presets", "[plugin]") {
+TEST_CASE("Host program list matches the 56 factory claps in editor order", "[plugin]") {
     OpenClapperProcessor processor;
-    REQUIRE(processor.getNumPrograms() == 44);
-    REQUIRE(openclapper::presets::factoryPresets().size() == 56);
-
-    for (int i = 0; i < 44; ++i) {
-        processor.setCurrentProgram(i);
-        REQUIRE(processor.getCurrentProgram() == i);
-        REQUIRE(processor.getProgramName(i).isNotEmpty());
+    const auto& bank = openclapper::presets::factoryPresets();
+    REQUIRE(processor.getNumPrograms() == 56);
+    REQUIRE(bank.size() == 56);
+    for (int index = 0; index < processor.getNumPrograms(); ++index) {
+        INFO(index);
+        REQUIRE(processor.getProgramName(index) == bank[static_cast<size_t>(index)].name);
+        processor.setCurrentProgram(index);
+        REQUIRE(processor.getCurrentProgram() == index);
+        REQUIRE(processor.getSelectedPresetIndex() == index);
     }
+    REQUIRE(processor.parameters.getRawParameterValue(openclapper::params::kPreset)->load() == Catch::Approx(43.0f));
 }
 
 TEST_CASE("All factory presets render and use tuned noise", "[plugin][presets]") {
@@ -493,7 +496,7 @@ TEST_CASE("Native editor browses, auditions and edits clap layers and held notes
     snapshot(*editor, "openClapper-screenshot.png");
     click(*editor, "Previous");
     REQUIRE(processor.getSelectedPresetIndex() == 55);
-    REQUIRE(processor.getCurrentProgram() == 0);
+    REQUIRE(processor.getCurrentProgram() == 55);
     click(*editor, "Next");
     REQUIRE(processor.getSelectedPresetIndex() == 0);
     browser->setSelectedId(13, juce::sendNotificationSync);
@@ -549,7 +552,7 @@ TEST_CASE("SVG hands follow host tempo and seeks, rest on stop, and pulse withou
         juce::MidiBuffer midi;
         juce::AudioBuffer<float> audio(2, 480);
         processor.processBlock(audio, midi);
-        return editor->createComponentSnapshot({editor->getWidth() - 97, 90, 82, 54});
+        return editor->createComponentSnapshot({editor->getWidth() - 97, 134, 82, 54});
     };
     const auto difference = [](const juce::Image& a, const juce::Image& b) {
         int count = 0;
@@ -792,7 +795,7 @@ TEST_CASE("Legacy preset automation preserves all original normalized program va
     }
     processor.setCurrentProgram(43);
     processor.selectPreset(55);
-    REQUIRE(processor.getCurrentProgram() == 43);
+    REQUIRE(processor.getCurrentProgram() == 55);
     REQUIRE(processor.getSelectedPresetIndex() == 55);
     REQUIRE(processor.getProgramName(55) == "Classic / Last Accent");
     REQUIRE(selector->getValue() == Catch::Approx(1.0f));
@@ -800,7 +803,7 @@ TEST_CASE("Legacy preset automation preserves all original normalized program va
     juce::MemoryBlock impactState;
     processor.getStateInformation(impactState);
     restored.setStateInformation(impactState.getData(), static_cast<int>(impactState.getSize()));
-    REQUIRE(restored.getCurrentProgram() == 43);
+    REQUIRE(restored.getCurrentProgram() == 55);
     REQUIRE(restored.getSelectedPresetIndex() == 55);
     REQUIRE(restored.parameters.getRawParameterValue("amp_enabled")->load() == Catch::Approx(0.0f));
 }

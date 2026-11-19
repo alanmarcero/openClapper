@@ -1,4 +1,4 @@
-# openClapper v3.10.0
+# openClapper v3.11.0
 
 [Install with OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest)
 
@@ -22,6 +22,8 @@ The 56 factory sounds span six dance styles: 16 Uplifting and eight each of Roll
 The animated hands beside the page tabs meet on each host beat and follow tempo changes and seeks. They rest when playback stops. Standalone and hosts without transport timing use the internal 138 BPM clock.
 
 The **Clap** page shows a dry A4 preview, four-knob cards for **Hand spacing**, **Tuned body** (with **Impact** punch/chest slam), **Noise tail**, and **Finish** (with **Room gate**), and the **Output** section (dual-layer 3-band EQ with ±12 dB gain and smooth frequency glide, stereo width, output gain, and brickwall limiter). Both every section header and every individual control have lock toggles so locked parameters stay put when browsing factory presets. The peach section in the waveform marks the pre-claps and the vertical marker shows when the main strike begins. **Body decay** and **Noise decay** shape the pitched body and noise tail separately.
+
+The window can be resized, and the last size is saved with the session. **Undo** and **Redo** (also Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z) step through knob and preset changes. **A** and **B** keep two full setups, with **A to B** and **B to A** to copy between them. **Presets** searches the factory bank and your own sounds, and stars the ones you want to keep handy. Factory sounds stay read-only. Saved sounds go in `Documents/Alan Marcero/openClapper/Presets`. **Drag WAV** pulls the current hit out as a WAV file.
 
 ## Shape the layers
 
@@ -53,6 +55,10 @@ MIDI CC 7 adjusts master level and CC 74 controls noise brightness. CC 120 stops
 
 The Sub Thump, Saturated Tri and Cyber Square body voices are removed. They were stacked sine harmonics, which sounded like a synth tone rather than a clap. The tuned body is now always the resonant band-pass voice, and the **Voice** control is gone. Factory presets that used a removed voice now use the band-pass body. Earlier sessions keep every other setting.
 
+## Changes in 3.11
+
+The editor can be resized and remembers its size. The DAW program list shows all 56 factory claps in the same order as the bank. You can undo edits, compare two setups, save your own presets, and drag the current hit out as a WAV.
+
 ## Changes in 3.10
 
 Factory claps have their hand smack back. The 1 kHz body and a little 200–500 Hz weight sit under the bright top, so they read as claps rather than hi-hats. They still hit on the note.
@@ -78,6 +84,6 @@ Factory claps land on the note. Hand spacing and noise attack stop at 5 ms, and 
 
 ## Formats and compatibility
 
-macOS includes AU, VST3, LV2, and Standalone. Windows and Linux include VST3, LV2, and Standalone. Older sessions restore their saved parameter values and appear as **Custom sound**. The original 44 host program positions and automation ranges are preserved. The editor offers all 56 sounds.
+macOS includes AU, VST3, LV2, and Standalone. Windows and Linux include VST3, LV2, and Standalone. Older sessions restore their saved parameter values and appear as **Custom sound**. The DAW program list shows all 56 factory sounds in the same order as the editor. The original Preset Index automation still covers the first 44 positions, so older sessions keep their values.
 
 MIT License. See [LICENSE](LICENSE).

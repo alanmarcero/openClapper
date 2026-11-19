@@ -1,6 +1,9 @@
 #pragma once
 
 #include "ClapEngine.h"
+#include "suite/AbSlots.h"
+#include "suite/ParameterUndo.h"
+#include "suite/UserPresets.h"
 #include <atomic>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <set>
@@ -41,6 +44,30 @@ public:
     void toggleSectionLock(const juce::StringArray& ids);
     [[nodiscard]] juce::StringArray lockedParameterIds() const;
 
+    void undo() { undo_.undo(); }
+    void redo() { undo_.redo(); }
+    [[nodiscard]] bool canUndo() const { return undo_.canUndo(); }
+    [[nodiscard]] bool canRedo() const { return undo_.canRedo(); }
+
+    void toggleAb();
+    void copyAbAToB();
+    void copyAbBToA();
+    [[nodiscard]] bool isAbSlotB() const noexcept { return ab_.editingB(); }
+
+    [[nodiscard]] juce::String userPresetName() const;
+    void loadUserPreset(const juce::String& name);
+    bool saveUserPreset(const juce::String& name);
+    bool renameUserPreset(const juce::String& from, const juce::String& to);
+    bool deleteUserPreset(const juce::String& name);
+    suite::UserPresetStore& userPresets() noexcept { return userPresets_; }
+
+    void setEditorSize(int width, int height) noexcept;
+    [[nodiscard]] int editorWidth() const noexcept { return editorWidth_.load(); }
+    [[nodiscard]] int editorHeight() const noexcept { return editorHeight_.load(); }
+
+    /** Offline render of the current hit, using the same A4 audition as the editor. */
+    [[nodiscard]] juce::File renderHitWav(const juce::File& destination) const;
+
     juce::AudioProcessorValueTreeState parameters;
 
     std::atomic<float> displayPeak{ 0.0f };
@@ -52,11 +79,23 @@ public:
     std::atomic<uint32_t> displayTriggerCount{ 0 };
 
 private:
+    enum class ApplyKind { session, slot, undo };
+
     void syncLocksToState();
     void loadLocksFromState(const juce::ValueTree& state);
+    [[nodiscard]] juce::ValueTree captureSoundState();
+    void applySoundTree(const juce::ValueTree& incoming, ApplyKind kind);
+    void applyParameterChildren(const juce::ValueTree& tree, const juce::StringArray& lockedIds);
+    void setUserPresetName(juce::String name);
+
     openclapper::core::ClapEngine engine_;
     std::atomic<bool> auditionPending_{ false };
     std::atomic<int> currentProgram_{0}, selectedPreset_{0};
+    std::atomic<int> editorWidth_{0}, editorHeight_{0};
     mutable juce::CriticalSection lockMutex_;
     std::set<juce::String> lockedParams_;
+    juce::String userPresetName_;
+    suite::ParameterUndo undo_;
+    suite::AbSlots ab_;
+    suite::UserPresetStore userPresets_{ suite::UserPresetStore::defaultDirectory("openClapper") };
 };

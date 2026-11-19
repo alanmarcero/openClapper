@@ -87,6 +87,7 @@ inline constexpr const char* kEqMidDb = "eq_mid_db";
 inline constexpr const char* kEqHighFreq = "eq_high_freq";
 inline constexpr const char* kEqHighDb = "eq_high_db";
 inline constexpr const char* kPreset = "preset";
+// Automatable Preset Index range kept for older sessions. The host program list is the full factory bank.
 inline constexpr int kHostProgramCount = 44;
 
 inline constexpr std::array<const char*, 4> kLayerNames{"Body", "Noise", "Transient", "Pre-clap"};
