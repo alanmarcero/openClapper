@@ -1,4 +1,4 @@
-# openClapper v3.9.0
+# openClapper v3.10.0
 
 [Install with OpenVST Manager](https://github.com/alanmarcero/alan-m-OpenVSTManager/releases/latest)
 
@@ -52,6 +52,10 @@ MIDI CC 7 adjusts master level and CC 74 controls noise brightness. CC 120 stops
 ## Changes in 3.5
 
 The Sub Thump, Saturated Tri and Cyber Square body voices are removed. They were stacked sine harmonics, which sounded like a synth tone rather than a clap. The tuned body is now always the resonant band-pass voice, and the **Voice** control is gone. Factory presets that used a removed voice now use the band-pass body. Earlier sessions keep every other setting.
+
+## Changes in 3.10
+
+Factory claps have their hand smack back. The 1 kHz body and a little 200–500 Hz weight sit under the bright top, so they read as claps rather than hi-hats. They still hit on the note.
 
 ## Changes in 3.9
 
