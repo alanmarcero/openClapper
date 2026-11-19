@@ -3,6 +3,8 @@
 #include "PluginEditor.h"
 #include "Presets.h"
 #include <algorithm>
+#include <cmath>
+#include <juce_audio_formats/juce_audio_formats.h>
 #include <ranges>
 
 OpenClapperProcessor::OpenClapperProcessor()
@@ -12,7 +14,15 @@ OpenClapperProcessor::OpenClapperProcessor()
         .withOutput("Transient", juce::AudioChannelSet::stereo(), false)
         .withOutput("Pre-clap", juce::AudioChannelSet::stereo(), false)),
       parameters(*this, nullptr, "PARAMETERS", openclapper::params::createParameterLayout()) {
+    undo_.setStateAccess(
+        [this] { return captureSoundState(); },
+        [this](const juce::ValueTree& tree) { applySoundTree(tree, ApplyKind::undo); });
+    undo_.attach(*this);
+    undo_.suspend();
     selectPreset(0);
+    undo_.resume();
+    undo_.clear();
+    ab_.setBoth(captureSoundState());
 }
 
 void OpenClapperProcessor::prepareToPlay(double sampleRate, int) {
@@ -175,7 +185,7 @@ juce::AudioProcessorEditor* OpenClapperProcessor::createEditor() {
 }
 
 int OpenClapperProcessor::getNumPrograms() {
-    return openclapper::params::kHostProgramCount;
+    return static_cast<int>(openclapper::presets::factoryPresets().size());
 }
 
 const juce::String OpenClapperProcessor::getProgramName(int index) {
@@ -193,14 +203,16 @@ void OpenClapperProcessor::setCurrentProgram(int index) {
 void OpenClapperProcessor::selectPreset(int index) {
     const auto& presets = openclapper::presets::factoryPresets();
     if (index < 0 || index >= static_cast<int>(presets.size())) return;
-    selectedPreset_ = index;
-    openclapper::presets::apply(presets[static_cast<size_t>(index)], parameters, lockedParameterIds());
-
-    // Additional editor presets must not shift either JUCE's host program automation or the legacy selector.
-    if (index >= getNumPrograms()) return;
-    currentProgram_ = index;
-    if (auto* parameter = parameters.getParameter(openclapper::params::kPreset))
-        parameter->setValueNotifyingHost(parameter->convertTo0to1(static_cast<float>(index)));
+    undo_.group("Preset", [&] {
+        selectedPreset_ = index;
+        setUserPresetName({});
+        openclapper::presets::apply(presets[static_cast<size_t>(index)], parameters, lockedParameterIds());
+        currentProgram_ = index;
+        // Preset Index automation stays on the original 44 positions.
+        if (index < openclapper::params::kHostProgramCount)
+            if (auto* parameter = parameters.getParameter(openclapper::params::kPreset))
+                parameter->setValueNotifyingHost(parameter->convertTo0to1(static_cast<float>(index)));
+    });
 }
 
 bool OpenClapperProcessor::isParamLocked(const juce::String& id) const {
@@ -268,44 +280,224 @@ void OpenClapperProcessor::loadLocksFromState(const juce::ValueTree& state) {
     });
 }
 
-void OpenClapperProcessor::getStateInformation(juce::MemoryBlock& destData) {
+juce::ValueTree OpenClapperProcessor::captureSoundState() {
     syncLocksToState();
     auto state = parameters.copyState();
+    state.removeChild(state.getChildWithName("ABCompare"), nullptr);
+    state.removeProperty("editor_width", nullptr);
+    state.removeProperty("editor_height", nullptr);
     state.setProperty("selected_preset", selectedPreset_.load(), nullptr);
+    state.setProperty("host_program", currentProgram_.load(), nullptr);
+    state.setProperty("user_preset", userPresetName(), nullptr);
     state.setProperty("clap_bank", 3, nullptr);
+    return state;
+}
+
+void OpenClapperProcessor::applyParameterChildren(const juce::ValueTree& tree, const juce::StringArray& lockedIds) {
+    for (int index = 0; index < tree.getNumChildren(); ++index) {
+        const auto child = tree.getChild(index);
+        if (!child.hasProperty("id") || !child.hasProperty("value")) continue;
+        const auto id = child.getProperty("id").toString();
+        if (lockedIds.contains(id)) continue;
+        if (auto* parameter = parameters.getParameter(id)) {
+            const float value = static_cast<float>(child.getProperty("value"));
+            parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
+        }
+    }
+}
+
+void OpenClapperProcessor::applySoundTree(const juce::ValueTree& incoming, ApplyKind kind) {
+    undo_.suspend();
+    auto state = incoming.createCopy();
+    state.removeChild(state.getChildWithName("ABCompare"), nullptr);
+    state.removeProperty("locked_wav", nullptr);
+    const int width = static_cast<int>(state.getProperty("editor_width", editorWidth_.load()));
+    const int height = static_cast<int>(state.getProperty("editor_height", editorHeight_.load()));
+    state.removeProperty("editor_width", nullptr);
+    state.removeProperty("editor_height", nullptr);
+    parameters.replaceState(state);
+
+    const int bank = static_cast<int>(state.getProperty("clap_bank", 0));
+    if (bank < 3 && !state.getChildWithProperty("id", openclapper::params::kImpactPunch).isValid()) {
+        if (auto* impactParam = parameters.getParameter(openclapper::params::kImpactPunch))
+            impactParam->setValueNotifyingHost(impactParam->convertTo0to1(0.0f));
+    }
+    loadLocksFromState(state);
+    const auto clampDelay = [this](const char* id) {
+        auto* parameter = parameters.getParameter(id);
+        const auto* raw = parameters.getRawParameterValue(id);
+        if (parameter == nullptr || raw == nullptr) return;
+        if (raw->load() > openclapper::core::kMaxTimingOffsetMs)
+            parameter->setValueNotifyingHost(parameter->convertTo0to1(openclapper::core::kMaxTimingOffsetMs));
+    };
+    clampDelay(openclapper::params::kPreSpread);
+    clampDelay(openclapper::params::kNoiseAttack);
+
+    const int factoryCount = static_cast<int>(openclapper::presets::factoryPresets().size());
+    const int legacyProgram = std::clamp(
+        static_cast<int>(parameters.getRawParameterValue(openclapper::params::kPreset)->load()),
+        0, openclapper::params::kHostProgramCount - 1);
+    currentProgram_ = state.hasProperty("host_program")
+        ? std::clamp(static_cast<int>(state.getProperty("host_program")), 0, factoryCount - 1)
+        : legacyProgram;
+    selectedPreset_ = bank == 3
+        ? std::clamp(static_cast<int>(state.getProperty("selected_preset", currentProgram_.load())), -1, factoryCount - 1)
+        : -1;
+    setUserPresetName(state.getProperty("user_preset").toString());
+
+    if (kind == ApplyKind::session) {
+        if (incoming.hasProperty("editor_width") && incoming.hasProperty("editor_height")) {
+            editorWidth_ = std::clamp(width, 100, 8000);
+            editorHeight_ = std::clamp(height, 100, 8000);
+        }
+        if (!ab_.read(incoming)) ab_.setBoth(captureSoundState());
+    }
+    undo_.resume();
+    if (kind != ApplyKind::undo) undo_.clear();
+}
+
+void OpenClapperProcessor::getStateInformation(juce::MemoryBlock& destData) {
+    if (ab_.hasSlots()) ab_.store(ab_.editingB(), captureSoundState());
+    auto state = captureSoundState();
+    if (editorWidth_.load() > 0) state.setProperty("editor_width", editorWidth_.load(), nullptr);
+    if (editorHeight_.load() > 0) state.setProperty("editor_height", editorHeight_.load(), nullptr);
+    ab_.write(state);
     std::unique_ptr<juce::XmlElement> xml(state.createXml());
     copyXmlToBinary(*xml, destData);
 }
 
 void OpenClapperProcessor::setStateInformation(const void* data, int sizeInBytes) {
     std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
-    if (xmlState != nullptr && xmlState->hasTagName(parameters.state.getType())) {
-        auto state = juce::ValueTree::fromXml(*xmlState);
-        state.removeProperty("locked_wav", nullptr);
-        parameters.replaceState(state);
-        const int bank = static_cast<int>(state.getProperty("clap_bank", 0));
-        if (bank < 3 && !state.getChildWithProperty("id", openclapper::params::kImpactPunch).isValid()) {
-            if (auto* impactParam = parameters.getParameter(openclapper::params::kImpactPunch)) {
-                impactParam->setValueNotifyingHost(impactParam->convertTo0to1(0.0f));
-            }
-        }
-        loadLocksFromState(state);
-        const auto clampDelay = [this](const char* id) {
-            auto* parameter = parameters.getParameter(id);
-            const auto* raw = parameters.getRawParameterValue(id);
-            if (parameter == nullptr || raw == nullptr) return;
-            if (raw->load() > openclapper::core::kMaxTimingOffsetMs)
-                parameter->setValueNotifyingHost(parameter->convertTo0to1(openclapper::core::kMaxTimingOffsetMs));
-        };
-        clampDelay(openclapper::params::kPreSpread);
-        clampDelay(openclapper::params::kNoiseAttack);
-        currentProgram_ = std::clamp(static_cast<int>(parameters.getRawParameterValue(openclapper::params::kPreset)->load()),
-            0, getNumPrograms() - 1);
-        selectedPreset_ = bank == 3
-            ? std::clamp(static_cast<int>(state.getProperty("selected_preset", currentProgram_.load())),
-                         -1, static_cast<int>(openclapper::presets::factoryPresets().size()) - 1)
-            : -1;
+    if (xmlState != nullptr && xmlState->hasTagName(parameters.state.getType()))
+        applySoundTree(juce::ValueTree::fromXml(*xmlState), ApplyKind::session);
+}
+
+void OpenClapperProcessor::setUserPresetName(juce::String name) {
+    const juce::ScopedLock guard(lockMutex_);
+    userPresetName_ = std::move(name);
+}
+
+juce::String OpenClapperProcessor::userPresetName() const {
+    const juce::ScopedLock guard(lockMutex_);
+    return userPresetName_;
+}
+
+void OpenClapperProcessor::setEditorSize(int width, int height) noexcept {
+    if (width > 0 && height > 0) {
+        editorWidth_ = width;
+        editorHeight_ = height;
     }
+}
+
+void OpenClapperProcessor::toggleAb() {
+    if (!ab_.hasSlots()) ab_.setBoth(captureSoundState());
+    undo_.suspend();
+    ab_.store(ab_.editingB(), captureSoundState());
+    ab_.setEditingB(!ab_.editingB());
+    applySoundTree(ab_.slot(ab_.editingB()), ApplyKind::slot);
+    undo_.resume();
+    undo_.clear();
+}
+
+void OpenClapperProcessor::copyAbAToB() {
+    if (!ab_.hasSlots()) ab_.setBoth(captureSoundState());
+    undo_.suspend();
+    ab_.store(ab_.editingB(), captureSoundState());
+    ab_.copyAToB();
+    if (ab_.editingB()) applySoundTree(ab_.slot(true), ApplyKind::slot);
+    undo_.resume();
+    undo_.clear();
+}
+
+void OpenClapperProcessor::copyAbBToA() {
+    if (!ab_.hasSlots()) ab_.setBoth(captureSoundState());
+    undo_.suspend();
+    ab_.store(ab_.editingB(), captureSoundState());
+    ab_.copyBToA();
+    if (!ab_.editingB()) applySoundTree(ab_.slot(false), ApplyKind::slot);
+    undo_.resume();
+    undo_.clear();
+}
+
+void OpenClapperProcessor::loadUserPreset(const juce::String& name) {
+    auto tree = userPresets_.load(name);
+    if (!tree) return;
+    undo_.group("User preset", [&] {
+        applyParameterChildren(*tree, lockedParameterIds());
+        selectedPreset_ = -1;
+        setUserPresetName(suite::UserPresetStore::sanitise(name));
+    });
+}
+
+bool OpenClapperProcessor::saveUserPreset(const juce::String& name) {
+    const auto clean = suite::UserPresetStore::sanitise(name);
+    if (clean.isEmpty()) return false;
+    if (!userPresets_.save(clean, captureSoundState())) return false;
+    setUserPresetName(clean);
+    selectedPreset_ = -1;
+    return true;
+}
+
+bool OpenClapperProcessor::renameUserPreset(const juce::String& from, const juce::String& to) {
+    if (!userPresets_.rename(from, to)) return false;
+    if (userPresetName() == suite::UserPresetStore::sanitise(from))
+        setUserPresetName(suite::UserPresetStore::sanitise(to));
+    return true;
+}
+
+bool OpenClapperProcessor::deleteUserPreset(const juce::String& name) {
+    if (!userPresets_.remove(name)) return false;
+    if (userPresetName() == suite::UserPresetStore::sanitise(name)) setUserPresetName({});
+    return true;
+}
+
+juce::File OpenClapperProcessor::renderHitWav(const juce::File& destination) const {
+    if (destination == juce::File()) return {};
+    destination.getParentDirectory().createDirectory();
+    constexpr double sampleRate = 48000.0;
+    const int samples = std::clamp(
+        static_cast<int>(std::ceil((getTailLengthSeconds() + 0.2) * sampleRate)),
+        static_cast<int>(sampleRate * 0.4),
+        static_cast<int>(sampleRate * 12.0));
+
+    openclapper::core::ClapEngine engine;
+    engine.prepare(sampleRate);
+    const auto settings = openclapper::params::readSettings(parameters);
+    openclapper::core::Transport transport;
+    transport.bpm = 138.0;
+    transport.ppqPosition = 0.0;
+    transport.beatsPerBar = 4.0;
+    transport.isPlaying = false;
+    const openclapper::core::MidiTrigger trigger{.noteNumber = 69, .velocity = 1.0f, .audition = true};
+
+    juce::AudioBuffer<float> buffer(2, samples);
+    buffer.clear();
+    int rendered = 0;
+    while (rendered < samples) {
+        const int block = std::min(512, samples - rendered);
+        float* channels[] = {buffer.getWritePointer(0, rendered), buffer.getWritePointer(1, rendered)};
+        if (rendered == 0)
+            engine.process(settings, transport, std::span(&trigger, 1), channels, 2, block);
+        else
+            engine.process(settings, transport, {}, channels, 2, block);
+        rendered += block;
+    }
+
+    const int fade = std::min(samples, static_cast<int>(sampleRate * 0.01));
+    for (int index = 0; index < fade; ++index) {
+        const float gain = static_cast<float>(fade - index) / static_cast<float>(fade);
+        buffer.applyGain(samples - fade + index, 1, gain);
+    }
+
+    juce::WavAudioFormat format;
+    std::unique_ptr<juce::OutputStream> stream(destination.createOutputStream());
+    if (stream == nullptr) return {};
+    auto writer = format.createWriterFor(stream, juce::AudioFormatWriterOptions{}
+        .withSampleRate(sampleRate)
+        .withNumChannels(2)
+        .withBitsPerSample(24));
+    if (writer == nullptr || !writer->writeFromAudioSampleBuffer(buffer, 0, samples)) return {};
+    return destination;
 }
 
 // Juce plugin entry point

@@ -1,0 +1,317 @@
+#include "Parameters.h"
+#include "PluginEditor.h"
+#include "PluginProcessor.h"
+#include "Presets.h"
+#include "suite/PresetBrowser.h"
+#include "suite/WavDragButton.h"
+#include <juce_audio_formats/juce_audio_formats.h>
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <cstring>
+
+namespace {
+juce::File tempDirectory(const char* name) {
+    auto directory = juce::File::getSpecialLocation(juce::File::tempDirectory)
+        .getChildFile("openclapper-suite-tests")
+        .getChildFile(name);
+    directory.deleteRecursively();
+    directory.createDirectory();
+    return directory;
+}
+
+template <typename Widget, typename Predicate>
+Widget* findVisible(juce::Component& root, Predicate matches) {
+    for (auto* child : root.getChildren()) {
+        if (!child->isVisible()) continue;
+        if (auto* widget = dynamic_cast<Widget*>(child); widget && matches(*widget)) return widget;
+        if (auto* result = findVisible<Widget>(*child, matches)) return result;
+    }
+    return nullptr;
+}
+
+float rawValue(OpenClapperProcessor& processor, const char* id) {
+    return processor.parameters.getRawParameterValue(id)->load();
+}
+
+void gesture(OpenClapperProcessor& processor, const char* id, float value) {
+    auto* parameter = processor.parameters.getParameter(id);
+    REQUIRE(parameter != nullptr);
+    parameter->beginChangeGesture();
+    parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
+    parameter->endChangeGesture();
+}
+}
+
+TEST_CASE("Parameter gestures undo and redo as one step", "[plugin][suite]") {
+    OpenClapperProcessor processor;
+    const float original = rawValue(processor, openclapper::params::kToneDecay);
+    auto* parameter = processor.parameters.getParameter(openclapper::params::kToneDecay);
+    parameter->setValueNotifyingHost(parameter->convertTo0to1(240.0f));
+    REQUIRE_FALSE(processor.canUndo());
+
+    parameter->beginChangeGesture();
+    parameter->setValueNotifyingHost(parameter->convertTo0to1(80.0f));
+    parameter->setValueNotifyingHost(parameter->convertTo0to1(320.0f));
+    parameter->endChangeGesture();
+    REQUIRE(rawValue(processor, openclapper::params::kToneDecay) == Catch::Approx(320.0f));
+    REQUIRE(processor.canUndo());
+    REQUIRE_FALSE(processor.canRedo());
+
+    const float spreadBefore = rawValue(processor, openclapper::params::kPreSpread);
+    gesture(processor, openclapper::params::kPreSpread, 4.0f);
+    processor.undo();
+    REQUIRE(rawValue(processor, openclapper::params::kPreSpread) == Catch::Approx(spreadBefore));
+    REQUIRE(rawValue(processor, openclapper::params::kToneDecay) == Catch::Approx(320.0f));
+    processor.undo();
+    REQUIRE(rawValue(processor, openclapper::params::kToneDecay) == Catch::Approx(240.0f));
+    REQUIRE(rawValue(processor, openclapper::params::kToneDecay) != Catch::Approx(original));
+    REQUIRE(processor.canRedo());
+    processor.redo();
+    REQUIRE(rawValue(processor, openclapper::params::kToneDecay) == Catch::Approx(320.0f));
+    processor.redo();
+    REQUIRE(rawValue(processor, openclapper::params::kPreSpread) == Catch::Approx(4.0f));
+}
+
+TEST_CASE("Loading a factory preset is a single undo step", "[plugin][suite]") {
+    OpenClapperProcessor processor;
+    gesture(processor, openclapper::params::kNoiseDecay, 900.0f);
+    const float tweaked = rawValue(processor, openclapper::params::kNoiseDecay);
+    processor.selectPreset(4);
+    REQUIRE(processor.getSelectedPresetIndex() == 4);
+    REQUIRE(rawValue(processor, openclapper::params::kNoiseDecay) != Catch::Approx(tweaked));
+    processor.undo();
+    REQUIRE(processor.getSelectedPresetIndex() == 0);
+    REQUIRE(rawValue(processor, openclapper::params::kNoiseDecay) == Catch::Approx(tweaked));
+    processor.redo();
+    REQUIRE(processor.getSelectedPresetIndex() == 4);
+}
+
+TEST_CASE("Editor shortcuts and buttons undo parameter changes", "[plugin][suite][gui]") {
+    OpenClapperProcessor processor;
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    editor->setVisible(true);
+    const float levelBefore = rawValue(processor, openclapper::params::kToneLevel);
+    gesture(processor, openclapper::params::kToneLevel, 0.2f);
+    const auto undoKey = juce::KeyPress('z', juce::ModifierKeys::commandModifier, 0);
+    auto* slider = findVisible<juce::Slider>(*editor, [](const juce::Slider& item) { return item.isVisible(); });
+    REQUIRE(slider != nullptr);
+    REQUIRE_FALSE(slider->keyPressed(undoKey));
+    REQUIRE(rawValue(processor, openclapper::params::kToneLevel) == Catch::Approx(0.2f));
+    REQUIRE(editor->keyPressed(undoKey));
+    REQUIRE(rawValue(processor, openclapper::params::kToneLevel) == Catch::Approx(levelBefore));
+    REQUIRE(editor->keyPressed(juce::KeyPress('z', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0)));
+    REQUIRE(rawValue(processor, openclapper::params::kToneLevel) == Catch::Approx(0.2f));
+
+    auto* undo = findVisible<juce::TextButton>(*editor, [](const juce::TextButton& button) {
+        return button.getButtonText() == "Undo";
+    });
+    auto* redo = findVisible<juce::TextButton>(*editor, [](const juce::TextButton& button) {
+        return button.getButtonText() == "Redo";
+    });
+    REQUIRE(undo != nullptr);
+    REQUIRE(redo != nullptr);
+    REQUIRE(undo->getWidth() >= 44);
+    REQUIRE(undo->getHeight() >= 36);
+    undo->onClick();
+    REQUIRE(rawValue(processor, openclapper::params::kToneLevel) == Catch::Approx(levelBefore));
+    redo->onClick();
+    REQUIRE(rawValue(processor, openclapper::params::kToneLevel) == Catch::Approx(0.2f));
+}
+
+TEST_CASE("A and B slots store a full state and copy either way", "[plugin][suite]") {
+    OpenClapperProcessor processor;
+    gesture(processor, openclapper::params::kToneDecay, 400.0f);
+    processor.setParamLocked(openclapper::params::kPreSpread, true);
+    REQUIRE(processor.canUndo());
+    const float slotA = rawValue(processor, openclapper::params::kToneDecay);
+
+    processor.toggleAb();
+    REQUIRE_FALSE(processor.isParamLocked(openclapper::params::kPreSpread));
+    REQUIRE(rawValue(processor, openclapper::params::kToneDecay) != Catch::Approx(slotA));
+    REQUIRE_FALSE(processor.canUndo());
+    gesture(processor, openclapper::params::kToneDecay, 90.0f);
+    const float slotB = rawValue(processor, openclapper::params::kToneDecay);
+
+    processor.toggleAb();
+    REQUIRE(processor.isAbSlotB() == false);
+    REQUIRE(rawValue(processor, openclapper::params::kToneDecay) == Catch::Approx(slotA));
+    REQUIRE(processor.isParamLocked(openclapper::params::kPreSpread));
+    processor.toggleAb();
+    REQUIRE(rawValue(processor, openclapper::params::kToneDecay) == Catch::Approx(slotB));
+
+    processor.copyAbBToA();
+    processor.toggleAb();
+    REQUIRE(rawValue(processor, openclapper::params::kToneDecay) == Catch::Approx(slotB));
+    gesture(processor, openclapper::params::kToneDecay, 700.0f);
+    processor.copyAbAToB();
+    processor.toggleAb();
+    REQUIRE(rawValue(processor, openclapper::params::kToneDecay) == Catch::Approx(700.0f));
+
+    juce::MemoryBlock state;
+    processor.getStateInformation(state);
+    OpenClapperProcessor restored;
+    restored.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+    REQUIRE(restored.isAbSlotB());
+    REQUIRE(rawValue(restored, openclapper::params::kToneDecay) == Catch::Approx(700.0f));
+    restored.toggleAb();
+    REQUIRE(rawValue(restored, openclapper::params::kToneDecay) == Catch::Approx(700.0f));
+}
+
+TEST_CASE("User presets save, rename, delete, search and favourite without touching factory sounds", "[plugin][suite]") {
+    const auto directory = tempDirectory("presets");
+    const auto documents = suite::UserPresetStore::defaultDirectory("openClapper");
+    REQUIRE(documents.getFileName() == "Presets");
+    REQUIRE(documents.getParentDirectory().getFileName() == "openClapper");
+    REQUIRE(documents.getParentDirectory().getParentDirectory().getFileName() == "Alan Marcero");
+
+    OpenClapperProcessor processor;
+    processor.userPresets().setDirectory(directory);
+    processor.setCurrentProgram(2);
+    const float savedDecay = rawValue(processor, openclapper::params::kToneDecay);
+    REQUIRE(processor.saveUserPreset("Room Clap"));
+    processor.setCurrentProgram(8);
+    REQUIRE(rawValue(processor, openclapper::params::kToneDecay) != Catch::Approx(savedDecay));
+    processor.loadUserPreset("Room Clap");
+    REQUIRE(processor.userPresetName() == "Room Clap");
+    REQUIRE(processor.getSelectedPresetIndex() == -1);
+    REQUIRE(rawValue(processor, openclapper::params::kToneDecay) == Catch::Approx(savedDecay));
+    processor.undo();
+    REQUIRE(processor.getSelectedPresetIndex() == 8);
+    processor.redo();
+    REQUIRE(processor.userPresetName() == "Room Clap");
+
+    REQUIRE(processor.renameUserPreset("Room Clap", "Big Room"));
+    REQUIRE(processor.userPresetName() == "Big Room");
+    REQUIRE(processor.userPresets().load("Big Room").has_value());
+    REQUIRE_FALSE(processor.userPresets().remove("Uplifting / Downbeat"));
+    REQUIRE(processor.deleteUserPreset("Big Room"));
+    REQUIRE(processor.userPresets().userNames().empty());
+    REQUIRE(processor.userPresetName().isEmpty());
+
+    processor.userPresets().setFavorite("Uplifting / Downbeat", true, true);
+    REQUIRE(processor.userPresets().isFavorite("Uplifting / Downbeat", true));
+    REQUIRE(processor.userPresets().userNames().empty());
+
+    suite::PresetBrowser browser(processor.userPresets(), { "Uplifting / Downbeat", "Rolling / Two Hands" });
+    browser.setSize(420, 440);
+    browser.setVisible(true);
+    browser.onSave = [&](const juce::String& name) { return processor.saveUserPreset(name); };
+    browser.nameEditor().setText("Night Hit", juce::dontSendNotification);
+    auto* save = findVisible<juce::TextButton>(browser, [](const juce::TextButton& button) {
+        return button.getButtonText() == "Save";
+    });
+    REQUIRE(save != nullptr);
+    REQUIRE(save->getHeight() >= 36);
+    save->onClick();
+    REQUIRE(processor.userPresets().load("Night Hit").has_value());
+
+    browser.setSearchText("rolling");
+    REQUIRE(browser.visibleCount() == 1);
+    REQUIRE(browser.rowName(0) == "Rolling / Two Hands");
+    browser.setSearchText("night");
+    REQUIRE(browser.visibleCount() == 1);
+    REQUIRE(browser.rowName(0) == "Night Hit");
+    auto* list = findVisible<juce::ListBox>(browser, [](const juce::ListBox&) { return true; });
+    REQUIRE(list != nullptr);
+    list->selectRow(0);
+    auto* remove = findVisible<juce::TextButton>(browser, [](const juce::TextButton& button) {
+        return button.getButtonText() == "Delete";
+    });
+    REQUIRE(remove->isEnabled());
+    browser.setSearchText("");
+    REQUIRE(browser.visibleCount() >= 3);
+    list->selectRow(2);
+    REQUIRE(remove->isEnabled());
+    list->selectRow(0);
+    REQUIRE_FALSE(remove->isEnabled());
+    directory.deleteRecursively();
+}
+
+TEST_CASE("Dragging a hit writes a WAV of the current sound", "[plugin][suite]") {
+    const auto directory = tempDirectory("wav");
+    OpenClapperProcessor processor;
+    processor.setCurrentProgram(0);
+    const auto first = processor.renderHitWav(directory.getChildFile("first.wav"));
+    processor.setCurrentProgram(20);
+    const auto second = processor.renderHitWav(directory.getChildFile("second.wav"));
+    REQUIRE(first.existsAsFile());
+    REQUIRE(second.existsAsFile());
+    juce::MemoryBlock header;
+    REQUIRE(first.loadFileAsData(header));
+    REQUIRE(header.getSize() > 12);
+    REQUIRE(std::memcmp(header.getData(), "RIFF", 4) == 0);
+
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    auto read = [&](const juce::File& file) {
+        std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
+        REQUIRE(reader != nullptr);
+        REQUIRE(reader->numChannels == 2);
+        juce::AudioBuffer<float> buffer(2, static_cast<int>(reader->lengthInSamples));
+        reader->read(&buffer, 0, buffer.getNumSamples(), 0, true, true);
+        return buffer.getMagnitude(0, buffer.getNumSamples());
+    };
+    const float peak = read(first);
+    REQUIRE(peak > 0.01f);
+    REQUIRE(std::abs(peak - read(second)) > 0.0001f);
+
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    auto* drag = dynamic_cast<suite::WavDragButton*>(findVisible<juce::TextButton>(*editor, [](const juce::TextButton& button) {
+        return button.getButtonText() == "Drag WAV";
+    }));
+    REQUIRE(drag != nullptr);
+    REQUIRE(drag->getWidth() >= 44);
+    REQUIRE(drag->getHeight() >= 36);
+    REQUIRE(drag->exportFile().existsAsFile());
+    directory.deleteRecursively();
+}
+
+TEST_CASE("Editor resizes without an aspect lock and remembers its size", "[plugin][suite][gui]") {
+    OpenClapperProcessor processor;
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    auto* constrainer = editor->getConstrainer();
+    REQUIRE(constrainer != nullptr);
+    REQUIRE(constrainer->getFixedAspectRatio() == Catch::Approx(0.0));
+    REQUIRE(constrainer->getMinimumWidth() >= 900);
+    REQUIRE(constrainer->getMinimumHeight() >= 700);
+    REQUIRE(constrainer->getMaximumWidth() > constrainer->getMinimumWidth());
+    REQUIRE(constrainer->getMaximumHeight() > constrainer->getMinimumHeight());
+    REQUIRE(editor->isResizable());
+
+    editor->setSize(1500, 980);
+    REQUIRE(editor->getWidth() == 1500);
+    REQUIRE(editor->getHeight() == 980);
+    editor->setSize(1280, editor->getHeight());
+    REQUIRE(editor->getWidth() == 1280);
+    REQUIRE(editor->getHeight() == 980);
+    REQUIRE(processor.editorWidth() == 1280);
+    REQUIRE(processor.editorHeight() == 980);
+
+    juce::MemoryBlock state;
+    processor.getStateInformation(state);
+    OpenClapperProcessor restored;
+    restored.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+    std::unique_ptr<juce::AudioProcessorEditor> reopened(restored.createEditor());
+    REQUIRE(reopened->getWidth() == 1280);
+    REQUIRE(reopened->getHeight() == 980);
+}
+
+TEST_CASE("Older sessions keep the preset parameter when no host program was stored", "[plugin][suite]") {
+    OpenClapperProcessor processor;
+    processor.setCurrentProgram(43);
+    processor.selectPreset(55);
+    auto legacy = processor.parameters.copyState();
+    legacy.setProperty("clap_bank", 3, nullptr);
+    legacy.setProperty("selected_preset", 55, nullptr);
+    legacy.removeProperty("host_program", nullptr);
+    juce::MemoryBlock data;
+    juce::AudioProcessor::copyXmlToBinary(*legacy.createXml(), data);
+
+    OpenClapperProcessor restored;
+    restored.setCurrentProgram(2);
+    restored.setStateInformation(data.getData(), static_cast<int>(data.getSize()));
+    REQUIRE(restored.getSelectedPresetIndex() == 55);
+    REQUIRE(restored.getCurrentProgram() == 43);
+    REQUIRE(restored.parameters.getParameter(openclapper::params::kPreset)->getValue() == Catch::Approx(1.0f));
+    REQUIRE(restored.parameters.getRawParameterValue("amp_enabled")->load() == Catch::Approx(0.0f));
+}

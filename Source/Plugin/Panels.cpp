@@ -170,7 +170,8 @@ void ControlPage::resized() {
     const int count = static_cast<int>(groups_.size());
     constexpr int gap = 8;
     if (page_ == Page::clap) {
-        auto outputCard = area.removeFromBottom(174);
+        const int outputH = juce::jlimit(160, 280, getHeight() * 36 / 100);
+        auto outputCard = area.removeFromBottom(outputH);
         area.removeFromBottom(gap);
         constexpr int topCount = 4;
         std::ranges::for_each(std::views::iota(0, topCount), [&](int index) {
