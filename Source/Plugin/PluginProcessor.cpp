@@ -23,10 +23,12 @@ OpenClapperProcessor::OpenClapperProcessor()
     undo_.resume();
     undo_.clear();
     ab_.setBoth(captureSoundState());
+    setLatencySamples(openclapper::core::ClapEngine::kLatencySamples);
 }
 
 void OpenClapperProcessor::prepareToPlay(double sampleRate, int) {
     engine_.prepare(sampleRate);
+    setLatencySamples(openclapper::core::ClapEngine::kLatencySamples);
 }
 
 double OpenClapperProcessor::getTailLengthSeconds() const {

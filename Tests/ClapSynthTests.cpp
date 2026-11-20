@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
+#include <ranges>
 
 using namespace openclapper::core;
 
@@ -517,4 +518,390 @@ TEST_CASE("A full noise curve settles instead of falling off a shelf", "[core][s
         worstDropDb = std::max(worstDropDb, drop);
     }
     REQUIRE(worstDropDb < 9.0f);
+}
+
+TEST_CASE("Flam bursts use uncorrelated per-hand noise streams and equal-power panning", "[core][synth][flam]") {
+    ClapSynth synth;
+    synth.prepare(48000.0);
+
+    ClapSynthSettings settings;
+    settings.preClapCount = 1;
+    settings.preClapSpreadMs = 0.0f;
+    settings.preClapDecayMs = 25.0f;
+    settings.preClapJitter = 0.0f;
+    settings.preClapFlamSpread = 0.0f;
+    settings.preClapLevel = 1.0f;
+    settings.toneLevel = 0.0f;
+    settings.clickLevel = 0.0f;
+    settings.impactPunch = 0.0f;
+    settings.noiseLevel = 1.0f;
+    settings.noiseAttackMs = 0.0f;
+
+    synth.trigger(settings, 69, 1.0f);
+    double dot = 0.0;
+    double normNoise = 0.0;
+    double normFlamCenter = 0.0;
+    std::ranges::for_each(std::views::iota(0, 1200), [&](int) {
+        std::array<StereoFrame, 4> comp{};
+        [[maybe_unused]] const auto mix = synth.processSample(settings, nullptr, &comp);
+        dot += static_cast<double>(comp[1].left) * comp[3].left;
+        normNoise += static_cast<double>(comp[1].left) * comp[1].left;
+        normFlamCenter += static_cast<double>(comp[3].left) * comp[3].left
+            + static_cast<double>(comp[3].right) * comp[3].right;
+    });
+
+    REQUIRE(normNoise > 1.0e-5);
+    REQUIRE(normFlamCenter > 1.0e-5);
+    const double correlation = std::abs(dot) / std::sqrt(normNoise * (normFlamCenter * 0.5));
+    REQUIRE(correlation < 0.15);
+
+    auto pannedSettings = settings;
+    pannedSettings.preClapFlamSpread = 1.0f;
+    ClapSynth pannedSynth;
+    pannedSynth.prepare(48000.0);
+    pannedSynth.trigger(pannedSettings, 69, 1.0f);
+    double normFlamPanned = 0.0;
+    std::ranges::for_each(std::views::iota(0, 1200), [&](int) {
+        std::array<StereoFrame, 4> comp{};
+        [[maybe_unused]] const auto mix = pannedSynth.processSample(pannedSettings, nullptr, &comp);
+        normFlamPanned += static_cast<double>(comp[3].left) * comp[3].left
+            + static_cast<double>(comp[3].right) * comp[3].right;
+    });
+
+    const double powerRatioDb = std::abs(10.0 * std::log10(normFlamPanned / normFlamCenter));
+    REQUIRE(powerRatioDb < 1.2);
+}
+
+TEST_CASE("ClapSynth body knock bloom and chest thump produce wide detuned stereo", "[core][synth][stereo]") {
+    ClapSynth synth;
+    synth.prepare(48000.0);
+
+    ClapSynthSettings settings;
+    settings.preClapCount = 0;
+    settings.noiseLevel = 0.0f;
+    settings.clickLevel = 0.0f;
+    settings.toneLevel = 0.9f;
+    settings.toneQ = 4.0f;
+    settings.impactPunch = 0.7f;
+    settings.layers[0].solo = true;
+
+    std::vector<float> left, right;
+    synth.renderBlock(left, right, settings, 1.0f, 69);
+
+    double midEnergy = 0.0;
+    double sideEnergy = 0.0;
+    std::ranges::for_each(std::views::iota(size_t{0}, left.size()), [&](size_t i) {
+        const double mid = 0.5 * (static_cast<double>(left[i]) + right[i]);
+        const double side = 0.5 * (static_cast<double>(left[i]) - right[i]);
+        midEnergy += mid * mid;
+        sideEnergy += side * side;
+    });
+
+    REQUIRE(midEnergy > 0.01);
+    REQUIRE(sideEnergy > midEnergy * 0.08);
+}
+
+TEST_CASE("Coupled 2-pole palm-cavity modal resonators decouple decay time from bandwidth", "[core][synth][tone]") {
+    const auto renderPalmMode = [](float decayMs, float q) {
+        ClapSynth synth;
+        synth.prepare(48000.0);
+        ClapSynthSettings settings;
+        settings.preClapCount = 0;
+        settings.noiseLevel = 0.0f;
+        settings.clickLevel = 0.0f;
+        settings.impactPunch = 0.0f;
+        settings.toneLevel = 1.0f;
+        settings.toneQ = q;
+        settings.toneDecayMs = decayMs;
+        settings.toneHPF = 80.0f;
+        settings.toneLPF = 520.0f;
+
+        std::vector<float> left, right;
+        synth.renderBlock(left, right, settings, 1.0f, 57);
+        const auto dftPower = [&](double freqHz) {
+            const size_t start = std::min<size_t>(3840, left.size());
+            const size_t end = std::min<size_t>(10560, left.size());
+            if (end <= start) return 0.0;
+            double re = 0.0;
+            double im = 0.0;
+            std::ranges::for_each(std::views::iota(start, end), [&](size_t i) {
+                const double angle = 2.0 * std::numbers::pi * freqHz * static_cast<double>(i) / 48000.0;
+                re += static_cast<double>(left[i]) * std::cos(angle);
+                im -= static_cast<double>(left[i]) * std::sin(angle);
+            });
+            return (re * re + im * im) / static_cast<double>(end - start);
+        };
+        return std::pair{ dftPower(220.0), dftPower(390.0) };
+    };
+
+    const auto [shortMode220, shortOffBand] = renderPalmMode(25.0f, 8.5f);
+    const auto [longMode220, longOffBand] = renderPalmMode(450.0f, 8.5f);
+    (void)shortOffBand;
+    REQUIRE(longMode220 > longOffBand * 6.0);
+    REQUIRE(longMode220 > shortMode220 * 50.0);
+}
+
+TEST_CASE("True Velvet noise maintains jittered grid regularity and flat spectrum", "[core][synth][velvet]") {
+    const auto measureVelvet = [](double rate) {
+        ClapSynth synth;
+        synth.prepare(rate);
+        ClapSynthSettings settings;
+        settings.noiseType = NoiseType::Velvet;
+        settings.preClapCount = 0;
+        settings.layers[1].solo = true;
+        settings.ampEnabled = true;
+        settings.ampAttackMs = 0.0f;
+        settings.ampSustain = 1.0f;
+        settings.impactPunch = 0.0f;
+        settings.noiseHPF = 10.0f;
+        settings.noiseLPF = static_cast<float>(rate * 0.47);
+        settings.noiseLevel = 1.0f;
+        synth.trigger(settings, 69, 1.0f);
+
+        const int warmup = static_cast<int>(rate * 0.01);
+        std::ranges::for_each(std::views::iota(0, warmup), [&](int) {
+            [[maybe_unused]] const auto f = synth.processSample(settings);
+        });
+
+        const int windowSamples = static_cast<int>(rate * 0.002);
+        constexpr int numWindows = 200;
+        std::vector<double> windowEnergies(numWindows, 0.0);
+        std::vector<float> signal;
+        signal.reserve(static_cast<size_t>(windowSamples * numWindows));
+        double totalPower = 0.0;
+        std::ranges::for_each(std::views::iota(0, numWindows), [&](int w) {
+            double e = 0.0;
+            std::ranges::for_each(std::views::iota(0, windowSamples), [&](int) {
+                const auto frame = synth.processSample(settings);
+                signal.push_back(frame.left);
+                e += static_cast<double>(frame.left) * frame.left;
+            });
+            e /= static_cast<double>(windowSamples);
+            windowEnergies[static_cast<size_t>(w)] = e;
+            totalPower += e;
+        });
+        const double meanPower = totalPower / numWindows;
+        double varPower = 0.0;
+        std::ranges::for_each(windowEnergies, [&](double e) {
+            const double d = e - meanPower;
+            varPower += d * d;
+        });
+        const double cv = std::sqrt(varPower / numWindows) / std::max(1.0e-12, meanPower);
+        return std::tuple{ meanPower, cv, signal };
+    };
+
+    const auto [power48k, cv48k, sig48k] = measureVelvet(48000.0);
+    const auto [power96k, cv96k, sig96k] = measureVelvet(96000.0);
+    (void)sig48k;
+    const double rateDiffDb = std::abs(10.0 * std::log10(power96k / power48k));
+    REQUIRE(rateDiffDb < 1.0);
+    REQUIRE(cv48k < 0.14);
+    REQUIRE(cv96k < 0.12);
+
+    constexpr int nfft = 4096;
+    double lowBand = 0.0;
+    double highBand = 0.0;
+    int lowCount = 0;
+    int highCount = 0;
+    std::ranges::for_each(std::views::iota(1, nfft / 2), [&](int k) {
+        const double freq = 96000.0 * static_cast<double>(k) / nfft;
+        if (freq < 1000.0 || freq > 16000.0) return;
+        double re = 0.0;
+        double im = 0.0;
+        std::ranges::for_each(std::views::iota(0, nfft), [&](int n) {
+            const double angle = 2.0 * std::numbers::pi * static_cast<double>(k * n) / nfft;
+            re += static_cast<double>(sig96k[static_cast<size_t>(n)]) * std::cos(angle);
+            im -= static_cast<double>(sig96k[static_cast<size_t>(n)]) * std::sin(angle);
+        });
+        const double p = re * re + im * im;
+        if (freq < 4000.0) {
+            lowBand += p;
+            ++lowCount;
+        }
+        if (freq >= 8000.0) {
+            highBand += p;
+            ++highCount;
+        }
+    });
+    const double tiltDb = std::abs(10.0 * std::log10((highBand / highCount) / (lowBand / lowCount)));
+    REQUIRE(tiltDb < 2.0);
+}
+
+TEST_CASE("Needle and Crack transients synthesize minimum-phase Gabor chirps without IIR smear", "[core][synth][transient]") {
+    const auto renderClick = [](ClickType type, float freqHz, float decayMs) {
+        ClapSynth synth;
+        synth.prepare(48000.0);
+        ClapSynthSettings settings;
+        settings.preClapCount = 0;
+        settings.layers[2].solo = true;
+        settings.clickType = type;
+        settings.clickFreqHz = freqHz;
+        settings.clickDecayMs = decayMs;
+        settings.clickLevel = 1.0f;
+        std::vector<float> left, right;
+        synth.renderBlock(left, right, settings, 1.0f, 69);
+        return left;
+    };
+
+    std::ranges::for_each(std::array{ ClickType::Needle, ClickType::Crack }, [&](ClickType type) {
+        const auto click = renderClick(type, 4500.0f, 0.6f);
+        const size_t windowEnd = static_cast<size_t>(std::ceil(48000.0 * 0.0018));
+        const size_t halfWindow = windowEnd / 2;
+        double firstHalfEnergy = 0.0;
+        double secondHalfEnergy = 0.0;
+        double postWindowEnergy = 0.0;
+        std::ranges::for_each(std::views::iota(size_t{0}, click.size()), [&](size_t i) {
+            const double e = static_cast<double>(click[i]) * click[i];
+            if (i < halfWindow) firstHalfEnergy += e;
+            if (i >= halfWindow && i <= windowEnd) secondHalfEnergy += e;
+            if (i > windowEnd) postWindowEnergy += e;
+        });
+        REQUIRE(firstHalfEnergy > 1.0e-4);
+        REQUIRE(firstHalfEnergy > secondHalfEnergy * 2.5);
+        REQUIRE(postWindowEnergy == 0.0);
+    });
+}
+
+TEST_CASE("ImpactPunch applies fast 2 ms log-domain transient compression and oversampled ADAA saturation", "[core][synth][impact]") {
+    ClapSynth drySynth;
+    ClapSynth punchSynth;
+    drySynth.prepare(48000.0);
+    punchSynth.prepare(48000.0);
+
+    ClapSynthSettings drySettings;
+    drySettings.preClapCount = 0;
+    drySettings.layers[1].solo = true;
+    drySettings.ampEnabled = true;
+    drySettings.ampAttackMs = 0.0f;
+    drySettings.ampSustain = 1.0f;
+    drySettings.noiseHPF = 20.0f;
+    drySettings.noiseLPF = 18000.0f;
+    drySettings.noiseLevel = 1.0f;
+    drySettings.impactPunch = 0.0f;
+
+    auto punchSettings = drySettings;
+    punchSettings.impactPunch = 1.0f;
+
+    drySynth.trigger(drySettings, 69, 1.0f);
+    punchSynth.trigger(punchSettings, 69, 1.0f);
+
+    double dryEarly = 0.0;
+    double dryMid = 0.0;
+    double punchEarly = 0.0;
+    double punchMid = 0.0;
+    std::ranges::for_each(std::views::iota(0, 320), [&](int i) {
+        const float d = drySynth.processSample(drySettings).left;
+        const float p = punchSynth.processSample(punchSettings).left;
+        if (i >= 8 && i < 44) {
+            dryEarly += static_cast<double>(d) * d;
+            punchEarly += static_cast<double>(p) * p;
+        }
+        if (i >= 120 && i < 260) {
+            dryMid += static_cast<double>(d) * d;
+            punchMid += static_cast<double>(p) * p;
+        }
+    });
+
+    const double dryGainRatio = (dryEarly / 36.0) / std::max(1.0e-12, dryMid / 140.0);
+    const double punchGainRatio = (punchEarly / 36.0) / std::max(1.0e-12, punchMid / 140.0);
+    REQUIRE(punchGainRatio > dryGainRatio * 1.28);
+
+    // Verify 2x oversampled ADAA suppresses midrange foldback aliasing vs 1x tanh on a 6850 Hz tone
+    // (7th harmonic 47950 Hz aliases to 50 Hz; 5th harmonic 34250 Hz aliases to 13750 Hz).
+    ImpactSaturator sat;
+    constexpr int N = 4096;
+    constexpr double sr = 48000.0;
+    constexpr double testHz = 6850.0;
+    std::vector<double> outOversampled(N, 0.0);
+    std::vector<double> outNaive(N, 0.0);
+    std::ranges::for_each(std::views::iota(0, N + 256), [&](int n) {
+        const float x = 0.95f * static_cast<float>(std::sin(2.0 * std::numbers::pi * testHz * static_cast<double>(n) / sr));
+        const float yOs = sat.process(x, x, 1.0f, 2.2f, sr).left;
+        const float yNaive = std::tanh(x * 2.23f) / std::tanh(2.23f);
+        if (n >= 256) {
+            outOversampled[static_cast<size_t>(n - 256)] = yOs;
+            outNaive[static_cast<size_t>(n - 256)] = yNaive;
+        }
+    });
+    const auto binPower = [&](const std::vector<double>& sig, double freqHz) {
+        double re = 0.0;
+        double im = 0.0;
+        std::ranges::for_each(std::views::iota(0, N), [&](int n) {
+            const double w = 0.5 - 0.5 * std::cos(2.0 * std::numbers::pi * static_cast<double>(n) / (N - 1));
+            const double angle = 2.0 * std::numbers::pi * freqHz * static_cast<double>(n) / sr;
+            re += sig[static_cast<size_t>(n)] * w * std::cos(angle);
+            im -= sig[static_cast<size_t>(n)] * w * std::sin(angle);
+        });
+        return re * re + im * im;
+    };
+    const double aliasNaive = binPower(outNaive, 48000.0 - 5.0 * testHz);
+    const double aliasOversampled = binPower(outOversampled, 48000.0 - 5.0 * testHz);
+    REQUIRE(aliasOversampled < aliasNaive * 0.02);
+}
+
+TEST_CASE("GatedStereoReverb eliminates comb pitch warble and tracks exact RT60 with HF damping", "[core][synth][reverb]") {
+    constexpr double sr = 48000.0;
+    GatedStereoReverb reverb;
+    reverb.prepare(sr);
+
+    constexpr int warmup = 48000;
+    constexpr int N = 192000;
+    std::vector<double> steadyOut(N, 0.0);
+    std::ranges::for_each(std::views::iota(0, warmup + N), [&](int n) {
+        const float s = 0.5f * static_cast<float>(std::sin(2.0 * std::numbers::pi * 1000.0 * static_cast<double>(n) / sr));
+        const auto out = reverb.process(s, s, 0.85f, 1600.0f, 0.1f, 0.0f, sr);
+        if (n >= warmup) {
+            steadyOut[static_cast<size_t>(n - warmup)] = out.left;
+        }
+    });
+
+    const auto dftAt = [&](double freqHz) {
+        double re = 0.0;
+        double im = 0.0;
+        std::ranges::for_each(std::views::iota(0, N), [&](int n) {
+            const double w = 0.5 - 0.5 * std::cos(2.0 * std::numbers::pi * static_cast<double>(n) / (N - 1));
+            const double angle = 2.0 * std::numbers::pi * freqHz * static_cast<double>(n) / sr;
+            re += steadyOut[static_cast<size_t>(n)] * w * std::cos(angle);
+            im -= steadyOut[static_cast<size_t>(n)] * w * std::sin(angle);
+        });
+        return re * re + im * im;
+    };
+    const double carrierPower = dftAt(1000.0);
+    double sidebandPower = 0.0;
+    std::ranges::for_each(std::array{ 999.09, 999.27, 1000.73, 1000.91, 1001.46, 1001.82 }, [&](double f) {
+        sidebandPower = std::max(sidebandPower, dftAt(f));
+    });
+    REQUIRE(carrierPower > 1.0);
+    REQUIRE(sidebandPower < carrierPower * 1.0e-3);
+
+    const auto measureTail = [&](float damp) {
+        GatedStereoReverb r;
+        r.prepare(sr);
+        [[maybe_unused]] const auto first = r.process(1.0f, 1.0f, 1.0f, 600.0f, damp, 0.0f, sr);
+        double eEarly = 0.0;
+        double eLate = 0.0;
+        double hfLate = 0.0;
+        float prev = 0.0f;
+        std::ranges::for_each(std::views::iota(1, 24000), [&](int n) {
+            const auto f = r.process(0.0f, 0.0f, 1.0f, 600.0f, damp, 0.0f, sr);
+            const double p = static_cast<double>(f.left) * f.left + static_cast<double>(f.right) * f.right;
+            if (n >= 3840 && n < 8640) eEarly += p;
+            if (n >= 13440 && n < 18240) {
+                eLate += p;
+                const double diff = static_cast<double>(f.left) - prev;
+                hfLate += diff * diff;
+            }
+            prev = f.left;
+        });
+        return std::tuple{ eEarly, eLate, hfLate };
+    };
+
+    const auto [eEarly0, eLate0, hfUndamped] = measureTail(0.0f);
+    const auto [eEarlyD, eLateD, hfDamped] = measureTail(0.75f);
+    (void)eEarlyD;
+    (void)eLateD;
+    const double dropDb = 10.0 * std::log10(eEarly0 / std::max(1.0e-20, eLate0));
+    REQUIRE(dropDb > 16.0);
+    REQUIRE(dropDb < 24.0);
+    REQUIRE(hfDamped < hfUndamped * 0.15);
 }

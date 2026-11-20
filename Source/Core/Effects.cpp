@@ -24,12 +24,34 @@ namespace {
 
 void SlapbackDelay::prepare(double sampleRate) {
     sampleRate_ = std::max(1.0, sampleRate);
+    glideCoeff_ = 1.0 - std::exp(-1.0 / std::max(1.0, 0.030 * sampleRate_));
+
+    const double wHp = 2.0 * std::numbers::pi * std::min(150.0, 0.45 * sampleRate_) / sampleRate_;
+    const double alphaHp = std::sin(wHp) * 0.5 * std::numbers::sqrt2;
+    const double csHp = std::cos(wHp);
+    const double a0Hp = 1.0 + alphaHp;
+    hpfB0_ = ((1.0 + csHp) * 0.5) / a0Hp;
+    hpfB1_ = -(1.0 + csHp) / a0Hp;
+    hpfB2_ = hpfB0_;
+    hpfA1_ = (-2.0 * csHp) / a0Hp;
+    hpfA2_ = (1.0 - alphaHp) / a0Hp;
+
+    const double wLp = 2.0 * std::numbers::pi * std::min(6500.0, 0.45 * sampleRate_) / sampleRate_;
+    const double alphaLp = std::sin(wLp) * 0.5 * std::numbers::sqrt2;
+    const double csLp = std::cos(wLp);
+    const double a0Lp = 1.0 + alphaLp;
+    lpfB0_ = ((1.0 - csLp) * 0.5) / a0Lp;
+    lpfB1_ = (1.0 - csLp) / a0Lp;
+    lpfB2_ = lpfB0_;
+    lpfA1_ = (-2.0 * csLp) / a0Lp;
+    lpfA2_ = (1.0 - alphaLp) / a0Lp;
+
     constexpr double maxDelaySeconds = 4.0;
-    const auto capacity = static_cast<size_t>(std::ceil(sampleRate_ * maxDelaySeconds)) + 1;
+    const auto capacity = static_cast<size_t>(std::ceil(sampleRate_ * maxDelaySeconds)) + 8;
     leftBuffer_.assign(capacity, 0.0f);
     rightBuffer_.assign(capacity, 0.0f);
     triggerBuffer_.assign(capacity, 0.0f);
-    writeIndex_ = 0;
+    reset();
 }
 
 void SlapbackDelay::reset() noexcept {
@@ -37,7 +59,15 @@ void SlapbackDelay::reset() noexcept {
     std::fill(rightBuffer_.begin(), rightBuffer_.end(), 0.0f);
     std::fill(triggerBuffer_.begin(), triggerBuffer_.end(), 0.0f);
     writeIndex_ = 0;
+    smoothedDelaySamples_ = 0.0;
+    hpfL_.reset();
+    hpfR_.reset();
+    lpfL_.reset();
+    lpfR_.reset();
+    adaaPrevU_L_ = adaaPrevF1_L_ = 0.0;
+    adaaPrevU_R_ = adaaPrevF1_R_ = 0.0;
     delayTriggerActive_ = false;
+    delayInitialized_ = false;
 }
 
 bool SlapbackDelay::process(
@@ -54,46 +84,65 @@ bool SlapbackDelay::process(
 
     const float dryLeft = left;
     const float dryRight = right;
-    float writeLeft = dryLeft;
-    float writeRight = dryRight;
-
     constexpr std::array<double, 6> beatFractions = { 0.0, 0.25, 0.375, 0.5, 0.75, 1.0 };
     const auto divisionIndex = static_cast<size_t>(division);
-    bool delayedTrigger = false;
-    if (divisionIndex > 0 && divisionIndex < beatFractions.size() && mix > 0.0f) {
-        const double safeBpm = std::isfinite(bpm) && bpm > 0.0 ? bpm : 138.0;
-        const double delaySamples = std::clamp(
-            beatFractions[divisionIndex] * 60.0 / safeBpm * sampleRate_,
-            1.0,
-            static_cast<double>(leftBuffer_.size() - 1));
-        double readPosition = static_cast<double>(writeIndex_) - delaySamples;
-        if (readPosition < 0.0) {
-            readPosition += static_cast<double>(leftBuffer_.size());
-        }
 
-        const auto firstIndex = static_cast<size_t>(readPosition);
-        const auto secondIndex = (firstIndex + 1) % leftBuffer_.size();
-        const float fraction = static_cast<float>(readPosition - static_cast<double>(firstIndex));
-        const float delayedLeft = leftBuffer_[firstIndex] + (leftBuffer_[secondIndex] - leftBuffer_[firstIndex]) * fraction;
-        const float delayedRight = rightBuffer_[firstIndex] + (rightBuffer_[secondIndex] - rightBuffer_[firstIndex]) * fraction;
-        const float delayedMarker = triggerBuffer_[firstIndex] * (1.0f - fraction) + triggerBuffer_[secondIndex] * fraction;
-        delayedTrigger = delayedMarker > 0.0f && !delayTriggerActive_;
-        delayTriggerActive_ = delayedMarker > 0.0f;
-        const float clampedFeedback = std::clamp(feedback, 0.0f, 0.85f);
-        writeLeft = std::tanh(dryLeft + delayedLeft * clampedFeedback);
-        writeRight = std::tanh(dryRight + delayedRight * clampedFeedback);
-        const float wet = std::clamp(mix, 0.0f, 1.0f);
-        left = dryLeft * (1.0f - wet) + delayedLeft * wet;
-        right = dryRight * (1.0f - wet) + delayedRight * wet;
-    } else {
+    if (divisionIndex == 0 || divisionIndex >= beatFractions.size() || mix <= 0.0f) {
         delayTriggerActive_ = false;
+        delayInitialized_ = false;
+        adaaPrevU_L_ = adaaPrevF1_L_ = 0.0;
+        adaaPrevU_R_ = adaaPrevF1_R_ = 0.0;
+        leftBuffer_[writeIndex_] = dryLeft;
+        rightBuffer_[writeIndex_] = dryRight;
+        triggerBuffer_[writeIndex_] = trigger ? 1.0f : 0.0f;
+        writeIndex_ = (writeIndex_ + 1) % leftBuffer_.size();
+        return false;
     }
 
-    leftBuffer_[writeIndex_] = writeLeft;
-    rightBuffer_[writeIndex_] = writeRight;
-    triggerBuffer_[writeIndex_] = trigger ? 1.0f : 0.0f;
+    const double safeBpm = std::isfinite(bpm) && bpm > 0.0 ? bpm : 138.0;
+    const double targetDelay = std::clamp(
+        beatFractions[divisionIndex] * 60.0 / safeBpm * sampleRate_,
+        2.0,
+        static_cast<double>(leftBuffer_.size() - 4));
+    if (!delayInitialized_) {
+        smoothedDelaySamples_ = targetDelay;
+        delayInitialized_ = true;
+    }
+    smoothedDelaySamples_ += glideCoeff_ * (targetDelay - smoothedDelaySamples_);
 
+    const float delayedLeft = readHermiteCircular(leftBuffer_, smoothedDelaySamples_, writeIndex_);
+    const float delayedRight = readHermiteCircular(rightBuffer_, smoothedDelaySamples_, writeIndex_);
+
+    double markerPos = static_cast<double>(writeIndex_) - smoothedDelaySamples_;
+    if (markerPos < 0.0) {
+        markerPos += static_cast<double>(triggerBuffer_.size());
+    }
+    const auto firstIndex = static_cast<size_t>(markerPos) % triggerBuffer_.size();
+    const auto secondIndex = (firstIndex + 1) % triggerBuffer_.size();
+    const float fraction = static_cast<float>(markerPos - std::floor(markerPos));
+    const float delayedMarker = triggerBuffer_[firstIndex] * (1.0f - fraction) + triggerBuffer_[secondIndex] * fraction;
+    const bool delayedTrigger = delayedMarker > 0.0f && !delayTriggerActive_;
+    delayTriggerActive_ = delayedMarker > 0.0f;
+
+    // Bandpass + ADAA inside the feedback loop keeps the first slap full-bandwidth while taming repeat buildup.
+    const float clampedFeedback = std::clamp(feedback, 0.0f, 0.85f);
+    const float bpLeft = lpfL_.process(
+        hpfL_.process(delayedLeft * clampedFeedback, hpfB0_, hpfB1_, hpfB2_, hpfA1_, hpfA2_),
+        lpfB0_, lpfB1_, lpfB2_, lpfA1_, lpfA2_);
+    const float bpRight = lpfR_.process(
+        hpfR_.process(delayedRight * clampedFeedback, hpfB0_, hpfB1_, hpfB2_, hpfA1_, hpfA2_),
+        lpfB0_, lpfB1_, lpfB2_, lpfA1_, lpfA2_);
+    const float fbLeft = static_cast<float>(adaaTanh1(static_cast<double>(bpLeft), adaaPrevU_L_, adaaPrevF1_L_));
+    const float fbRight = static_cast<float>(adaaTanh1(static_cast<double>(bpRight), adaaPrevU_R_, adaaPrevF1_R_));
+
+    leftBuffer_[writeIndex_] = std::clamp(dryLeft + fbLeft, -4.0f, 4.0f);
+    rightBuffer_[writeIndex_] = std::clamp(dryRight + fbRight, -4.0f, 4.0f);
+    triggerBuffer_[writeIndex_] = trigger ? 1.0f : 0.0f;
     writeIndex_ = (writeIndex_ + 1) % leftBuffer_.size();
+
+    const float wet = std::clamp(mix, 0.0f, 1.0f);
+    left = dryLeft * (1.0f - wet) + delayedLeft * wet;
+    right = dryRight * (1.0f - wet) + delayedRight * wet;
     return delayedTrigger;
 }
 
@@ -101,10 +150,88 @@ bool SlapbackDelay::process(
 // DistortionShaper
 // ============================================================================
 
+namespace {
+
+struct NonlinearEval {
+    double f0 = 0.0;
+    double f1 = 0.0;
+    double f2 = 0.0;
+};
+
+[[nodiscard]] inline NonlinearEval evalCurve(DistortionType type, double u) noexcept {
+    if (type == DistortionType::Tape) {
+        const double c = std::clamp(u, -18.0, 18.0);
+        const double t = std::tanh(c);
+        const double lc = logCosh(c);
+        const double w = std::abs(c);
+        const double p = 1.0 / (1.0 + std::exp(2.0 * w));
+        const double lnOneMinusP = -std::log1p(std::exp(-2.0 * w));
+        double li2P = 0.0;
+        std::ranges::for_each(std::views::iota(0, 28), [&](int idx) {
+            const int k = 28 - idx;
+            li2P = p * ((1.0 / static_cast<double>(k * k)) + li2P);
+        });
+        constexpr double kR0 = (std::numbers::pi * std::numbers::pi) / 24.0;
+        const double rW = 0.5 * li2P + 0.25 * lnOneMinusP * lnOneMinusP;
+        const double gAbs = 0.5 * w * w - w * std::numbers::ln2 + (kR0 - rW);
+        const double sign = c >= 0.0 ? 1.0 : -1.0;
+        return {
+            t + 0.18 * t * t,
+            0.18 * c + lc - 0.18 * t,
+            0.09 * c * c + sign * gAbs - 0.18 * lc
+        };
+    }
+
+    if (type == DistortionType::Tube) {
+        const double c = std::clamp(u, -40.0, 40.0);
+        if (c >= 0.0) {
+            const double ln1p = std::log1p(c);
+            return {
+                1.3 * (c / (1.0 + c)),
+                1.3 * (c - ln1p),
+                1.3 * (0.5 * c * c - (1.0 + c) * ln1p + c)
+            };
+        }
+        constexpr double a = 0.45;
+        constexpr double scale = 1.3 / a;
+        constexpr double invA = 1.0 / a;
+        constexpr double invA2 = 1.0 / (a * a);
+        const double oneMinusAx = 1.0 - a * c;
+        const double lnTerm = std::log(oneMinusAx);
+        return {
+            1.3 * (c / oneMinusAx),
+            scale * (-c - invA * lnTerm),
+            scale * (-0.5 * c * c + invA2 * (oneMinusAx * lnTerm + a * c))
+        };
+    }
+
+    if (type == DistortionType::HardClip) {
+        if (u > 1.0) {
+            return { 1.0, u - 0.5, 0.5 * u * u - 0.5 * u + (1.0 / 6.0) };
+        }
+        if (u < -1.0) {
+            return { -1.0, -u - 0.5, -0.5 * u * u - 0.5 * u - (1.0 / 6.0) };
+        }
+        return { u, 0.5 * u * u, (1.0 / 6.0) * u * u * u };
+    }
+
+    const double c = std::clamp(u, -64.0, 64.0);
+    const double s = std::sin(c);
+    return { s, 1.0 - std::cos(c), c - s };
+}
+
+} // namespace
+
 void DistortionShaper::reset() noexcept {
+    stage1_.reset();
+    stage2_.reset();
+    u1_ = u2_ = 0.0;
+    f1Prev1_ = f2Prev1_ = f2Prev2_ = 0.0;
+    lastType_ = -1;
+    primed_ = false;
     toneFilterState_ = 0.0f;
-    dcX_ = 0.0f;
-    dcY_ = 0.0f;
+    dcX_ = 0.0;
+    dcY_ = 0.0;
 }
 
 float DistortionShaper::processSample(
@@ -117,68 +244,84 @@ float DistortionShaper::processSample(
         return input;
     }
 
-    // Drive adds up to +28 dB input gain
-    const float gain = dbToLin(drive * 28.0f);
-    const float x = input * gain;
-    float shaped = 0.0f;
-
-    switch (type) {
-        case DistortionType::Tape: {
-            // Bounded soft clip plus a little even harmonic. The DC blocker
-            // below keeps that warmth from shifting the waveform off centre.
-            const float curved = std::tanh(x * 1.2f);
-            shaped = curved + 0.18f * curved * curved;
-            break;
-        }
-        case DistortionType::Tube: {
-            // Asymmetric triode tube saturation with even harmonics
-            if (x >= 0.0f) {
-                shaped = x / (1.0f + x);
-            } else {
-                shaped = x / (1.0f - 0.45f * x);
-            }
-            shaped *= 1.3f;
-            break;
-        }
-        case DistortionType::HardClip: {
-            shaped = std::clamp(x * 1.5f, -1.0f, 1.0f);
-            break;
-        }
-        case DistortionType::Wavefold: {
-            shaped = std::sin(x * pi() * 0.7f);
-            break;
-        }
+    if (static_cast<int>(type) != lastType_) {
+        lastType_ = static_cast<int>(type);
+        primed_ = false;
     }
 
-    // Level-normalize according to drive without collapsing punch
-    float compGain = 1.0f;
+    const double gain = static_cast<double>(dbToLin(drive * 28.0f));
+    double preScale = 1.0;
+    if (type == DistortionType::Tape) preScale = 1.2;
+    if (type == DistortionType::HardClip) preScale = 1.5;
+    if (type == DistortionType::Wavefold) preScale = 0.7 * std::numbers::pi;
+    const double totalScale = gain * preScale;
+
+    // 4x polyphase half-band oversampling + singularity-free ADAA2 suppresses even/odd harmonic foldback.
+    const auto [s2_0, s2_1] = stage1_.upsample(static_cast<double>(input));
+    const auto [s4_0, s4_1] = stage2_.upsample(s2_0);
+    const auto [s4_2, s4_3] = stage2_.upsample(s2_1);
+    const std::array<double, 4> u4{
+        s4_0 * totalScale,
+        s4_1 * totalScale,
+        s4_2 * totalScale,
+        s4_3 * totalScale
+    };
+
+    if (!primed_) {
+        const auto init = evalCurve(type, u4[0]);
+        u1_ = u2_ = u4[0];
+        f1Prev1_ = init.f1;
+        f2Prev1_ = f2Prev2_ = init.f2;
+        primed_ = true;
+    }
+
+    const auto halfHat = [&](double a, double f1A, double f2A, double b, double f2B) noexcept {
+        const double d = b - a;
+        if (std::abs(d) > 1.0e-4) {
+            return (f2B - f2A - d * f1A) / (d * d);
+        }
+        return 0.5 * evalCurve(type, (2.0 * a + b) * (1.0 / 3.0)).f0;
+    };
+
+    std::array<double, 4> y4{};
+    std::ranges::for_each(std::views::iota(size_t{ 0 }, size_t{ 4 }), [&](size_t i) {
+        const double u0 = u4[i];
+        const auto cur = evalCurve(type, u0);
+        y4[i] = halfHat(u1_, f1Prev1_, f2Prev1_, u0, cur.f2)
+              + halfHat(u1_, f1Prev1_, f2Prev1_, u2_, f2Prev2_);
+        u2_ = u1_;
+        f2Prev2_ = f2Prev1_;
+        u1_ = u0;
+        f1Prev1_ = cur.f1;
+        f2Prev1_ = cur.f2;
+    });
+
+    const double d2_0 = stage2_.downsample(y4[0], y4[1]);
+    const double d2_1 = stage2_.downsample(y4[2], y4[3]);
+    const float shaped = static_cast<float>(stage1_.downsample(d2_0, d2_1));
+
+    float compGain = 1.0f / (1.0f + drive * 0.8f);
     if (type == DistortionType::HardClip) {
         compGain = 1.0f / (1.0f + drive * 0.35f);
-    } else if (type == DistortionType::Wavefold) {
+    }
+    if (type == DistortionType::Wavefold) {
         compGain = 1.0f / (1.0f + drive * 0.45f);
-    } else {
-        compGain = 1.0f / (1.0f + drive * 0.8f);
     }
     float output = shaped * compGain;
 
-    // Post-distortion tone tilt filter
     if (std::abs(tone) > 0.01f) {
         const float alpha = std::clamp(std::abs(tone) * 0.5f, 0.01f, 0.9f);
-        toneFilterState_ = toneFilterState_ + alpha * (output - toneFilterState_);
-        if (tone < 0.0f) {
-            // Darker tone: lowpass
-            output = toneFilterState_;
-        } else {
-            // Brighter tone: high shelf emphasis
-            output = output + (output - toneFilterState_) * (tone * 1.5f);
-        }
+        toneFilterState_ += alpha * (output - toneFilterState_);
+        const float highBoost = output + (output - toneFilterState_) * (tone * 1.5f);
+        output = tone < 0.0f ? toneFilterState_ : highBoost;
     }
 
-    const float dcPole = std::exp(-2.0f * pi() * 25.0f / static_cast<float>(std::max(1.0, sampleRate)));
-    const float blocked = output - dcX_ + dcPole * dcY_;
-    dcX_ = output;
+    const double dcPole = std::exp(-2.0 * std::numbers::pi * 25.0 / std::max(1.0, sampleRate));
+    const double outD = static_cast<double>(output);
+    const double blocked = outD - dcX_ + dcPole * dcY_;
+    dcX_ = outD;
     dcY_ = blocked;
-    return blocked;
+    return static_cast<float>(blocked);
 }
 
 // ============================================================================
@@ -329,46 +472,88 @@ void ThreeBandEq::process(float& left, float& right, const ThreeBandEqSettings& 
 // ============================================================================
 
 void BrickwallLimiter::prepare(double sampleRate) {
-    sampleRate_ = sampleRate;
+    sampleRate_ = std::max(1.0, sampleRate);
     reset();
 }
 
 void BrickwallLimiter::reset() noexcept {
-    gain_ = 1.0f;
+    delayL_.fill(0.0f);
+    delayR_.fill(0.0f);
+    tpHistL_.fill(0.0f);
+    tpHistR_.fill(0.0f);
+    scDelay_.fill(1.0f);
+    minWindow_.fill(1.0f);
+    smoothBuf_.fill(1.0f);
+    writePos_ = 0;
+    tpPos_ = 0;
+    scPos_ = 0;
+    minPos_ = 0;
+    smoothPos_ = 0;
+    envGain_ = 1.0f;
 }
 
 void BrickwallLimiter::process(float& left, float& right, const LimiterSettings& settings) noexcept {
+    const float delayedL = delayL_[writePos_];
+    const float delayedR = delayR_[writePos_];
+    delayL_[writePos_] = left;
+    delayR_[writePos_] = right;
+    writePos_ = (writePos_ + 1) % delayL_.size();
+
+    tpPos_ = (tpPos_ + 7) & 7u;
+    tpHistL_[tpPos_] = left;
+    tpHistR_[tpPos_] = right;
+
+    // 4x polyphase Hamming-windowed sinc true-peak detector catches inter-sample overshoots before D/A reconstruction.
+    constexpr std::array<std::array<float, 8>, 3> kTruePeakPhases{{
+        { -0.01094f, 0.04517f, -0.14368f, 0.89501f, 0.27766f, -0.08123f, 0.02335f, -0.00534f },
+        { -0.01054f, 0.04647f, -0.15245f, 0.61652f, 0.61652f, -0.15245f, 0.04647f, -0.01054f },
+        { -0.00534f, 0.02335f, -0.08123f, 0.27766f, 0.89501f, -0.14368f, 0.04517f, -0.01094f }
+    }};
+    float truePeak = std::max(std::abs(left), std::abs(right));
+    std::ranges::for_each(kTruePeakPhases, [&](const auto& coeffs) {
+        float accL = 0.0f;
+        float accR = 0.0f;
+        std::ranges::for_each(std::views::iota(size_t{ 0 }, size_t{ 8 }), [&](size_t m) {
+            const size_t idx = (tpPos_ + m) & 7u;
+            accL += coeffs[m] * tpHistL_[idx];
+            accR += coeffs[m] * tpHistR_[idx];
+        });
+        truePeak = std::max({ truePeak, std::abs(accL), std::abs(accR) });
+    });
+
+    const float ceiling = dbToLin(settings.ceilingDb);
+    const float desiredGain = (settings.enabled && truePeak > ceiling && truePeak > 1.0e-6f)
+        ? (ceiling / truePeak)
+        : 1.0f;
+
+    // 18-sample pre-delay + 49-sample hold + 40-sample smoother aligns the gain trough at sample 64.
+    const float scTarget = scDelay_[scPos_];
+    scDelay_[scPos_] = desiredGain;
+    scPos_ = (scPos_ + 1) % scDelay_.size();
+
+    minWindow_[minPos_] = scTarget;
+    minPos_ = (minPos_ + 1) % minWindow_.size();
+    const float holdTarget = *std::ranges::min_element(minWindow_);
+
+    const float releaseCoeff = std::exp(-1.0f / (std::max(1.0f, settings.releaseMs) * 0.001f * static_cast<float>(sampleRate_)));
+    const float released = holdTarget + releaseCoeff * (envGain_ - holdTarget);
+    envGain_ = holdTarget < envGain_ ? holdTarget : released;
+
+    smoothBuf_[smoothPos_] = envGain_;
+    smoothPos_ = (smoothPos_ + 1) % smoothBuf_.size();
+
     if (!settings.enabled) {
+        left = delayedL;
+        right = delayedR;
         return;
     }
 
-    const float ceiling = dbToLin(settings.ceilingDb);
-    const float releaseCoeff = std::exp(-1.0f / (std::max(1.0f, settings.releaseMs) * 0.001f * static_cast<float>(sampleRate_)));
+    double sumGain = 0.0;
+    std::ranges::for_each(smoothBuf_, [&](float g) { sumGain += static_cast<double>(g); });
+    const float smoothGain = static_cast<float>(sumGain * (1.0 / static_cast<double>(smoothBuf_.size())));
 
-    const float peak = std::max(std::abs(left), std::abs(right));
-
-    // Instant attack look-ahead / catch
-    if (peak * gain_ > ceiling && peak > 1e-6f) {
-        gain_ = ceiling / peak;
-    } else {
-        gain_ = 1.0f + releaseCoeff * (gain_ - 1.0f);
-    }
-
-    left *= gain_;
-    right *= gain_;
-
-    // Safety soft saturation knee right at the ceiling to guarantee 0.0 overshoot
-    const float thresholdSoft = ceiling * 0.95f;
-    if (std::abs(left) > thresholdSoft) {
-        const float sign = left > 0.0f ? 1.0f : -1.0f;
-        const float diff = std::abs(left) - thresholdSoft;
-        left = sign * (thresholdSoft + (ceiling - thresholdSoft) * std::tanh(diff / (ceiling - thresholdSoft)));
-    }
-    if (std::abs(right) > thresholdSoft) {
-        const float sign = right > 0.0f ? 1.0f : -1.0f;
-        const float diff = std::abs(right) - thresholdSoft;
-        right = sign * (thresholdSoft + (ceiling - thresholdSoft) * std::tanh(diff / (ceiling - thresholdSoft)));
-    }
+    left = std::clamp(delayedL * smoothGain, -ceiling, ceiling);
+    right = std::clamp(delayedR * smoothGain, -ceiling, ceiling);
 }
 
 // ============================================================================
