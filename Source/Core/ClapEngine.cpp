@@ -33,9 +33,13 @@ void ClapEngine::prepare(double sampleRate) {
     const int maxReverseSamples = static_cast<int>(sampleRate * 2.0);
     reverseBufferL_.assign(maxReverseSamples, 0.0f);
     reverseBufferR_.assign(maxReverseSamples, 0.0f);
-    const size_t maxDoublerSamples = std::max<size_t>(16, static_cast<size_t>(sampleRate * 0.045));
+    const size_t maxDoublerSamples = std::max<size_t>(32, static_cast<size_t>(sampleRate * 0.045));
     doublerBufferL_.assign(maxDoublerSamples, 0.0f);
     doublerBufferR_.assign(maxDoublerSamples, 0.0f);
+    doublerApL1_.prepare(std::max<size_t>(4, static_cast<size_t>(sampleRate * 0.00053)), 0.62f, 0);
+    doublerApL2_.prepare(std::max<size_t>(4, static_cast<size_t>(sampleRate * 0.00089)), -0.58f, 0);
+    doublerApR1_.prepare(std::max<size_t>(4, static_cast<size_t>(sampleRate * 0.00061)), 0.62f, 0);
+    doublerApR2_.prepare(std::max<size_t>(4, static_cast<size_t>(sampleRate * 0.00097)), -0.58f, 0);
     reset();
 }
 
@@ -59,9 +63,21 @@ void ClapEngine::reset() noexcept {
     limiter_.reset();
     std::fill(doublerBufferL_.begin(), doublerBufferL_.end(), 0.0f);
     std::fill(doublerBufferR_.begin(), doublerBufferR_.end(), 0.0f);
+    doublerApL1_.reset();
+    doublerApL2_.reset();
+    doublerApR1_.reset();
+    doublerApR2_.reset();
+    doublerTargetSamplesL_ = sampleRate_ * 0.0016;
+    doublerTargetSamplesR_ = sampleRate_ * 0.0042;
+    doublerTapSamplesL_ = doublerTargetSamplesL_;
+    doublerTapSamplesR_ = doublerTargetSamplesR_;
+    doublerPrng_ = 0x51C0FFEEu;
+    doublerTapInitialized_ = false;
     doublerWriteIndex_ = 0;
     doublerLpL_ = 0.0f;
     doublerLpR_ = 0.0f;
+    componentDelay_ = {};
+    componentDelayPos_ = 0;
     reversePlayHead_ = -1;
     reverseDuration_ = 0;
     isReversing_ = false;
@@ -84,6 +100,28 @@ void ClapEngine::triggerClap(
     triggerSerial_++;
     currentClapProgress_ = 0.0f;
     reverb_.triggerGate();
+
+    // Randomize stereo Haas taps inside 0.8-4.5 ms per MIDI trigger so mono sum never has a static comb notch.
+    const auto nextDoublerRand = [&]() noexcept {
+        uint32_t x = doublerPrng_;
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        doublerPrng_ = x;
+        return static_cast<double>(x & 0x00FFFFFFu) / static_cast<double>(0x01000000u);
+    };
+    const double shortMs = 0.8 + 1.55 * nextDoublerRand();
+    const double longMs = 2.55 + 1.95 * nextDoublerRand();
+    const bool swapSides = (doublerPrng_ & 1u) != 0u;
+    const double leftMs = swapSides ? longMs : shortMs;
+    const double rightMs = swapSides ? shortMs : longMs;
+    doublerTargetSamplesL_ = sampleRate_ * (leftMs * 0.001);
+    doublerTargetSamplesR_ = sampleRate_ * (rightMs * 0.001);
+    if (!doublerTapInitialized_) {
+        doublerTapSamplesL_ = doublerTargetSamplesL_;
+        doublerTapSamplesR_ = doublerTargetSamplesR_;
+        doublerTapInitialized_ = true;
+    }
 
     if (settings.chokeGroup > 0) {
         for (auto& active : voices_)
@@ -219,6 +257,15 @@ void ClapEngine::process(
             eq_.reset();
             compressor_.reset();
             limiter_.reset();
+            std::fill(doublerBufferL_.begin(), doublerBufferL_.end(), 0.0f);
+            std::fill(doublerBufferR_.begin(), doublerBufferR_.end(), 0.0f);
+            doublerApL1_.reset();
+            doublerApL2_.reset();
+            doublerApR1_.reset();
+            doublerApR2_.reset();
+            doublerLpL_ = 0.0f;
+            doublerLpR_ = 0.0f;
+            doublerTapInitialized_ = false;
         } else if (cc.controller == 121) {
             ccVolume_ = 1.0f;
             ccBrightness_ = 1.0f;
@@ -316,16 +363,22 @@ void ClapEngine::process(
         const float doubler = std::clamp(settings.effects.doublerAmount, 0.0f, 1.0f);
         if (!doublerBufferL_.empty() && doubler > 0.001f) {
             const size_t bufSize = doublerBufferL_.size();
+            const double maxTap = static_cast<double>(bufSize - 4);
+            const double glide = 1.0 - std::exp(-1.0 / std::max(1.0, 0.00025 * sampleRate_));
+            doublerTapSamplesL_ += glide * (std::clamp(doublerTargetSamplesL_, 2.0, maxTap) - doublerTapSamplesL_);
+            doublerTapSamplesR_ += glide * (std::clamp(doublerTargetSamplesR_, 2.0, maxTap) - doublerTapSamplesR_);
+
             doublerBufferL_[doublerWriteIndex_] = sL;
             doublerBufferR_[doublerWriteIndex_] = sR;
-            // Haas offsets, low-passed so the copy widens the clap instead of comb-filtering a metallic ring.
-            const size_t tapL = std::clamp<size_t>(static_cast<size_t>(sampleRate_ * 0.0016), 1, bufSize - 1);
-            const size_t tapR = std::clamp<size_t>(static_cast<size_t>(sampleRate_ * 0.0042), 1, bufSize - 1);
-            const float delayedL = doublerBufferL_[(doublerWriteIndex_ + bufSize - tapL) % bufSize];
-            const float delayedR = doublerBufferR_[(doublerWriteIndex_ + bufSize - tapR) % bufSize];
-            const float lp = 1.0f - std::exp(-2.0f * 3.14159265f * 1800.0f / static_cast<float>(sampleRate_));
-            doublerLpL_ += lp * (delayedL - doublerLpL_);
-            doublerLpR_ += lp * (delayedR - doublerLpR_);
+
+            // Per-hit randomized Haas taps fed through 2-stage dispersive allpasses prevent static mono comb notches.
+            const float delayedL = readHermiteCircular(doublerBufferL_, doublerTapSamplesL_, doublerWriteIndex_);
+            const float delayedR = readHermiteCircular(doublerBufferR_, doublerTapSamplesR_, doublerWriteIndex_);
+            const float dispL = doublerApL2_.process(doublerApL1_.process(delayedL));
+            const float dispR = doublerApR2_.process(doublerApR1_.process(delayedR));
+            const float lp = 1.0f - std::exp(-2.0f * std::numbers::pi_v<float> * 2600.0f / static_cast<float>(sampleRate_));
+            doublerLpL_ += lp * (dispL - doublerLpL_);
+            doublerLpR_ += lp * (dispR - doublerLpR_);
             sL += doublerLpR_ * doubler * 0.28f;
             sR += doublerLpL_ * doubler * 0.28f;
             doublerWriteIndex_ = (doublerWriteIndex_ + 1) % bufSize;
@@ -385,9 +438,13 @@ void ClapEngine::process(
         sL *= masterGain;
         sR *= masterGain;
 
+        const auto delayedComponents = componentDelay_[componentDelayPos_];
+        componentDelay_[componentDelayPos_] = components;
+        componentDelayPos_ = (componentDelayPos_ + 1) % componentDelay_.size();
+
         for (size_t channel = 0; channel < componentChannels.size() && channel < 8; ++channel) {
             if (componentChannels[channel] == nullptr) continue;
-            const auto& frame = components[channel / 2];
+            const auto& frame = delayedComponents[channel / 2];
             componentChannels[channel][sample] = (channel % 2 == 0 ? frame.left : frame.right) * masterGain;
         }
         channels[0][sample] = sL;

@@ -303,8 +303,9 @@ TEST_CASE("Factory claps use the limiter as a ceiling and stay distinct", "[plug
             const float frame = std::max(std::abs(audio.getSample(0, i)), std::abs(audio.getSample(1, i)));
             if (frame >= onsetThreshold) { onset = i; break; }
         }
-        REQUIRE(onset <= static_cast<int>(rate * 0.001));
-        REQUIRE(peakIndex <= static_cast<int>(rate * 0.004));
+        const int latency = processor.getLatencySamples();
+        REQUIRE(onset - latency <= static_cast<int>(rate * 0.001));
+        REQUIRE(peakIndex - latency <= static_cast<int>(rate * 0.004));
 
         constexpr int nfft = 4096;
         double weighted = 0.0;

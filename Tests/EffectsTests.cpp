@@ -1,6 +1,8 @@
 #include "Effects.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
+#include <numbers>
+#include <ranges>
 
 using namespace openclapper::core;
 
@@ -86,4 +88,165 @@ TEST_CASE("Reverse sync timing targets are exact", "[core][effects]") {
 
     const double targetHalfBeat = reverseTargetPpq(ReverseSyncMode::HalfBeat, ppq, beatsPerBar);
     REQUIRE(targetHalfBeat == 3.5);
+}
+
+TEST_CASE("SlapbackDelay uses 4-point Hermite reads, smooth tempo glide, and 150Hz-6.5kHz bandpass ADAA feedback", "[core][effects][slapback]") {
+    constexpr double sr = 48000.0;
+
+    // Half-sample fractional delay at 9 kHz: linear interpolation loses >15% amplitude, Hermite retains >96%.
+    SlapbackDelay fracDelay;
+    fracDelay.prepare(sr);
+    const double halfSampleBpm = (0.25 * 60.0 * sr) / 4800.5;
+    double peakWet9k = 0.0;
+    std::ranges::for_each(std::views::iota(0, 9600), [&](int n) {
+        float l = 0.0f;
+        if (n < 4000) {
+            l = 0.25f * static_cast<float>(std::sin(2.0 * std::numbers::pi * 9000.0 * n / sr));
+        }
+        float r = l;
+        (void)fracDelay.process(l, r, SlapbackDivision::Sixteenth, 1.0f, halfSampleBpm, false, 0.0f);
+        if (n >= 5200 && n < 8400) {
+            peakWet9k = std::max(peakWet9k, static_cast<double>(std::abs(l)));
+        }
+    });
+    REQUIRE(peakWet9k > 0.232);
+
+    SlapbackDelay glideDelay;
+    glideDelay.prepare(sr);
+    float prevOut = 0.0f;
+    float maxStep = 0.0f;
+    std::ranges::for_each(std::views::iota(0, 16000), [&](int n) {
+        float l = 0.4f * static_cast<float>(std::sin(2.0 * std::numbers::pi * 320.0 * n / sr));
+        float r = l;
+        const double bpm = n < 10000 ? 120.0 : 142.0;
+        (void)glideDelay.process(l, r, SlapbackDivision::Sixteenth, 1.0f, bpm, false, 0.0f);
+        if (n > 8000) {
+            maxStep = std::max(maxStep, std::abs(l - prevOut));
+        }
+        prevOut = l;
+    });
+    REQUIRE(maxStep < 0.08f);
+
+    const auto measureThirdEchoEnergy = [&](double freqHz) {
+        SlapbackDelay d;
+        d.prepare(sr);
+        double energy = 0.0;
+        std::ranges::for_each(std::views::iota(0, 20000), [&](int n) {
+            float l = 0.0f;
+            if (n < 2000) {
+                l = 0.35f * static_cast<float>(std::sin(2.0 * std::numbers::pi * freqHz * n / sr));
+            }
+            float r = l;
+            (void)d.process(l, r, SlapbackDivision::Sixteenth, 1.0f, 150.0, false, 0.8f);
+            if (n >= 14400 && n < 16400) {
+                energy += static_cast<double>(l) * l;
+            }
+        });
+        return energy;
+    };
+    const double midEcho = measureThirdEchoEnergy(1000.0);
+    const double lowEcho = measureThirdEchoEnergy(60.0);
+    const double highEcho = measureThirdEchoEnergy(14000.0);
+    REQUIRE(midEcho > 1.0e-3);
+    REQUIRE(lowEcho < midEcho * 0.12);
+    REQUIRE(highEcho < midEcho * 0.12);
+}
+
+TEST_CASE("DistortionShaper uses 4x oversampled DC-blocked ADAA2 to suppress harmonic foldback", "[core][effects][distortion]") {
+    constexpr double sr = 48000.0;
+    constexpr int warmup = 4096;
+    constexpr int N = 16384;
+    constexpr double testHz = 11300.0;
+
+    DistortionShaper tapeShaper;
+    std::vector<double> outTape(N, 0.0);
+    double dcSum = 0.0;
+    std::ranges::for_each(std::views::iota(0, warmup + N), [&](int n) {
+        const float x = 0.45f * static_cast<float>(std::sin(2.0 * std::numbers::pi * testHz * static_cast<double>(n) / sr));
+        const float y = tapeShaper.processSample(x, DistortionType::Tape, 0.85f, 0.0f, sr);
+        if (n >= warmup) {
+            outTape[static_cast<size_t>(n - warmup)] = y;
+            dcSum += y;
+        }
+    });
+
+    const auto dftPower = [&](double freqHz) {
+        double re = 0.0;
+        double im = 0.0;
+        std::ranges::for_each(std::views::iota(0, N), [&](int n) {
+            const double w = 0.5 - 0.5 * std::cos(2.0 * std::numbers::pi * static_cast<double>(n) / (N - 1));
+            const double angle = 2.0 * std::numbers::pi * freqHz * static_cast<double>(n) / sr;
+            re += outTape[static_cast<size_t>(n)] * w * std::cos(angle);
+            im -= outTape[static_cast<size_t>(n)] * w * std::sin(angle);
+        });
+        return re * re + im * im;
+    };
+
+    const double fundPower = dftPower(testHz);
+    const double evenAlias2800 = dftPower(48000.0 - 4.0 * testHz);
+    const double oddAlias14100 = dftPower(48000.0 - 3.0 * testHz);
+    REQUIRE(fundPower > 1.0);
+    REQUIRE(evenAlias2800 < fundPower * 1.0e-6);
+    REQUIRE(oddAlias14100 < fundPower * 2.0e-5);
+    REQUIRE(std::abs(dcSum / static_cast<double>(N)) < 1.0e-3);
+
+    std::ranges::for_each(std::array{ DistortionType::Tube, DistortionType::HardClip, DistortionType::Wavefold }, [&](DistortionType mode) {
+        DistortionShaper modeShaper;
+        double modeDc = 0.0;
+        double modeEnergy = 0.0;
+        std::ranges::for_each(std::views::iota(0, warmup + N), [&](int n) {
+            const float x = 0.45f * static_cast<float>(std::sin(2.0 * std::numbers::pi * testHz * static_cast<double>(n) / sr));
+            const float y = modeShaper.processSample(x, mode, 0.8f, 0.0f, sr);
+            REQUIRE(std::isfinite(y));
+            if (n >= warmup) {
+                modeDc += y;
+                modeEnergy += static_cast<double>(y) * y;
+            }
+        });
+        REQUIRE(modeEnergy > 1.0);
+        REQUIRE(std::abs(modeDc / static_cast<double>(N)) < 1.0e-3);
+    });
+}
+
+TEST_CASE("BrickwallLimiter applies 64-sample true-peak lookahead without flattening pre-clap flams", "[core][effects][limiter]") {
+    constexpr double sr = 48000.0;
+    BrickwallLimiter limiter;
+    limiter.prepare(sr);
+
+    LimiterSettings settings;
+    settings.ceilingDb = -1.0f;
+    settings.releaseMs = 30.0f;
+    settings.enabled = true;
+    const float ceiling = std::pow(10.0f, settings.ceilingDb / 20.0f);
+
+    std::vector<float> flamOut(200, 0.0f);
+    std::ranges::for_each(std::views::iota(0, 200), [&](int n) {
+        float l = 0.0f;
+        if (n == 0) l = 0.30f;
+        if (n == 58) l = 3.0f;
+        float r = l;
+        limiter.process(l, r, settings);
+        flamOut[static_cast<size_t>(n)] = l;
+    });
+
+    float preLatencyMax = 0.0f;
+    std::ranges::for_each(std::views::iota(0, 64), [&](int n) {
+        preLatencyMax = std::max(preLatencyMax, std::abs(flamOut[static_cast<size_t>(n)]));
+    });
+    REQUIRE(preLatencyMax == 0.0f);
+    REQUIRE(flamOut[64] > 0.27f);
+    REQUIRE(std::abs(flamOut[64 + 58]) <= ceiling + 0.002f);
+
+    // 12 kHz cosine at pi/4 phase has sample values <= 0.884 (< ceiling) but continuous true peak = 1.25.
+    limiter.reset();
+    float steadySamplePeak = 0.0f;
+    std::ranges::for_each(std::views::iota(0, 600), [&](int n) {
+        float l = 1.25f * static_cast<float>(std::cos(0.5 * std::numbers::pi * static_cast<double>(n) + 0.25 * std::numbers::pi));
+        float r = l;
+        limiter.process(l, r, settings);
+        if (n >= 200) {
+            steadySamplePeak = std::max(steadySamplePeak, std::abs(l));
+        }
+    });
+    REQUIRE(steadySamplePeak <= ceiling * 0.74f);
 }

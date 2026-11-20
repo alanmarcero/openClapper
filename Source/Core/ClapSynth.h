@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Effects.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -94,20 +95,82 @@ struct BiquadState {
     }
 };
 
+struct BiquadCoeffs {
+    float b0 = 0.0f;
+    float b1 = 0.0f;
+    float b2 = 0.0f;
+    float a1 = 0.0f;
+    float a2 = 0.0f;
+};
+
 // Clean stereo clap frame
 struct StereoFrame {
     float left = 0.0f;
     float right = 0.0f;
 };
 
+struct ImpactSaturator {
+    struct ChannelOversampler {
+        PolyphaseHalfband2x halfband{};
+        double prevU = 0.0;
+        double prevF1 = 0.0;
+
+        void reset() noexcept {
+            halfband.reset();
+            prevU = 0.0;
+            prevF1 = 0.0;
+        }
+    };
+
+    ChannelOversampler leftChan{};
+    ChannelOversampler rightChan{};
+    float envDb = -36.0f;
+
+    void reset() noexcept {
+        leftChan.reset();
+        rightChan.reset();
+        envDb = -36.0f;
+    }
+
+    [[nodiscard]] StereoFrame process(float inL, float inR, float amount, float driveScale, double sampleRate) noexcept;
+};
+
+struct CoupledPalmResonator {
+    float y1A = 0.0f, y2A = 0.0f;
+    float y1B = 0.0f, y2B = 0.0f;
+    float twoRCosA = 0.0f, rSqA = 0.0f, normA = 0.0f;
+    float twoRCosB = 0.0f, rSqB = 0.0f, normB = 0.0f;
+    float coupling = 0.0f;
+
+    void reset() noexcept {
+        y1A = y2A = y1B = y2B = 0.0f;
+    }
+
+    void configure(float freqHz, float q, double sampleRate) noexcept;
+
+    [[nodiscard]] float process(float x) noexcept {
+        const float inA = x * normA + coupling * y1B;
+        const float inB = x * normB - coupling * y1A;
+        const float outA = twoRCosA * y1A - rSqA * y2A + inA;
+        const float outB = twoRCosB * y1B - rSqB * y2B + inB;
+        y2A = y1A;
+        y1A = outA;
+        y2B = y1B;
+        y1B = outB;
+        return outA + 0.16f * outB;
+    }
+};
+
 // Stereo allpass diffuser for smooth transient dispersion without metallic comb flutter
 struct AllpassDiffuser {
     std::vector<float> buffer;
+    size_t baseDelay = 1;
     size_t writeIndex = 0;
     float feedback = 0.6f;
 
-    void prepare(size_t delaySamples, float g = 0.6f) {
-        buffer.assign(std::max<size_t>(1, delaySamples), 0.0f);
+    void prepare(size_t delaySamples, float g = 0.6f, size_t modMargin = 8) {
+        baseDelay = std::max<size_t>(2, delaySamples);
+        buffer.assign(baseDelay + modMargin + 4, 0.0f);
         writeIndex = 0;
         feedback = g;
     }
@@ -121,7 +184,21 @@ struct AllpassDiffuser {
         if (buffer.empty()) {
             return in;
         }
-        const float delayed = buffer[writeIndex];
+        const size_t readIndex = (writeIndex + buffer.size() - baseDelay) % buffer.size();
+        const float delayed = buffer[readIndex];
+        const float out = -feedback * in + delayed;
+        buffer[writeIndex] = in + feedback * delayed;
+        writeIndex = (writeIndex + 1) % buffer.size();
+        return out;
+    }
+
+    [[nodiscard]] float processModulated(float in, double modSamples) noexcept {
+        if (buffer.empty()) {
+            return in;
+        }
+        const double maxDelay = static_cast<double>(buffer.size() - 3);
+        const double delay = std::clamp(static_cast<double>(baseDelay) + modSamples, 1.5, maxDelay);
+        const float delayed = readHermiteCircular(buffer, delay, writeIndex);
         const float out = -feedback * in + delayed;
         buffer[writeIndex] = in + feedback * delayed;
         writeIndex = (writeIndex + 1) % buffer.size();
@@ -144,8 +221,6 @@ public:
     [[nodiscard]] StereoFrame process(float inLeft, float inRight, float size, float decayMs, float damp, float gateMs, double sampleRate) noexcept;
 
 private:
-    [[nodiscard]] static float readHermite(const std::vector<float>& buffer, double delaySamples, int writePos) noexcept;
-
     AllpassDiffuser diffL1_;
     AllpassDiffuser diffL2_;
     AllpassDiffuser diffL3_;
@@ -160,8 +235,7 @@ private:
     std::vector<float> delayR3_;
     int writeL1_ = 0, writeL2_ = 0, writeL3_ = 0;
     int writeR1_ = 0, writeR2_ = 0, writeR3_ = 0;
-    float dampStateL1_ = 0.0f, dampStateL2_ = 0.0f;
-    float dampStateR1_ = 0.0f, dampStateR2_ = 0.0f;
+    std::array<float, 6> dampStates_{};
     float hpfStateL_ = 0.0f, hpfStateR_ = 0.0f;
     double lfoPhaseL_ = 0.0;
     double lfoPhaseR_ = 0.0;
@@ -212,20 +286,28 @@ private:
     std::array<int, 5> burstStartSamples_{};
     std::array<float, 5> burstAmplitudes_{};
     std::array<float, 5> burstPans_{};
+    std::array<uint32_t, 5> burstPrngStates_{};
+    std::array<BiquadState, 5> burstFormantStates_{};
+    std::array<BiquadCoeffs, 5> burstFormantCoeffs_{};
 
-    BiquadState toneFilterL_{};
+    CoupledPalmResonator palmModalL_{};
+    CoupledPalmResonator palmModalR_{};
     BiquadState toneBloomFilterL_{};
-    BiquadState toneHPF_{};
-    BiquadState toneLPF_{};
-    BiquadState clickFilter_{};
+    BiquadState toneBloomFilterR_{};
+    BiquadState toneHPF_L_{};
+    BiquadState toneHPF_R_{};
+    BiquadState toneLPF_L_{};
+    BiquadState toneLPF_R_{};
     float lastToneFrequency_ = -1.0f;
     float lastToneQ_ = -1.0f;
-    float lastClickFrequency_ = -1.0f;
-    float lastClickQ_ = -1.0f;
-    float b0_t_ = 0.0f, b1_t_ = 0.0f, b2_t_ = 0.0f, a1_t_ = 0.0f, a2_t_ = 0.0f;
-    float b0_tb_ = 0.0f, b1_tb_ = 0.0f, b2_tb_ = 0.0f, a1_tb_ = 0.0f, a2_tb_ = 0.0f;
-    float b0_c_ = 0.0f, b1_c_ = 0.0f, b2_c_ = 0.0f, a1_c_ = 0.0f, a2_c_ = 0.0f;
-    float impactLp_ = 0.0f;
+    BiquadCoeffs bloomCoeffsL_{};
+    BiquadCoeffs bloomCoeffsR_{};
+    double clickPhase_ = 0.0;
+    float clickPrevWavelet_ = 0.0f;
+    ImpactSaturator impactNoiseSat_{};
+    ImpactSaturator impactToneSat_{};
+    float impactLpL_ = 0.0f;
+    float impactLpR_ = 0.0f;
     float lastToneHPF_ = -1.0f, lastToneLPF_ = -1.0f;
     float b0_th_ = 0.0f, b1_th_ = 0.0f, b2_th_ = 0.0f, a1_th_ = 0.0f, a2_th_ = 0.0f;
     float b0_tl_ = 1.0f, b1_tl_ = 0.0f, b2_tl_ = 0.0f, a1_tl_ = 0.0f, a2_tl_ = 0.0f;
@@ -247,8 +329,19 @@ private:
     float b0_h_ = 0.0f, b1_h_ = 0.0f, b2_h_ = 0.0f, a1_h_ = 0.0f, a2_h_ = 0.0f;
     float b0_l_ = 0.0f, b1_l_ = 0.0f, b2_l_ = 0.0f, a1_l_ = 0.0f, a2_l_ = 0.0f;
 
+    struct VelvetChannelState {
+        int64_t sampleIndex = 0;
+        int64_t gridIndex = 0;
+        int64_t nextPulseSample = 0;
+        uint32_t prng = 0x243f6a88U;
+    };
+
     // PRNG seed for deterministic and jittered noise
     uint32_t prngState_ = 0x12345678;
+    VelvetChannelState velvetL_{};
+    VelvetChannelState velvetR_{};
+    double velvetTd_ = 3.2;
+    float velvetGain_ = 0.96f;
     std::array<float, 3> pinkPoles_{}, pinkGains_{}, pinkLeft_{}, pinkRight_{};
     StereoFrame lofiHeld_{};
     double lofiPhase_ = 1.0, lofiStep_ = 0.25;

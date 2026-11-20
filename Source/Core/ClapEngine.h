@@ -76,7 +76,7 @@ struct EngineSettings {
 
 class ClapEngine {
 public:
-    static constexpr int kLatencySamples = 0;
+    static constexpr int kLatencySamples = BrickwallLimiter::kLookaheadSamples;
 
     void prepare(double sampleRate);
     void reset() noexcept;
@@ -148,9 +148,21 @@ private:
     std::vector<float> reverseBufferR_;
     std::vector<float> doublerBufferL_;
     std::vector<float> doublerBufferR_;
+    AllpassDiffuser doublerApL1_;
+    AllpassDiffuser doublerApL2_;
+    AllpassDiffuser doublerApR1_;
+    AllpassDiffuser doublerApR2_;
+    double doublerTargetSamplesL_ = 76.8;
+    double doublerTargetSamplesR_ = 201.6;
+    double doublerTapSamplesL_ = 76.8;
+    double doublerTapSamplesR_ = 201.6;
+    uint32_t doublerPrng_ = 0x51C0FFEEu;
+    bool doublerTapInitialized_ = false;
     size_t doublerWriteIndex_ = 0;
     float doublerLpL_ = 0.0f;
     float doublerLpR_ = 0.0f;
+    std::array<std::array<StereoFrame, 4>, kLatencySamples> componentDelay_{};
+    size_t componentDelayPos_ = 0;
     int reversePlayHead_ = -1;
     int reverseDuration_ = 0;
     bool isReversing_ = false;
