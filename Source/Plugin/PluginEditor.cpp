@@ -9,12 +9,10 @@ namespace {
 constexpr int kHeaderHeight = 88;
 constexpr int kSuiteHeight = 44;
 constexpr int kNavHeight = 61;
-constexpr int kDefaultWidth = 1080;
-constexpr int kDefaultHeight = 868;
-constexpr int kMinWidth = 1080;
-constexpr int kMinHeight = 868;
-constexpr int kMaxWidth = 2400;
-constexpr int kMaxHeight = 1800;
+constexpr int kDesignWidth = 1080;
+constexpr int kDesignHeight = 868;
+constexpr float kMinScale = 0.75f;
+constexpr float kMaxScale = 1.5f;
 
 std::vector<juce::String> factoryNames() {
     std::vector<juce::String> names;
@@ -42,6 +40,8 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& instrument)
         sounds.addItem(id++, name);
     });
     if (sounds.getNumItems() > 0) presets_.getRootMenu()->addSubMenu(family, sounds);
+    addAndMakeVisible(content_);
+    content_.setBounds(0, 0, kDesignWidth, kDesignHeight);
     presets_.setName("Factory preset");
     presets_.setTooltip("Choose a factory clap across six dance styles.");
     presets_.setTextWhenNothingSelected("Custom sound");
@@ -52,7 +52,7 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& instrument)
             browser_.setVisible(false);
         }
     };
-    addAndMakeVisible(presets_);
+    content_.addAndMakeVisible(presets_);
     previous_.setTooltip("Load the previous factory clap.");
     next_.setTooltip("Load the next factory clap.");
     audition_.setTooltip("Play the current sound at A4.");
@@ -61,7 +61,7 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& instrument)
     audition_.onClick = [this] { processor_.triggerAudition(); };
     audition_.setColour(juce::TextButton::buttonColourId, theme::apricot);
     audition_.setColour(juce::TextButton::textColourOffId, theme::plot);
-    for (auto* button : { &previous_, &next_, &audition_ }) addAndMakeVisible(*button);
+    for (auto* button : { &previous_, &next_, &audition_ }) content_.addAndMakeVisible(*button);
 
     suite_.onUndo = [this] { processor_.undo(); refreshChrome(); };
     suite_.onRedo = [this] { processor_.redo(); refreshChrome(); };
@@ -83,7 +83,7 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& instrument)
             .getChildFile("Alan Marcero").getChildFile("openClapper").getChildFile(stem + ".wav");
         return processor_.renderHitWav(file);
     };
-    addAndMakeVisible(suite_);
+    content_.addAndMakeVisible(suite_);
 
     browser_.setPalette({
         theme::paper, theme::surface, theme::ink, theme::secondary, theme::edge, theme::violet, theme::selected
@@ -102,27 +102,29 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& instrument)
     };
     browser_.onDelete = [this](const juce::String& name) { return processor_.deleteUserPreset(name); };
     browser_.setVisible(false);
-    addChildComponent(browser_);
+    content_.addChildComponent(browser_);
 
     constexpr std::array names{ "Clap", "Layers", "Effects", "MIDI & envelope" };
     for (size_t i = 0; i < tabs_.size(); ++i) {
         pages_[i] = std::make_unique<ui::ControlPage>(processor_.parameters, static_cast<ui::Page>(i));
-        addChildComponent(*pages_[i]);
+        content_.addChildComponent(*pages_[i]);
         tabs_[i].setButtonText(names[i]);
         tabs_[i].setTooltip("Open the " + juce::String(names[i]) + " page.");
         tabs_[i].onClick = [this, i] { setPage(static_cast<int>(i)); };
-        addAndMakeVisible(tabs_[i]);
+        content_.addAndMakeVisible(tabs_[i]);
     }
-    addAndMakeVisible(waveform_);
+    content_.addAndMakeVisible(waveform_);
     setLookAndFeel(&look_);
     setWantsKeyboardFocus(true);
-    const int savedWidth = processor_.editorWidth();
-    const int savedHeight = processor_.editorHeight();
+    // Older sessions saved free-aspect sizes. The smaller ratio keeps the whole editor on screen.
+    const float savedScale = std::min(static_cast<float>(processor_.editorWidth()) / kDesignWidth,
+                                      static_cast<float>(processor_.editorHeight()) / kDesignHeight);
+    const float scale = juce::jlimit(kMinScale, kMaxScale, savedScale > 0.0f ? savedScale : 1.0f);
     setResizable(true, true);
-    setResizeLimits(kMinWidth, kMinHeight, kMaxWidth, kMaxHeight);
-    const int width = juce::jlimit(kMinWidth, kMaxWidth, savedWidth > 0 ? savedWidth : kDefaultWidth);
-    const int height = juce::jlimit(kMinHeight, kMaxHeight, savedHeight > 0 ? savedHeight : kDefaultHeight);
-    setSize(width, height);
+    setResizeLimits(juce::roundToInt(kDesignWidth * kMinScale), juce::roundToInt(kDesignHeight * kMinScale),
+                    juce::roundToInt(kDesignWidth * kMaxScale), juce::roundToInt(kDesignHeight * kMaxScale));
+    getConstrainer()->setFixedAspectRatio(static_cast<double>(kDesignWidth) / kDesignHeight);
+    setSize(juce::roundToInt(kDesignWidth * scale), juce::roundToInt(kDesignHeight * scale));
     syncPreset();
     setPage(0);
     startTimerHz(24);
@@ -200,16 +202,17 @@ void OpenClapperEditor::timerCallback() {
     suite_.setUndoEnabled(processor_.canUndo(), processor_.canRedo());
     if (page_ == 0 && isShowing()) waveform_.refresh();
     const int handTop = kHeaderHeight + kSuiteHeight;
-    repaint(getWidth() - 180, handTop, 170, 80);
+    content_.repaint(kDesignWidth - 180, handTop, 170, 80);
 }
 
 void OpenClapperEditor::paint(juce::Graphics& g) {
     g.fillAll(theme::paper);
+    g.addTransform(content_.getTransform());
     const int chrome = kHeaderHeight + kSuiteHeight;
     g.setColour(theme::surface);
-    g.fillRect(0, 0, getWidth(), chrome);
+    g.fillRect(0, 0, kDesignWidth, chrome);
     g.setColour(theme::edge);
-    g.drawHorizontalLine(chrome - 1, 0, static_cast<float>(getWidth()));
+    g.drawHorizontalLine(chrome - 1, 0, static_cast<float>(kDesignWidth));
     g.setColour(theme::violet);
     constexpr std::array<int, 3> lengths{24, 39, 30};
     for (size_t i = 0; i < lengths.size(); ++i) {
@@ -234,7 +237,7 @@ void OpenClapperEditor::paint(juce::Graphics& g) {
     const float beat = processor_.displayBeatPhase.load(std::memory_order_relaxed);
     const bool running = beat >= 0.0f;
     const float contact = running ? std::exp(-7.0f * std::min(beat, 1.0f - beat)) : 0.0f;
-    const float centre = static_cast<float>(getWidth() - 56);
+    const float centre = static_cast<float>(kDesignWidth - 56);
     const float handY = static_cast<float>(kHeaderHeight + kSuiteHeight + 30);
     if (hand_) {
         for (float side : {-1.0f, 1.0f}) {
@@ -247,12 +250,17 @@ void OpenClapperEditor::paint(juce::Graphics& g) {
     }
     g.setColour(theme::secondary);
     g.drawText(running ? juce::String(juce::roundToInt(processor_.displayBpm.load())) + " BPM" : "Stopped",
-               getWidth() - 164, kHeaderHeight + kSuiteHeight + 11, 64, 38, juce::Justification::centredRight);
+               kDesignWidth - 164, kHeaderHeight + kSuiteHeight + 11, 64, 38, juce::Justification::centredRight);
 }
 
 void OpenClapperEditor::resized() {
     processor_.setEditorSize(getWidth(), getHeight());
-    auto area = getLocalBounds().reduced(20, 0);
+    const float scale = std::min(static_cast<float>(getWidth()) / kDesignWidth,
+                                 static_cast<float>(getHeight()) / kDesignHeight);
+    content_.setTransform(juce::AffineTransform::scale(scale).translated(
+        (static_cast<float>(getWidth()) - kDesignWidth * scale) * 0.5f,
+        (static_cast<float>(getHeight()) - kDesignHeight * scale) * 0.5f));
+    auto area = content_.getLocalBounds().reduced(20, 0);
     auto header = area.removeFromTop(kHeaderHeight).withTrimmedTop(30).withHeight(38);
     header.removeFromLeft(280);
     audition_.setBounds(header.removeFromRight(140));
@@ -282,7 +290,7 @@ void OpenClapperEditor::resized() {
 
     if (browser_.isVisible()) {
         const int top = kHeaderHeight + kSuiteHeight + 8;
-        browser_.setBounds(getWidth() - 450, top, 420, juce::jmin(440, getHeight() - top - 16));
+        browser_.setBounds(kDesignWidth - 450, top, 420, juce::jmin(440, kDesignHeight - top - 16));
         browser_.toFront(false);
     }
 }

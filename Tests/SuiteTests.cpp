@@ -335,34 +335,52 @@ TEST_CASE("Dragging a hit writes a WAV of the current sound", "[plugin][suite]")
     directory.deleteRecursively();
 }
 
-TEST_CASE("Editor resizes without an aspect lock and remembers its size", "[plugin][suite][gui]") {
+TEST_CASE("Editor scales uniformly from 75% to 150% and remembers its size", "[plugin][suite][gui]") {
     OpenClapperProcessor processor;
     std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    REQUIRE(editor->getWidth() == 1080);
+    REQUIRE(editor->getHeight() == 868);
     auto* constrainer = editor->getConstrainer();
     REQUIRE(constrainer != nullptr);
-    REQUIRE(constrainer->getFixedAspectRatio() == Catch::Approx(0.0));
-    REQUIRE(constrainer->getMinimumWidth() >= 900);
-    REQUIRE(constrainer->getMinimumHeight() >= 700);
-    REQUIRE(constrainer->getMaximumWidth() > constrainer->getMinimumWidth());
-    REQUIRE(constrainer->getMaximumHeight() > constrainer->getMinimumHeight());
+    REQUIRE(constrainer->getFixedAspectRatio() == Catch::Approx(1080.0 / 868.0));
+    REQUIRE(constrainer->getMinimumWidth() == 810);
+    REQUIRE(constrainer->getMinimumHeight() == 651);
+    REQUIRE(constrainer->getMaximumWidth() == 1620);
+    REQUIRE(constrainer->getMaximumHeight() == 1302);
     REQUIRE(editor->isResizable());
 
-    editor->setSize(1500, 980);
-    REQUIRE(editor->getWidth() == 1500);
-    REQUIRE(editor->getHeight() == 980);
-    editor->setSize(1280, editor->getHeight());
-    REQUIRE(editor->getWidth() == 1280);
-    REQUIRE(editor->getHeight() == 980);
-    REQUIRE(processor.editorWidth() == 1280);
-    REQUIRE(processor.editorHeight() == 980);
+    auto* audition = findVisible<juce::TextButton>(*editor, [](const juce::TextButton& button) {
+        return button.getButtonText() == "Audition A4";
+    });
+    REQUIRE(audition != nullptr);
+    editor->setBoundsConstrained({ 0, 0, 2000, 1302 });
+    REQUIRE(editor->getWidth() == 1620);
+    REQUIRE(editor->getHeight() == 1302);
+    const auto scaled = editor->getLocalArea(audition, audition->getLocalBounds());
+    REQUIRE(scaled.getWidth() == audition->getWidth() * 3 / 2);
+    REQUIRE(scaled.getHeight() == audition->getHeight() * 3 / 2);
+    editor->setBoundsConstrained({ 0, 0, 400, 300 });
+    REQUIRE(editor->getWidth() == 810);
+    REQUIRE(editor->getHeight() == 651);
+    editor->setBoundsConstrained({ 0, 0, 1296, 1042 });
+    REQUIRE(processor.editorWidth() == 1296);
+    REQUIRE(processor.editorHeight() == 1042);
 
     juce::MemoryBlock state;
     processor.getStateInformation(state);
     OpenClapperProcessor restored;
     restored.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
     std::unique_ptr<juce::AudioProcessorEditor> reopened(restored.createEditor());
-    REQUIRE(reopened->getWidth() == 1280);
-    REQUIRE(reopened->getHeight() == 980);
+    REQUIRE(reopened->getWidth() == 1296);
+    REQUIRE(reopened->getHeight() == 1042);
+}
+
+TEST_CASE("A free-aspect size from an older session opens at the scale that fits it", "[plugin][suite][gui]") {
+    OpenClapperProcessor processor;
+    processor.setEditorSize(1500, 980);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    REQUIRE(editor->getHeight() == 980);
+    REQUIRE(editor->getWidth() == juce::roundToInt(980.0 * 1080.0 / 868.0));
 }
 
 TEST_CASE("Older sessions keep the preset parameter when no host program was stored", "[plugin][suite]") {

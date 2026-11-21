@@ -24,6 +24,8 @@ private:
 
     OpenClapperProcessor& processor_;
     openclapper::ui::EdmLookAndFeel look_;
+    // Holds every control at the design size. resized() scales it to fit the window.
+    juce::Component content_;
     juce::ComboBox presets_;
     juce::TextButton previous_{ "Previous" }, next_{ "Next" }, audition_{ "Audition A4" };
     suite::SuiteBar suite_;
