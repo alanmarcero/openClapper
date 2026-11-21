@@ -26,8 +26,11 @@ public:
         g.drawText(text, 36, 0, getWidth() - 42, getHeight(), juce::Justification::centredLeft, true);
     }
 
-    void mouseDown(const juce::MouseEvent& event) override {
-        if (event.x < 32 && onStar) onStar();
+    // Only the star takes clicks. The ListBox gets the rest, so it can select and load the row.
+    bool hitTest(int x, int) override { return x < 32; }
+
+    void mouseDown(const juce::MouseEvent&) override {
+        if (onStar) onStar();
     }
 
 private:
@@ -189,7 +192,7 @@ void PresetBrowser::choose(int row, bool favoriteOnly) {
         store_.setFavorite(entry.name, entry.factory, entry.favorite);
         for (auto& stored : all_)
             if (stored.factory == entry.factory && stored.name == entry.name) stored.favorite = entry.favorite;
-        list_.repaintRow(row);
+        list_.updateContent();
         return;
     }
     selectedRow_ = row;
@@ -211,6 +214,15 @@ juce::Component* PresetBrowser::refreshComponentForRow(int row, bool selected, j
     line->setContent(entry, palette_, selected || row == selectedRow_);
     line->onStar = [this, row] { choose(row, true); };
     return line;
+}
+
+void PresetBrowser::listBoxItemClicked(int row, const juce::MouseEvent&) { choose(row, false); }
+
+void PresetBrowser::listBoxItemDoubleClicked(int, const juce::MouseEvent&) { setVisible(false); }
+
+void PresetBrowser::returnKeyPressed(int row) {
+    choose(row, false);
+    setVisible(false);
 }
 
 void PresetBrowser::selectedRowsChanged(int lastRow) {

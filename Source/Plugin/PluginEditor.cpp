@@ -91,12 +91,10 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& instrument)
     browser_.onFactoryPreset = [this](int index) {
         processor_.selectPreset(index);
         refreshChrome();
-        browser_.setVisible(false);
     };
     browser_.onUserPreset = [this](const juce::String& name) {
         processor_.loadUserPreset(name);
         refreshChrome();
-        browser_.setVisible(false);
     };
     browser_.onSave = [this](const juce::String& name) { return processor_.saveUserPreset(name); };
     browser_.onRename = [this](const juce::String& from, const juce::String& to) {

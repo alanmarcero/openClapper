@@ -43,6 +43,9 @@ private:
     int getNumRows() override { return visibleCount(); }
     void paintListBoxItem(int, juce::Graphics&, int, int, bool) override {}
     juce::Component* refreshComponentForRow(int row, bool selected, juce::Component* existing) override;
+    void listBoxItemClicked(int row, const juce::MouseEvent&) override;
+    void listBoxItemDoubleClicked(int row, const juce::MouseEvent&) override;
+    void returnKeyPressed(int row) override;
     void selectedRowsChanged(int lastRow) override;
 
     void applyFilter();

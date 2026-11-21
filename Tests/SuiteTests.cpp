@@ -40,6 +40,27 @@ void gesture(OpenClapperProcessor& processor, const char* id, float value) {
     parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
     parameter->endChangeGesture();
 }
+
+// Presses and releases the mouse on the component that the point hits, as a real click does.
+void clickAt(juce::Component& root, juce::Point<int> point) {
+    auto* target = root.getComponentAt(point);
+    REQUIRE(target != nullptr);
+    const auto local = target->getLocalPoint(&root, point).toFloat();
+    const auto now = juce::Time::getCurrentTime();
+    const juce::MouseEvent press(juce::Desktop::getInstance().getMainMouseSource(), local,
+        juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), juce::MouseInputSource::defaultPressure,
+        juce::MouseInputSource::defaultOrientation, juce::MouseInputSource::defaultRotation,
+        juce::MouseInputSource::defaultTiltX, juce::MouseInputSource::defaultTiltY,
+        target, target, now, local, now, 1, false);
+    target->mouseDown(press);
+    target->mouseUp(press);
+}
+
+bool samePixels(const juce::Image& first, const juce::Image& second) {
+    const juce::Image::BitmapData a(first, juce::Image::BitmapData::readOnly);
+    const juce::Image::BitmapData b(second, juce::Image::BitmapData::readOnly);
+    return a.size == b.size && std::memcmp(a.data, b.data, a.size) == 0;
+}
 }
 
 TEST_CASE("Parameter gestures undo and redo as one step", "[plugin][suite]") {
@@ -224,6 +245,54 @@ TEST_CASE("User presets save, rename, delete, search and favourite without touch
     REQUIRE(remove->isEnabled());
     list->selectRow(0);
     REQUIRE_FALSE(remove->isEnabled());
+    directory.deleteRecursively();
+}
+
+TEST_CASE("Clicking a browser row loads factory and user presets", "[plugin][suite][gui]") {
+    const auto directory = tempDirectory("row-clicks");
+    OpenClapperProcessor processor;
+    processor.userPresets().setDirectory(directory);
+    REQUIRE(processor.saveUserPreset("Night Hit"));
+    processor.selectPreset(0);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    editor->setVisible(true);
+    auto* open = findVisible<juce::TextButton>(*editor, [](const juce::TextButton& button) {
+        return button.getButtonText() == "Presets";
+    });
+    REQUIRE(open != nullptr);
+    open->onClick();
+    auto* browser = findVisible<suite::PresetBrowser>(*editor, [](const suite::PresetBrowser&) { return true; });
+    auto* list = findVisible<juce::ListBox>(*editor, [](const juce::ListBox&) { return true; });
+    REQUIRE(browser != nullptr);
+    REQUIRE(list != nullptr);
+    const auto rowArea = [&](int row) { return editor->getLocalArea(list, list->getRowPosition(row, true)); };
+
+    clickAt(*editor, rowArea(3).getCentre());
+    REQUIRE(processor.getSelectedPresetIndex() == 3);
+    REQUIRE(browser->isVisible());
+
+    const auto starBefore = list->createComponentSnapshot(list->getRowPosition(1, true));
+    clickAt(*editor, rowArea(1).getTopLeft() + juce::Point<int>(16, 18));
+    REQUIRE(processor.userPresets().isFavorite(browser->rowName(1), true));
+    REQUIRE(processor.getSelectedPresetIndex() == 3);
+    REQUIRE_FALSE(samePixels(starBefore, list->createComponentSnapshot(list->getRowPosition(1, true))));
+
+    REQUIRE(list->keyPressed(juce::KeyPress(juce::KeyPress::downKey)));
+    REQUIRE(processor.getSelectedPresetIndex() == 3);
+    REQUIRE(list->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    REQUIRE(processor.getSelectedPresetIndex() == 4);
+    REQUIRE_FALSE(browser->isVisible());
+
+    open->onClick();
+    browser->setSearchText("night");
+    clickAt(*editor, rowArea(0).getCentre());
+    REQUIRE(processor.userPresetName() == "Night Hit");
+    REQUIRE(processor.getSelectedPresetIndex() == -1);
+    auto* remove = findVisible<juce::TextButton>(*browser, [](const juce::TextButton& button) {
+        return button.getButtonText() == "Delete";
+    });
+    REQUIRE(remove != nullptr);
+    REQUIRE(remove->isEnabled());
     directory.deleteRecursively();
 }
 
