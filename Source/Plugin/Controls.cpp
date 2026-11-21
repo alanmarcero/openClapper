@@ -7,6 +7,20 @@
 
 namespace openclapper::ui {
 
+namespace {
+// A drag moves the value from where it was, so a click never jumps it. Shift-drag is 10 times finer.
+class FineSlider final : public juce::Slider {
+public:
+    FineSlider() { setSliderSnapsToMousePosition(false); }
+
+    void mouseDown(const juce::MouseEvent& event) override {
+        const int track = std::max(1, getLookAndFeel().getSliderLayout(*this).sliderBounds.getWidth());
+        setMouseDragSensitivity(track * (event.mods.isShiftDown() ? 10 : 1));
+        juce::Slider::mouseDown(event);
+    }
+};
+} // namespace
+
 LockBadge::LockBadge(Apvts& state, const juce::String& parameterId)
     : state_(state), id_(parameterId) {
     setComponentID("lock_" + id_);
@@ -79,7 +93,7 @@ Control::Control(Apvts& state, const char* id, const char* caption)
         return;
     }
 
-    slider_ = std::make_unique<juce::Slider>();
+    slider_ = std::make_unique<FineSlider>();
     slider_->setName(parameter->getName(80));
     slider_->setSliderStyle(juce::Slider::LinearHorizontal);
     slider_->setColour(juce::Slider::textBoxTextColourId, theme::ink);

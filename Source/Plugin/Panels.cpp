@@ -3,6 +3,7 @@
 #include "PluginProcessor.h"
 #include "Theme.h"
 #include <algorithm>
+#include <numeric>
 #include <ranges>
 #include <tuple>
 
@@ -199,20 +200,20 @@ ControlPage::ControlPage(Apvts& state, Page page) : page_(page) {
                 {kPreDecay,"Burst decay"}, {kPreJitter,"Humanize"}, {kFlamSpread,"Pan spread"}});
             group("Tuned body", 4, {{kToneQ,"Resonance"}, {kToneDecay,"Decay"}, {kToneLevel,"Level"}, {kImpactPunch,"Impact"},
                 {kTonePitchEnv,"Pitch sweep"}, {kTonePitchDecay,"Sweep time"}, {kToneHPF,"Low cut"}, {kToneLPF,"High cut"}});
-            group("Noise", 5, {{kNoiseType,"Texture"}, {kNoiseAttack,"Attack"}, {kNoiseHold,"Hold"}, {kNoiseDecay,"Decay"}, {kNoiseCurve,"Curve"},
+            group("Noise", 3, {{kNoiseType,"Texture"}, {kNoiseAttack,"Attack"}, {kNoiseHold,"Hold"}, {kNoiseDecay,"Decay"}, {kNoiseCurve,"Curve"},
                 {kNoiseHPF,"Low cut"}, {kNoiseLPF,"High cut"}, {kNoiseStereoWidth,"Stereo width"}, {kNoiseLevel,"Level"}});
             group("Transient", 4, {{kClickType,"Shape"}, {kClickFreq,"Frequency"}, {kClickDecay,"Decay"}, {kClickLevel,"Level"}});
             break;
         case Page::effects:
-            group("Drive", 5, {{kDistType,"Type"}, {kDistDrive,"Drive"}, {kDistTone,"Tone"}, {kDistMix,"Mix"}, {kClapDoubler,"Doubler"}});
+            group("Drive", 3, {{kDistType,"Type"}, {kDistDrive,"Drive"}, {kDistTone,"Tone"}, {kDistMix,"Mix"}, {kClapDoubler,"Doubler"}});
             group("Compressor", 3, {{kCompThresh,"Threshold"}, {kCompRatio,"Ratio"}, {kCompMakeup,"Makeup"},
                 {kCompAttack,"Attack"}, {kCompRelease,"Release"}, {kCompMix,"Mix"}});
-            group("Gated room", 5, {{kReverbSize,"Size"}, {kReverbDecay,"Decay"}, {kReverbDamp,"Damping"}, {kReverbGate,"Gate time"}, {kReverbMix,"Mix"}});
-            group("Echo & reverse", 5, {{kSlapbackDivision,"Slapback time"}, {kSlapbackMix,"Slapback mix"}, {kSlapbackFeedback,"Feedback"}, {kReverseMode,"Reverse timing"}, {kReverseMix,"Reverse mix"}});
+            group("Gated room", 3, {{kReverbSize,"Size"}, {kReverbDecay,"Decay"}, {kReverbDamp,"Damping"}, {kReverbGate,"Gate time"}, {kReverbMix,"Mix"}});
+            group("Echo & reverse", 3, {{kSlapbackDivision,"Slapback time"}, {kSlapbackMix,"Slapback mix"}, {kSlapbackFeedback,"Feedback"}, {kReverseMode,"Reverse timing"}, {kReverseMix,"Reverse mix"}});
             break;
         case Page::midi:
-            group("Note envelope", 5, {{"amp_enabled",""}, {"amp_attack","Attack"}, {"amp_decay","Decay"}, {"amp_sustain","Sustain"}, {"amp_release","Release"}});
-            group("Trigger zone", 5, {{"key_low","Lowest note"}, {"key_high","Highest note"}, {"velocity_low","Min velocity"}, {"velocity_high","Max velocity"}, {"choke_group","Choke group"}});
+            group("Note envelope", 3, {{"amp_enabled",""}, {"amp_attack","Attack"}, {"amp_decay","Decay"}, {"amp_sustain","Sustain"}, {"amp_release","Release"}});
+            group("Trigger zone", 3, {{"key_low","Lowest note"}, {"key_high","Highest note"}, {"velocity_low","Min velocity"}, {"velocity_high","Max velocity"}, {"choke_group","Choke group"}});
             group("Roll & fill", 3, {{"roll_division","Subdivision"}, {"roll_hits","Hit count"}, {kPitchHumanize,"Pitch humanize"}});
             std::ranges::for_each(std::views::iota(size_t{0}, kLayerNames.size()), [&](size_t layer) {
                 if (layer < kLayerVelocity.size()) {
@@ -242,16 +243,15 @@ void ControlPage::resized() {
         groups_[4]->setBounds(outputCard);
         return;
     }
-    int rows = 0;
-    for (const auto& group : groups_) rows += group->rows();
-    int available = area.getHeight() - (count - 1) * gap;
-    for (const auto& group : groups_) {
-        const int h = available * group->rows() / rows;
-        group->setBounds(area.removeFromTop(h));
+    // Every card keeps room for its heading and Lock button. Rows past the first share the rest.
+    constexpr int minCardHeight = 80;
+    const int rows = std::accumulate(groups_.begin(), groups_.end(), 0,
+        [](int total, const std::unique_ptr<ControlGroup>& group) { return total + group->rows(); });
+    const int extraRowHeight = (area.getHeight() - (count - 1) * gap - count * minCardHeight) / (rows - count);
+    std::ranges::for_each(groups_, [&](const std::unique_ptr<ControlGroup>& group) {
+        group->setBounds(area.removeFromTop(minCardHeight + (group->rows() - 1) * extraRowHeight));
         area.removeFromTop(gap);
-        rows -= group->rows();
-        available -= h;
-    }
+    });
 }
 
 Waveform::Waveform(OpenClapperProcessor& processor) : processor_(processor) { refresh(); }

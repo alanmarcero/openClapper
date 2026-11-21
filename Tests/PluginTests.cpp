@@ -1028,3 +1028,63 @@ TEST_CASE("The look and feel draws disabled buttons, knobs and combo boxes dimme
     knob.setValue(0.7 * knob.getMaximum());
     CHECK(light(knob, false, knob.getLocalBounds()) < light(knob, true, knob.getLocalBounds()) * 0.6);
 }
+
+TEST_CASE("Cards that had five columns give each slider at least 120 px of travel", "[plugin][gui]") {
+    OpenClapperProcessor processor;
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    editor->setVisible(true);
+    const auto shortTracks = [&](const char* page, const char* idPrefix) {
+        click(*editor, page);
+        std::vector<std::string> narrow;
+        const auto collect = [&](auto&& self, juce::Component& parent) -> void {
+            std::ranges::for_each(parent.getChildren(), [&](juce::Component* child) {
+                if (!child->isVisible()) return;
+                auto* slider = dynamic_cast<juce::Slider*>(child);
+                const auto id = parent.getComponentID();
+                if (slider != nullptr && id.startsWith(idPrefix)
+                    && slider->getLookAndFeel().getSliderLayout(*slider).sliderBounds.getWidth() < 120)
+                    narrow.push_back(id.toStdString());
+                self(self, *child);
+            });
+        };
+        collect(collect, *editor);
+        return narrow;
+    };
+    CHECK(shortTracks("Layers", "noise_").empty());
+    CHECK(shortTracks("Effects", "").empty());
+    CHECK(shortTracks("MIDI & envelope", "").empty());
+}
+
+TEST_CASE("A slider click does not jump and Shift-drag is ten times finer", "[plugin][gui]") {
+    OpenClapperProcessor processor;
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    editor->setVisible(true);
+    click(*editor, "Effects");
+    auto* slider = findVisible<juce::Slider>(*editor, [](const juce::Slider& item) {
+        return item.getParentComponent()->getComponentID() == openclapper::params::kReverbGate;
+    });
+    REQUIRE(slider != nullptr);
+    const auto track = slider->getLookAndFeel().getSliderLayout(*slider).sliderBounds.toFloat();
+    const auto drag = [&](float fromX, float toX, juce::ModifierKeys mods) {
+        slider->setValue(500.0, juce::sendNotificationSync);
+        const juce::Point<float> down(fromX, track.getCentreY());
+        const juce::Point<float> to(toX, track.getCentreY());
+        const auto now = juce::Time::getCurrentTime();
+        const auto event = [&](juce::Point<float> at) {
+            return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), at,
+                mods.withFlags(juce::ModifierKeys::leftButtonModifier), juce::MouseInputSource::defaultPressure,
+                juce::MouseInputSource::defaultOrientation, juce::MouseInputSource::defaultRotation,
+                juce::MouseInputSource::defaultTiltX, juce::MouseInputSource::defaultTiltY,
+                slider, slider, now, down, now, 1, at != down);
+        };
+        slider->mouseDown(event(down));
+        slider->mouseDrag(event(to));
+        slider->mouseUp(event(to));
+        return slider->getValue() - 500.0;
+    };
+    CHECK(drag(track.getRight() - 2.0f, track.getRight() - 2.0f, {}) == Catch::Approx(0.0));
+    const double normal = drag(track.getX() + 10.0f, track.getX() + 40.0f, {});
+    const double fine = drag(track.getX() + 10.0f, track.getX() + 40.0f, juce::ModifierKeys(juce::ModifierKeys::shiftModifier));
+    CHECK(normal > 100.0);
+    CHECK(fine == Catch::Approx(normal / 10.0).margin(normal * 0.03));
+}
