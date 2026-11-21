@@ -20,6 +20,8 @@ public:
     void paint(juce::Graphics&) override;
     void resized() override;
     int rows() const;
+    // Updates the Lock button and dims the controls that have no effect now.
+    void refresh();
 private:
     void timerCallback() override;
     void refreshLockButton();

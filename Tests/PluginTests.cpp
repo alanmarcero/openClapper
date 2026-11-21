@@ -48,6 +48,14 @@ void checkTargets(juce::Component& root, juce::Component& parent) {
 }
 
 void snapshot(juce::Component& editor, const char* filename) {
+    // Card timers do not run in tests, so refresh the cards to capture the current dimming.
+    const auto refreshCards = [](auto&& self, juce::Component& parent) -> void {
+        std::ranges::for_each(parent.getChildren(), [&](juce::Component* child) {
+            if (auto* card = dynamic_cast<openclapper::ui::ControlGroup*>(child)) card->refresh();
+            self(self, *child);
+        });
+    };
+    refreshCards(refreshCards, editor);
     checkTargets(editor, editor);
     const auto image = editor.createComponentSnapshot(editor.getLocalBounds());
     REQUIRE(image.isValid());

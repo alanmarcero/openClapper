@@ -98,11 +98,13 @@ ControlGroup::ControlGroup(Apvts& state, const char* heading, std::initializer_l
         refreshLockButton();
     };
     addAndMakeVisible(lockButton_);
-    timerCallback();
+    refresh();
     startTimerHz(10);
 }
 
-void ControlGroup::timerCallback() {
+void ControlGroup::timerCallback() { refresh(); }
+
+void ControlGroup::refresh() {
     refreshLockButton();
     std::ranges::for_each(controls_, [this](const std::unique_ptr<juce::Component>& component) {
         if (auto* control = dynamic_cast<Control*>(component.get()))
