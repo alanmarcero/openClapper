@@ -16,7 +16,6 @@ public:
 
 private:
     void timerCallback() override;
-    void syncPreset();
     void refreshChrome();
     void stepPreset(int delta);
     void setPage(int index);

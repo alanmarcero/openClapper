@@ -18,12 +18,23 @@ OpenClapperProcessor::OpenClapperProcessor()
         [this] { return captureSoundState(); },
         [this](const juce::ValueTree& tree) { applySoundTree(tree, ApplyKind::undo); });
     undo_.attach(*this);
+    presetParameterIndex_ = parameters.getParameter(openclapper::params::kPreset)->getParameterIndex();
+    std::ranges::for_each(getParameters(), [this](juce::AudioProcessorParameter* parameter) { parameter->addListener(this); });
     undo_.suspend();
     selectPreset(0);
     undo_.resume();
     undo_.clear();
     ab_.setBoth(captureSoundState());
     setLatencySamples(openclapper::core::ClapEngine::kLatencySamples);
+}
+
+OpenClapperProcessor::~OpenClapperProcessor() {
+    std::ranges::for_each(getParameters(), [this](juce::AudioProcessorParameter* parameter) { parameter->removeListener(this); });
+}
+
+// Loads change parameters too. They hold loading_ above 0, so only edits set the flag.
+void OpenClapperProcessor::parameterValueChanged(int index, float) {
+    if (index != presetParameterIndex_ && loading_.load() == 0) presetEdited_ = true;
 }
 
 void OpenClapperProcessor::prepareToPlay(double sampleRate, int) {
@@ -214,7 +225,10 @@ void OpenClapperProcessor::selectPreset(int index) {
     undo_.group("Preset", [&] {
         selectedPreset_ = index;
         setUserPresetName({});
+        ++loading_;
         openclapper::presets::apply(presets[static_cast<size_t>(index)], parameters, lockedParameterIds());
+        --loading_;
+        presetEdited_ = false;
         currentProgram_ = index;
         // Preset Index automation stays on the original 44 positions.
         if (index < openclapper::params::kHostProgramCount)
@@ -297,6 +311,7 @@ juce::ValueTree OpenClapperProcessor::captureSoundState() {
     state.setProperty("selected_preset", selectedPreset_.load(), nullptr);
     state.setProperty("host_program", currentProgram_.load(), nullptr);
     state.setProperty("user_preset", userPresetName(), nullptr);
+    state.setProperty("preset_edited", presetEdited_.load(), nullptr);
     state.setProperty("clap_bank", 3, nullptr);
     return state;
 }
@@ -316,6 +331,7 @@ void OpenClapperProcessor::applyParameterChildren(const juce::ValueTree& tree, c
 
 void OpenClapperProcessor::applySoundTree(const juce::ValueTree& incoming, ApplyKind kind) {
     undo_.suspend();
+    ++loading_;
     auto state = incoming.createCopy();
     state.removeChild(state.getChildWithName("ABCompare"), nullptr);
     state.removeProperty("locked_wav", nullptr);
@@ -352,6 +368,7 @@ void OpenClapperProcessor::applySoundTree(const juce::ValueTree& incoming, Apply
         ? std::clamp(static_cast<int>(state.getProperty("selected_preset", currentProgram_.load())), -1, factoryCount - 1)
         : -1;
     setUserPresetName(state.getProperty("user_preset").toString());
+    presetEdited_ = static_cast<bool>(state.getProperty("preset_edited"));
 
     if (kind == ApplyKind::session) {
         if (incoming.hasProperty("editor_width") && incoming.hasProperty("editor_height")) {
@@ -360,6 +377,7 @@ void OpenClapperProcessor::applySoundTree(const juce::ValueTree& incoming, Apply
         }
         if (!ab_.read(incoming)) ab_.setBoth(captureSoundState());
     }
+    --loading_;
     undo_.resume();
     if (kind != ApplyKind::undo) undo_.clear();
 }
@@ -388,6 +406,16 @@ void OpenClapperProcessor::setUserPresetName(juce::String name) {
 juce::String OpenClapperProcessor::userPresetName() const {
     const juce::ScopedLock guard(lockMutex_);
     return userPresetName_;
+}
+
+juce::String OpenClapperProcessor::presetDisplayName() const {
+    const juce::String suffix = presetEdited_.load() ? " *" : "";
+    const auto user = userPresetName();
+    if (user.isNotEmpty()) return user + suffix;
+    const auto& bank = openclapper::presets::factoryPresets();
+    const int index = selectedPreset_.load();
+    if (index < 0 || index >= static_cast<int>(bank.size())) return "Custom sound" + suffix;
+    return bank[static_cast<size_t>(index)].name + suffix;
 }
 
 void OpenClapperProcessor::setEditorSize(int width, int height) noexcept {
@@ -431,9 +459,12 @@ void OpenClapperProcessor::loadUserPreset(const juce::String& name) {
     auto tree = userPresets_.load(name);
     if (!tree) return;
     undo_.group("User preset", [&] {
+        ++loading_;
         applyParameterChildren(*tree, lockedParameterIds());
+        --loading_;
         selectedPreset_ = -1;
         setUserPresetName(suite::UserPresetStore::sanitise(name));
+        presetEdited_ = false;
     });
 }
 
@@ -443,6 +474,7 @@ bool OpenClapperProcessor::saveUserPreset(const juce::String& name) {
     if (!userPresets_.save(clean, captureSoundState())) return false;
     setUserPresetName(clean);
     selectedPreset_ = -1;
+    presetEdited_ = false;
     return true;
 }
 

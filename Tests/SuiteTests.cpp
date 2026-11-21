@@ -402,3 +402,45 @@ TEST_CASE("Older sessions keep the preset parameter when no host program was sto
     REQUIRE(restored.parameters.getParameter(openclapper::params::kPreset)->getValue() == Catch::Approx(1.0f));
     REQUIRE(restored.parameters.getRawParameterValue("amp_enabled")->load() == Catch::Approx(0.0f));
 }
+
+TEST_CASE("The preset name gains a star on the first edit and loses it on undo, load and save", "[plugin][suite]") {
+    const auto directory = tempDirectory("edited");
+    OpenClapperProcessor processor;
+    processor.userPresets().setDirectory(directory);
+    processor.selectPreset(4);
+    CHECK(processor.presetDisplayName() == "Uplifting / Wide Ribbon");
+    gesture(processor, openclapper::params::kToneDecay, 400.0f);
+    CHECK(processor.presetDisplayName() == "Uplifting / Wide Ribbon *");
+    processor.undo();
+    CHECK(processor.presetDisplayName() == "Uplifting / Wide Ribbon");
+    processor.redo();
+    CHECK(processor.presetDisplayName() == "Uplifting / Wide Ribbon *");
+    processor.selectPreset(4);
+    CHECK(processor.presetDisplayName() == "Uplifting / Wide Ribbon");
+
+    gesture(processor, openclapper::params::kToneDecay, 500.0f);
+    REQUIRE(processor.saveUserPreset("Night Hit"));
+    CHECK(processor.presetDisplayName() == "Night Hit");
+    gesture(processor, openclapper::params::kNoiseDecay, 900.0f);
+    CHECK(processor.presetDisplayName() == "Night Hit *");
+    processor.loadUserPreset("Night Hit");
+    CHECK(processor.presetDisplayName() == "Night Hit");
+    gesture(processor, openclapper::params::kNoiseDecay, 700.0f);
+
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    auto* header = findVisible<juce::ComboBox>(*editor, [](const juce::ComboBox& box) { return box.getName() == "Factory preset"; });
+    REQUIRE(header != nullptr);
+    CHECK(header->getText() == "Night Hit *");
+    editor.reset();
+
+    juce::MemoryBlock state;
+    processor.getStateInformation(state);
+    OpenClapperProcessor restored;
+    restored.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+    CHECK(restored.presetDisplayName() == "Night Hit *");
+    restored.toggleAb();
+    CHECK(restored.presetDisplayName() == "Uplifting / Downbeat");
+    restored.toggleAb();
+    CHECK(restored.presetDisplayName() == "Night Hit *");
+    directory.deleteRecursively();
+}

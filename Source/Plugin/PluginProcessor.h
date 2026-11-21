@@ -8,9 +8,10 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <set>
 
-class OpenClapperProcessor : public juce::AudioProcessor {
+class OpenClapperProcessor : public juce::AudioProcessor, private juce::AudioProcessorParameter::Listener {
 public:
     OpenClapperProcessor();
+    ~OpenClapperProcessor() override;
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
@@ -55,6 +56,10 @@ public:
     [[nodiscard]] bool isAbSlotB() const noexcept { return ab_.editingB(); }
 
     [[nodiscard]] juce::String userPresetName() const;
+    // True after any parameter edit since the last preset load or save.
+    [[nodiscard]] bool isPresetEdited() const noexcept { return presetEdited_.load(); }
+    // The loaded factory or user preset name, with " *" once it is edited.
+    [[nodiscard]] juce::String presetDisplayName() const;
     void loadUserPreset(const juce::String& name);
     bool saveUserPreset(const juce::String& name);
     bool renameUserPreset(const juce::String& from, const juce::String& to);
@@ -90,6 +95,8 @@ private:
     void applySoundTree(const juce::ValueTree& incoming, ApplyKind kind);
     void applyParameterChildren(const juce::ValueTree& tree, const juce::StringArray& lockedIds);
     void setUserPresetName(juce::String name);
+    void parameterValueChanged(int index, float) override;
+    void parameterGestureChanged(int, bool) override {}
 
     openclapper::core::ClapEngine engine_;
     std::atomic<bool> auditionPending_{ false };
@@ -98,6 +105,10 @@ private:
     mutable juce::CriticalSection lockMutex_;
     std::set<juce::String> lockedParams_;
     juce::String userPresetName_;
+    // Host automation can call parameterValueChanged on the audio thread, so both are atomic.
+    std::atomic<bool> presetEdited_{ false };
+    std::atomic<int> loading_{ 0 };
+    int presetParameterIndex_ = -1;
     suite::ParameterUndo undo_;
     suite::AbSlots ab_;
     suite::UserPresetStore userPresets_{ suite::UserPresetStore::defaultDirectory("openClapper") };

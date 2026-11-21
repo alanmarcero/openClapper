@@ -129,7 +129,7 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& instrument)
                     juce::roundToInt(kDesignWidth * kMaxScale), juce::roundToInt(kDesignHeight * kMaxScale));
     getConstrainer()->setFixedAspectRatio(static_cast<double>(kDesignWidth) / kDesignHeight);
     setSize(juce::roundToInt(kDesignWidth * scale), juce::roundToInt(kDesignHeight * scale));
-    syncPreset();
+    presets_.setText(processor_.presetDisplayName(), juce::dontSendNotification);
     setPage(0);
     startTimerHz(24);
 }
@@ -144,21 +144,12 @@ void OpenClapperEditor::stepPreset(int delta) {
     const int current = processor_.getSelectedPresetIndex();
     const int next = current < 0 ? (delta > 0 ? 0 : size - 1) : (current + delta + size) % size;
     processor_.selectPreset(next);
-    syncPreset();
+    presets_.setText(processor_.presetDisplayName(), juce::dontSendNotification);
     waveform_.refresh();
 }
 
-void OpenClapperEditor::syncPreset() {
-    if (processor_.userPresetName().isNotEmpty()) {
-        presets_.setSelectedId(0, juce::dontSendNotification);
-        presets_.setText(processor_.userPresetName(), juce::dontSendNotification);
-        return;
-    }
-    presets_.setSelectedId(processor_.getSelectedPresetIndex() + 1, juce::dontSendNotification);
-}
-
 void OpenClapperEditor::refreshChrome() {
-    syncPreset();
+    presets_.setText(processor_.presetDisplayName(), juce::dontSendNotification);
     suite_.setAbSlotB(processor_.isAbSlotB());
     suite_.setUndoEnabled(processor_.canUndo(), processor_.canRedo());
     waveform_.refresh();
@@ -201,7 +192,7 @@ bool OpenClapperEditor::keyPressed(const juce::KeyPress& key) {
 }
 
 void OpenClapperEditor::timerCallback() {
-    syncPreset();
+    presets_.setText(processor_.presetDisplayName(), juce::dontSendNotification);
     suite_.setAbSlotB(processor_.isAbSlotB());
     suite_.setUndoEnabled(processor_.canUndo(), processor_.canRedo());
     if (page_ == 0 && isShowing()) waveform_.refresh();
