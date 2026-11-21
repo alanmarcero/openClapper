@@ -1,5 +1,9 @@
 # Changelog
 
+## v3.12.1
+
+- **UI & Suite Fixes:** UI polish, named keyboard-ready padlocks, unit formatting and typed-value entry, per-slot A/B undo, inline preset confirms, 40x40 preset steppers, and screen-reader titles.
+
 ## v3.12.0
 
 - **Micro-Crowd Doubler:** Randomizes 0.8–4.5 ms taps per MIDI hit with dispersive allpasses.
