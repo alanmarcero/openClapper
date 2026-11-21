@@ -212,6 +212,12 @@ inline constexpr float kReverbGateReleaseMs = 64.0f;
 /** Flam, attack, and doubler offsets never push a clap off the beat by more than this. */
 inline constexpr float kMaxTimingOffsetMs = 5.0f;
 
+// The gap between hand bursts. All bursts fit inside kMaxTimingOffsetMs, so more bursts can shorten it.
+[[nodiscard]] inline float flamSpacingMs(int bursts, float requestedMs) noexcept {
+    const int gaps = std::max(1, bursts - 1);
+    return std::min(std::clamp(requestedMs, 0.0f, kMaxTimingOffsetMs), kMaxTimingOffsetMs / static_cast<float>(gaps));
+}
+
 // Algorithmic stereo diffuser / reverb with gate
 class GatedStereoReverb {
 public:

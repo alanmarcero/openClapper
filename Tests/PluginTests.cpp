@@ -1172,3 +1172,24 @@ TEST_CASE("The Output card groups the limiter and shows where limited peaks land
     refreshCards(*editor);
     CHECK(ceiling->getText() == "Output ceiling off");
 }
+
+TEST_CASE("The waveform ends with the noise and the hands caption shows the spacing that plays", "[plugin][gui]") {
+    using namespace openclapper;
+    core::ClapSynthSettings settings;
+    settings.noiseAttackMs = 0.0f;
+    settings.noiseHoldMs = 0.0f;
+    settings.noiseDecayMs = 180.0f;
+    settings.toneDecayMs = 90.0f;
+    CHECK(ui::waveformDurationMs(settings) == 250);
+    settings.toneDecayMs = 40.0f;
+    CHECK(ui::waveformDurationMs(settings) == 200);
+
+    settings.preClapCount = 1;
+    CHECK(ui::handsCaption(settings) == "1 burst");
+    settings.preClapCount = 3;
+    settings.preClapSpreadMs = 1.1f;
+    CHECK(ui::handsCaption(settings) == "3 bursts, 1.1 ms apart");
+    settings.preClapSpreadMs = 4.0f;
+    CHECK(core::flamSpacingMs(3, 4.0f) == Catch::Approx(2.5f));
+    CHECK(ui::handsCaption(settings) == "3 bursts, 2.5 ms apart (capped)");
+}

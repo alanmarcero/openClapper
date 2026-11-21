@@ -6,6 +6,7 @@
 #include <bit>
 #include <numeric>
 #include <ranges>
+#include <span>
 #include <tuple>
 
 namespace openclapper::ui {
@@ -359,31 +360,81 @@ void ControlPage::resized() {
     });
 }
 
+namespace {
+constexpr int kSamplesPerMs = 48;
+constexpr int kHandsMs = 10;
+constexpr float kMinPlotPeak = 0.12f;
+
+// Draws one bar per bin, from the lowest to the highest sample in the bin.
+void drawBars(juce::Graphics& g, juce::Rectangle<float> plot, std::span<const float> upper,
+              std::span<const float> lower, float gain) {
+    const float step = plot.getWidth() / static_cast<float>(upper.size());
+    std::ranges::for_each(std::views::iota(size_t{ 0 }, upper.size()), [&](size_t i) {
+        const float x = plot.getX() + static_cast<float>(i) * step;
+        g.fillRect(x, plot.getCentreY() - upper[i] * gain, step + 0.25f, (upper[i] - lower[i]) * gain);
+    });
+}
+
+// Records the lowest and highest sample of each bin.
+void binFrames(std::span<const core::StereoFrame> frames, std::span<float> upper, std::span<float> lower) {
+    std::ranges::fill(upper, 0.0f);
+    std::ranges::fill(lower, 0.0f);
+    std::ranges::for_each(std::views::iota(size_t{ 0 }, frames.size()), [&](size_t i) {
+        const auto bin = i * upper.size() / frames.size();
+        upper[bin] = std::max({ upper[bin], frames[i].left, frames[i].right });
+        lower[bin] = std::min({ lower[bin], frames[i].left, frames[i].right });
+    });
+}
+} // namespace
+
+int waveformDurationMs(const core::ClapSynthSettings& settings) {
+    if (settings.ampEnabled) return juce::jlimit(300, 1500, 150 + juce::roundToInt(settings.ampReleaseMs));
+    const float noiseEndMs = settings.noiseAttackMs + settings.noiseHoldMs + settings.noiseDecayMs;
+    return juce::jmax(100, 50 * static_cast<int>(std::ceil(std::max(noiseEndMs, 2.5f * settings.toneDecayMs) / 50.0f)));
+}
+
+juce::String handsCaption(const core::ClapSynthSettings& settings) {
+    const int bursts = settings.preClapCount;
+    const auto count = juce::String(bursts) + (bursts == 1 ? " burst" : " bursts");
+    if (bursts < 2) return count;
+    const float spacing = core::flamSpacingMs(bursts, settings.preClapSpreadMs);
+    const auto apart = count + ", " + params::formatMilliseconds(spacing) + " apart";
+    if (spacing < settings.preClapSpreadMs - 0.01f) return apart + " (capped)";
+    return apart;
+}
+
 Waveform::Waveform(OpenClapperProcessor& processor) : processor_(processor) { refresh(); }
 
 void Waveform::refresh() {
     const auto settings = params::readSettings(processor_.parameters).synth;
     if (previous_ && *previous_ == settings) return;
     previous_ = settings;
-    strikeMs_ = 0.0f;
-    durationMs_ = juce::jmax(100, 50 * static_cast<int>(std::ceil(
-        (strikeMs_ + std::max(settings.noiseAttackMs + settings.noiseHoldMs + 1.6f * settings.noiseDecayMs,
-                              2.5f * settings.toneDecayMs)) / 50.0f)));
-    if (settings.ampEnabled) durationMs_ = juce::jlimit(300, 1500, 150 + juce::roundToInt(settings.ampReleaseMs));
+    durationMs_ = waveformDurationMs(settings);
+    handsCaption_ = handsCaption(settings);
+
     core::ClapSynth voice;
-    constexpr int samplesPerMs = 48;
-    voice.prepare(samplesPerMs * 1000);
+    voice.prepare(kSamplesPerMs * 1000);
     voice.trigger(settings, 69, 1.0f);
-    upper_.fill(0);
-    lower_.fill(0);
-    const int samples = durationMs_ * samplesPerMs;
-    for (int i = 0; i < samples; ++i) {
-        if (settings.ampEnabled && i == 150 * samplesPerMs) voice.noteOff(settings);
-        const auto frame = voice.processSample(settings);
-        const auto bin = static_cast<size_t>(i) * upper_.size() / static_cast<size_t>(samples);
-        upper_[bin] = std::max({upper_[bin], frame.left, frame.right});
-        lower_[bin] = std::min({lower_[bin], frame.left, frame.right});
-    }
+    std::vector<core::StereoFrame> frames(static_cast<size_t>(durationMs_ * kSamplesPerMs));
+    std::ranges::for_each(std::views::iota(size_t{ 0 }, frames.size()), [&](size_t i) {
+        if (settings.ampEnabled && i == 150 * kSamplesPerMs) voice.noteOff(settings);
+        frames[i] = voice.processSample(settings);
+    });
+    const auto handsSamples = static_cast<size_t>(kHandsMs * kSamplesPerMs);
+    binFrames(frames, upper_, lower_);
+    binFrames(std::span(frames).first(handsSamples), handsUpper_, handsLower_);
+
+    // Muting the other layers keeps the same random hand timing as the whole clap.
+    auto handsOnly = settings;
+    handsOnly.layers[0].mute = true;
+    handsOnly.layers[1].mute = true;
+    handsOnly.layers[2].mute = true;
+    core::ClapSynth hands;
+    hands.prepare(kSamplesPerMs * 1000);
+    hands.trigger(handsOnly, 69, 1.0f);
+    std::vector<core::StereoFrame> bursts(handsSamples);
+    std::ranges::generate(bursts, [&] { return hands.processSample(handsOnly); });
+    binFrames(bursts, burstsUpper_, burstsLower_);
     repaint();
 }
 
@@ -392,6 +443,8 @@ void Waveform::paint(juce::Graphics& g) {
     g.setColour(theme::plot);
     g.fillRoundedRectangle(area.toFloat(), 10);
     auto inner = area.reduced(23, 12);
+    auto hands = inner.removeFromRight(250);
+    inner.removeFromRight(20);
     auto caption = inner.removeFromTop(30);
     g.setColour(theme::ink);
     g.setFont(juce::FontOptions(22.0f, juce::Font::bold));
@@ -403,9 +456,8 @@ void Waveform::paint(juce::Graphics& g) {
     inner.removeFromTop(3);
     const auto ruler = inner.removeFromBottom(19);
     const auto plot = inner.toFloat();
-    const float strike = plot.getX() + strikeMs_ / static_cast<float>(durationMs_) * plot.getWidth();
-    const float mid = plot.getCentreY() + 4;
-    const float maxPeak = std::max(0.12f, std::max(*std::max_element(upper_.begin(), upper_.end()),
+    const float mid = plot.getCentreY();
+    const float maxPeak = std::max(kMinPlotPeak, std::max(*std::max_element(upper_.begin(), upper_.end()),
                                                     -*std::min_element(lower_.begin(), lower_.end())));
     for (int i = 0; i <= 5; ++i) {
         const int x = juce::roundToInt(plot.getX() + static_cast<float>(i) * plot.getWidth() / 5);
@@ -419,18 +471,47 @@ void Waveform::paint(juce::Graphics& g) {
     }
     g.setColour(theme::lilac.withAlpha(0.35f));
     g.drawHorizontalLine(juce::roundToInt(mid), plot.getX(), plot.getRight());
-    const float step = plot.getWidth() / static_cast<float>(upper_.size());
-    const float gain = (plot.getHeight() - 21) * 0.45f / maxPeak;
-    for (size_t i = 0; i < upper_.size(); ++i) {
-        const float x = plot.getX() + static_cast<float>(i) * step;
-        g.setColour(x < strike ? theme::apricot : theme::lilac);
-        g.fillRect(x, mid - upper_[i] * gain, step + 0.25f, (upper_[i] - lower_[i]) * gain);
-    }
+    g.setColour(theme::lilac);
+    drawBars(g, plot, upper_, lower_, plot.getHeight() * 0.45f / maxPeak);
+
+    // The inset zooms into the flam. Peach is the hand bursts at their own scale, and a tick marks
+    // where each burst starts. Mint is the whole clap.
+    const auto handsTitle = hands.removeFromTop(30);
+    g.setColour(theme::ink);
+    g.setFont(juce::FontOptions(16.0f, juce::Font::bold));
+    g.drawText("Hands", handsTitle, juce::Justification::centredLeft);
     g.setColour(theme::apricot);
-    g.drawVerticalLine(juce::roundToInt(strike), plot.getY() + 15, plot.getBottom());
-    g.setFont(juce::FontOptions(12.5f, juce::Font::bold));
-    g.drawText("Main strike   " + juce::String(strikeMs_, 1) + " ms", juce::roundToInt(strike + 5),
-               inner.getY(), 155, 17, juce::Justification::centredLeft);
+    g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
+    g.drawText(handsCaption_, handsTitle, juce::Justification::centredRight);
+    hands.removeFromTop(3);
+    const auto handsRuler = hands.removeFromBottom(19);
+    const auto handsPlot = hands.toFloat();
+    g.setColour(theme::ink.withAlpha(0.06f));
+    g.fillRoundedRectangle(handsPlot, 4);
+    const std::array<juce::Justification, 3> rulerJustification{
+        juce::Justification::centredLeft, juce::Justification::centred, juce::Justification::centredRight };
+    std::ranges::for_each(std::views::iota(0, 3), [&](int i) {
+        const int x = juce::roundToInt(handsPlot.getX() + static_cast<float>(i) * handsPlot.getWidth() / 2);
+        g.setColour(theme::ink.withAlpha(0.13f));
+        g.drawVerticalLine(x, handsPlot.getY(), handsPlot.getBottom());
+        g.setColour(theme::lilac);
+        g.setFont(juce::FontOptions(12.0f));
+        g.drawText(juce::String(i * kHandsMs / 2) + " ms", juce::jlimit(handsRuler.getX(), handsRuler.getRight() - 40, x - 20),
+                   handsRuler.getY(), 40, 19, rulerJustification[static_cast<size_t>(i)]);
+    });
+    const float handsPeak = std::max(kMinPlotPeak, std::max(*std::ranges::max_element(handsUpper_),
+                                                            -*std::ranges::min_element(handsLower_)));
+    const float burstsPeak = std::max(1.0e-4f, std::max(*std::ranges::max_element(burstsUpper_),
+                                                        -*std::ranges::min_element(burstsLower_)));
+    g.setColour(theme::lilac.withAlpha(0.3f));
+    drawBars(g, handsPlot, handsUpper_, handsLower_, handsPlot.getHeight() * 0.45f / handsPeak);
+    g.setColour(theme::apricot);
+    drawBars(g, handsPlot, burstsUpper_, burstsLower_, handsPlot.getHeight() * 0.45f / burstsPeak);
+    const float spacing = core::flamSpacingMs(previous_->preClapCount, previous_->preClapSpreadMs);
+    std::ranges::for_each(std::views::iota(0, previous_->preClapCount), [&](int i) {
+        const float x = handsPlot.getX() + static_cast<float>(i) * spacing / kHandsMs * handsPlot.getWidth();
+        g.fillRect(x - 1.0f, handsPlot.getY(), 2.0f, 8.0f);
+    });
 }
 
 } // namespace openclapper::ui

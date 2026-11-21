@@ -8,7 +8,7 @@ All of these plugins are in beta. The macOS and Linux builds are not up to date,
 
 openClapper is a pitched, four-layer clap synthesizer. Play the resonant body from a MIDI keyboard, add a flam of up to five hands, and set how much noise follows the strike. **Audition A4** previews the current sound from any page.
 
-![Clap editor with a rendered waveform marking the main strike, the preset browser, and controls for hand spacing, tuned body, noise tail and output](docs/screenshots/preview.png)
+![Clap editor with a rendered waveform, a close view of the hand bursts, the preset browser, and controls for hand spacing, tuned body, noise tail and output](docs/screenshots/preview.png)
 
 ## Choose a clap
 
@@ -25,7 +25,7 @@ The 56 factory sounds span six dance styles: 16 Uplifting and eight each of Roll
 
 The animated hands beside the page tabs meet on each host beat and follow tempo changes and seeks. They rest when playback stops. Standalone and hosts without transport timing use the internal 138 BPM clock.
 
-The **Clap** page shows a dry A4 preview, four-knob cards for **Hand spacing**, **Tuned body** (with **Impact** punch/chest slam), **Noise tail**, and **Finish** (with **Room gate**), and the **Output** section (dual-layer 3-band EQ with ±12 dB gain and smooth frequency glide, stereo width, output gain, and brickwall limiter). Both every section header and every individual control have lock toggles so locked parameters stay put when browsing factory presets. The peach section in the waveform marks the pre-claps and the vertical marker shows when the main strike begins. **Body decay** and **Noise decay** shape the pitched body and noise tail separately.
+The **Clap** page shows a dry A4 preview, four-knob cards for **Hand spacing**, **Tuned body** (with **Impact** punch/chest slam), **Noise tail**, and **Finish** (with **Room gate**), and the **Output** section (dual-layer 3-band EQ with ±12 dB gain and smooth frequency glide, stereo width, output gain, and brickwall limiter). Both every section header and every individual control have lock toggles so locked parameters stay put when browsing factory presets. The **Hands** view next to the waveform shows the first 10 ms. The peach trace is the hand bursts, and a tick marks where each one starts. Its caption gives the spacing the bursts play, which is shorter than **Spacing** when the bursts would not fit in 5 ms. **Body decay** and **Noise decay** shape the pitched body and noise tail separately.
 
 The window can be resized, and the last size is saved with the session. **Undo** and **Redo** (also Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z) step through knob and preset changes. **A** and **B** keep two full setups, with **A to B** and **B to A** to copy between them. **Presets** searches the factory bank and your own sounds, and stars the ones you want to keep handy. Factory sounds stay read-only. Saved sounds go in `Documents/Alan Marcero/openClapper/Presets`. **Drag WAV** pulls the current hit out as a WAV file.
 

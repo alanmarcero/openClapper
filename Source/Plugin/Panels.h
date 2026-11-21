@@ -59,6 +59,11 @@ private:
     std::vector<std::unique_ptr<ControlGroup>> groups_;
 };
 
+// Plot length in 50 ms steps. It ends where the noise stops or the body has faded.
+int waveformDurationMs(const core::ClapSynthSettings& settings);
+// "3 bursts, 1.1 ms apart". "(capped)" marks a Spacing that the 5 ms flam limit shortens.
+juce::String handsCaption(const core::ClapSynthSettings& settings);
+
 class Waveform : public juce::Component {
 public:
     explicit Waveform(OpenClapperProcessor&);
@@ -68,8 +73,10 @@ private:
     OpenClapperProcessor& processor_;
     std::optional<core::ClapSynthSettings> previous_;
     std::array<float, 560> upper_{}, lower_{};
+    // The first 10 ms of the whole clap, and of the hand bursts alone.
+    std::array<float, 160> handsUpper_{}, handsLower_{}, burstsUpper_{}, burstsLower_{};
+    juce::String handsCaption_;
     int durationMs_ = 200;
-    float strikeMs_ = 0;
 };
 
 } // namespace openclapper::ui

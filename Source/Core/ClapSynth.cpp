@@ -409,10 +409,7 @@ void ClapSynth::trigger(const ClapSynthSettings& settings, int midiNote, float v
     // The main strike is the note-on. Any flam is squeezed into the first 5 ms so it
     // reads as one tight clap, not a late hit.
     mainStartSamples_ = 0;
-    const float requestedMs = std::clamp(settings.preClapSpreadMs, 0.0f, kMaxTimingOffsetMs);
-    const int gaps = std::max(1, burstCount_ - 1);
-    const float spacingMs = std::min(requestedMs, kMaxTimingOffsetMs / static_cast<float>(gaps));
-    const float spreadSamples = spacingMs * 0.001f * static_cast<float>(sampleRate_);
+    const float spreadSamples = flamSpacingMs(burstCount_, settings.preClapSpreadMs) * 0.001f * static_cast<float>(sampleRate_);
     const int maxOffsetSamples = std::max(0, static_cast<int>(std::lround(kMaxTimingOffsetMs * 0.001 * sampleRate_)));
 
     const float baseFormantHz = std::clamp(1350.0f + midiNoteToHz(midiNote_) * 0.35f, 1000.0f, 2400.0f);
