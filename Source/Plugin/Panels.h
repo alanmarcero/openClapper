@@ -79,4 +79,34 @@ private:
     int durationMs_ = 200;
 };
 
+// Output peak in dBFS with a 1 s hold, the output ceiling mark, limiter gain reduction and a clip latch.
+class OutputMeter : public juce::Component, public juce::SettableTooltipClient {
+public:
+    OutputMeter();
+    // peak and limiterGain are linear extremes since the last call. ceilingDb is empty while the limiter is off.
+    void update(float peak, float limiterGain, std::optional<float> ceilingDb, juce::uint32 nowMs);
+    [[nodiscard]] bool isClipped() const noexcept { return clipped_; }
+    [[nodiscard]] float holdDb() const noexcept { return holdDb_; }
+    void paint(juce::Graphics&) override;
+    void mouseDown(const juce::MouseEvent&) override;
+private:
+    float levelDb_ = -100.0f, holdDb_ = -100.0f, reductionDb_ = 0.0f;
+    juce::uint32 lastUpdateMs_ = 0, holdUntilMs_ = 0;
+    std::optional<float> ceilingDb_;
+    bool clipped_ = false;
+};
+
+// Flashes on each hit, and shows an apricot ring when a note falls outside Trigger zone.
+class HitLight : public juce::Component, public juce::SettableTooltipClient {
+public:
+    HitLight(uint32_t hits, uint32_t dropped);
+    // A count that moved since the last call starts a flash. Each call fades the flashes.
+    void update(uint32_t hits, uint32_t dropped);
+    [[nodiscard]] bool isLit() const noexcept { return hitGlow_ > 0.0f || droppedGlow_ > 0.0f; }
+    void paint(juce::Graphics&) override;
+private:
+    uint32_t hits_, dropped_;
+    float hitGlow_ = 0.0f, droppedGlow_ = 0.0f;
+};
+
 } // namespace openclapper::ui

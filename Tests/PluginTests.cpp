@@ -1193,3 +1193,76 @@ TEST_CASE("The waveform ends with the noise and the hands caption shows the spac
     CHECK(core::flamSpacingMs(3, 4.0f) == Catch::Approx(2.5f));
     CHECK(ui::handsCaption(settings) == "3 bursts, 2.5 ms apart (capped)");
 }
+
+TEST_CASE("The processor keeps the loudest peak and deepest limiting until the editor reads them", "[plugin][meter]") {
+    using namespace openclapper;
+    OpenClapperProcessor processor;
+    processor.prepareToPlay(48000.0, 4096);
+    performanceValue(processor, params::kLimiterCeiling, -12.0f);
+    juce::AudioBuffer<float> audio(2, 4096);
+    juce::MidiBuffer hit;
+    hit.addEvent(juce::MidiMessage::noteOn(1, 69, 1.0f), 0);
+    processor.processBlock(audio, hit);
+    const float loud = processor.displayPeak.load();
+    REQUIRE(loud > 0.0f);
+    juce::MidiBuffer none;
+    processor.processBlock(audio, none);
+    CHECK(processor.displayPeak.load() == Catch::Approx(loud));
+    CHECK(processor.displayLimiterGain.load() < 1.0f);
+    CHECK(processor.displayPeak.exchange(0.0f) == Catch::Approx(loud));
+    CHECK(processor.displayLimiterGain.exchange(1.0f) < 1.0f);
+    juce::AudioBuffer<float> silence(2, 4096);
+    processor.processBlock(silence, none);
+    CHECK(processor.displayPeak.load() < loud);
+}
+
+TEST_CASE("Notes outside Trigger zone count as dropped and still notes count as hits", "[plugin][meter]") {
+    OpenClapperProcessor processor;
+    processor.prepareToPlay(48000.0, 512);
+    performanceValue(processor, "key_low", 60);
+    juce::AudioBuffer<float> audio(2, 512);
+    juce::MidiBuffer low;
+    low.addEvent(juce::MidiMessage::noteOn(1, 50, 1.0f), 0);
+    processor.processBlock(audio, low);
+    CHECK(processor.displayDroppedCount.load() == 1);
+    CHECK(processor.displayTriggerCount.load() == 0);
+    juce::MidiBuffer inZone;
+    inZone.addEvent(juce::MidiMessage::noteOn(1, 69, 1.0f), 0);
+    processor.processBlock(audio, inZone);
+    CHECK(processor.displayDroppedCount.load() == 1);
+    CHECK(processor.displayTriggerCount.load() == 1);
+}
+
+TEST_CASE("The output meter holds peaks for 1 s and latches clips until clicked", "[plugin][meter][gui]") {
+    openclapper::ui::OutputMeter meter;
+    meter.setSize(380, 37);
+    meter.update(0.5f, 1.0f, -1.0f, 1000);
+    const float held = meter.holdDb();
+    CHECK(held == Catch::Approx(juce::Decibels::gainToDecibels(0.5f)));
+    meter.update(0.1f, 1.0f, -1.0f, 1500);
+    CHECK(meter.holdDb() == Catch::Approx(held));
+    meter.update(0.1f, 1.0f, -1.0f, 2100);
+    CHECK(meter.holdDb() < held);
+    CHECK_FALSE(meter.isClipped());
+    meter.update(1.2f, 1.0f, std::nullopt, 2200);
+    meter.update(0.1f, 1.0f, std::nullopt, 2300);
+    CHECK(meter.isClipped());
+    const auto now = juce::Time::getCurrentTime();
+    meter.mouseDown(juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), {}, juce::ModifierKeys(),
+        juce::MouseInputSource::defaultPressure, juce::MouseInputSource::defaultOrientation,
+        juce::MouseInputSource::defaultRotation, juce::MouseInputSource::defaultTiltX,
+        juce::MouseInputSource::defaultTiltY, &meter, &meter, now, {}, now, 1, false));
+    CHECK_FALSE(meter.isClipped());
+}
+
+TEST_CASE("The hit light flashes on hits and dropped notes, then fades", "[plugin][meter][gui]") {
+    openclapper::ui::HitLight light(3, 1);
+    light.update(3, 1);
+    CHECK_FALSE(light.isLit());
+    light.update(4, 1);
+    CHECK(light.isLit());
+    std::ranges::for_each(std::views::iota(0, 7), [&](int) { light.update(4, 1); });
+    CHECK_FALSE(light.isLit());
+    light.update(4, 2);
+    CHECK(light.isLit());
+}

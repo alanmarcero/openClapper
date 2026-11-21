@@ -490,6 +490,7 @@ void BrickwallLimiter::reset() noexcept {
     minPos_ = 0;
     smoothPos_ = 0;
     envGain_ = 1.0f;
+    appliedGain_ = 1.0f;
 }
 
 void BrickwallLimiter::process(float& left, float& right, const LimiterSettings& settings) noexcept {
@@ -545,12 +546,14 @@ void BrickwallLimiter::process(float& left, float& right, const LimiterSettings&
     if (!settings.enabled) {
         left = delayedL;
         right = delayedR;
+        appliedGain_ = 1.0f;
         return;
     }
 
     double sumGain = 0.0;
     std::ranges::for_each(smoothBuf_, [&](float g) { sumGain += static_cast<double>(g); });
     const float smoothGain = static_cast<float>(sumGain * (1.0 / static_cast<double>(smoothBuf_.size())));
+    appliedGain_ = smoothGain;
 
     left = std::clamp(delayedL * smoothGain, -ceiling, ceiling);
     right = std::clamp(delayedR * smoothGain, -ceiling, ceiling);

@@ -274,9 +274,12 @@ public:
     void prepare(double sampleRate);
     void reset() noexcept;
     void process(float& left, float& right, const LimiterSettings& settings) noexcept;
+    // The gain the last sample got, 1 when the limiter is off.
+    [[nodiscard]] float gain() const noexcept { return appliedGain_; }
 
 private:
     double sampleRate_ = 48000.0;
+    float appliedGain_ = 1.0f;
     std::array<float, kLookaheadSamples> delayL_{};
     std::array<float, kLookaheadSamples> delayR_{};
     std::array<float, 8> tpHistL_{};

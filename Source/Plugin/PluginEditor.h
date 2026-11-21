@@ -33,6 +33,8 @@ private:
     std::array<juce::TextButton, 4> tabs_;
     std::array<std::unique_ptr<openclapper::ui::ControlPage>, 4> pages_;
     openclapper::ui::Waveform waveform_;
+    openclapper::ui::OutputMeter meter_;
+    openclapper::ui::HitLight hitLight_;
     std::unique_ptr<juce::Drawable> hand_;
     juce::TooltipWindow tooltips_{this, 500};
     int page_ = 0;

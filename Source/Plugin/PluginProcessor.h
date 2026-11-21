@@ -70,13 +70,16 @@ public:
 
     juce::AudioProcessorValueTreeState parameters;
 
+    // The editor reads these two with exchange(). Each keeps its extreme since the last read.
     std::atomic<float> displayPeak{ 0.0f };
+    std::atomic<float> displayLimiterGain{ 1.0f };
     std::atomic<float> displayBeatPhase{ 0.0f };
     std::atomic<float> displayBpm{ 138.0f };
     std::atomic<float> displayBeatsPerBar{ 4.0f };
     std::atomic<float> displayClapProgress{ 1.0f };
     std::atomic<float> displayVelocity{ 1.0f };
     std::atomic<uint32_t> displayTriggerCount{ 0 };
+    std::atomic<uint32_t> displayDroppedCount{ 0 };
 
 private:
     enum class ApplyKind { session, slot, undo };

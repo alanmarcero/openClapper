@@ -134,6 +134,7 @@ void OpenClapperProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
         return position;
     };
     float blockPeak = 0.0f;
+    float blockLimiterGain = 1.0f;
     const auto render = [&](int start, int end) {
         if (end <= start) return;
         std::array<float*, 2> main{buffer.getWritePointer(0, start), buffer.getWritePointer(1, start)};
@@ -146,6 +147,7 @@ void OpenClapperProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
         }
         engine_.process(settings, eventTransport(start), {}, main.data(), 2, end - start, {}, components);
         blockPeak = std::max(blockPeak, engine_.currentPeak());
+        blockLimiterGain = std::min(blockLimiterGain, engine_.currentLimiterGain());
     };
 
     if (auditionPending_.exchange(false)) {
@@ -175,7 +177,11 @@ void OpenClapperProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
     render(cursor, numSamples);
 
     // Update GUI telemetry
-    displayPeak.store(blockPeak);
+    float shownPeak = displayPeak.load(std::memory_order_relaxed);
+    while (blockPeak > shownPeak && !displayPeak.compare_exchange_weak(shownPeak, blockPeak)) {}
+    float shownGain = displayLimiterGain.load(std::memory_order_relaxed);
+    while (blockLimiterGain < shownGain && !displayLimiterGain.compare_exchange_weak(shownGain, blockLimiterGain)) {}
+    displayDroppedCount.store(engine_.droppedNoteSerial());
     const float phase = engine_.currentBeatPhase();
     displayBeatPhase.store(transport.isPlaying ? phase - std::floor(phase) : -1.0f, std::memory_order_relaxed);
     displayClapProgress.store(engine_.currentClapProgress());

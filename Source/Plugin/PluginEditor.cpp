@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "Parameters.h"
 #include "Presets.h"
 #include "BinaryData.h"
 #include "Theme.h"
@@ -23,7 +24,8 @@ std::vector<juce::String> factoryNames() {
 
 OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& instrument)
     : AudioProcessorEditor(&instrument), processor_(instrument),
-      browser_(processor_.userPresets(), factoryNames()), waveform_(instrument) {
+      browser_(processor_.userPresets(), factoryNames()), waveform_(instrument),
+      hitLight_(instrument.displayTriggerCount.load(), instrument.displayDroppedCount.load()) {
     hand_ = juce::Drawable::createFromImageData(BinaryData::claphand_svg, BinaryData::claphand_svgSize);
     const auto& bank = presets::factoryPresets();
     juce::String family;
@@ -62,6 +64,8 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& instrument)
     audition_.setColour(juce::TextButton::buttonColourId, theme::apricot);
     audition_.setColour(juce::TextButton::textColourOffId, theme::plot);
     for (auto* button : { &previous_, &next_, &audition_ }) content_.addAndMakeVisible(*button);
+    content_.addAndMakeVisible(hitLight_);
+    content_.addAndMakeVisible(meter_);
 
     suite_.onUndo = [this] { processor_.undo(); refreshChrome(); };
     suite_.onRedo = [this] { processor_.redo(); refreshChrome(); };
@@ -201,6 +205,14 @@ void OpenClapperEditor::timerCallback() {
     suite_.setAbSlotB(processor_.isAbSlotB());
     suite_.setUndoEnabled(processor_.canUndo(), processor_.canRedo());
     if (page_ == 0 && isShowing()) waveform_.refresh();
+    const auto value = [this](const char* id) { return processor_.parameters.getRawParameterValue(id)->load(); };
+    const auto ceiling = [&]() -> std::optional<float> {
+        if (value(params::kLimiterEnabled) < 0.5f) return std::nullopt;
+        return value(params::kLimiterCeiling) + value(params::kOutputGain);
+    }();
+    meter_.update(processor_.displayPeak.exchange(0.0f), processor_.displayLimiterGain.exchange(1.0f), ceiling,
+                  juce::Time::getMillisecondCounter());
+    hitLight_.update(processor_.displayTriggerCount.load(), processor_.displayDroppedCount.load());
     const int handTop = kHeaderHeight + kSuiteHeight;
     content_.repaint(kDesignWidth - 180, handTop, 170, 80);
 }
@@ -264,7 +276,9 @@ void OpenClapperEditor::resized() {
     auto header = area.removeFromTop(kHeaderHeight).withTrimmedTop(30).withHeight(38);
     header.removeFromLeft(280);
     audition_.setBounds(header.removeFromRight(140));
-    header.removeFromRight(14);
+    header.removeFromRight(6);
+    hitLight_.setBounds(header.removeFromRight(40));
+    header.removeFromRight(6);
     next_.setBounds(header.removeFromRight(70));
     header.removeFromRight(5);
     previous_.setBounds(header.removeFromRight(91));
@@ -279,6 +293,7 @@ void OpenClapperEditor::resized() {
         tabs_[i].setBounds(nav.removeFromLeft(widths[i]));
         nav.removeFromLeft(6);
     }
+    meter_.setBounds(nav.getX() + 24, nav.getY(), 380, nav.getHeight());
     area.removeFromBottom(14);
     if (page_ == 0) {
         waveform_.setBounds(area.removeFromTop(165));

@@ -94,6 +94,10 @@ public:
     void handleMidi(const EngineSettings& settings, const Transport& transport, const MidiTrigger& trigger) noexcept;
 
     [[nodiscard]] float currentPeak() const noexcept { return currentPeak_; }
+    // The lowest limiter gain in the last processed block.
+    [[nodiscard]] float currentLimiterGain() const noexcept { return currentLimiterGain_; }
+    // Counts note-ons that fell outside the key or velocity range.
+    [[nodiscard]] uint32_t droppedNoteSerial() const noexcept { return droppedNoteSerial_; }
     [[nodiscard]] float currentBeatPhase() const noexcept { return currentBeatPhase_; }
     [[nodiscard]] float currentClapProgress() const noexcept { return currentClapProgress_; }
     [[nodiscard]] uint32_t triggerSerial() const noexcept { return triggerSerial_; }
@@ -173,6 +177,8 @@ private:
 
     // Metrics for GUI animation
     float currentPeak_ = 0.0f;
+    float currentLimiterGain_ = 1.0f;
+    uint32_t droppedNoteSerial_ = 0;
     float currentBeatPhase_ = 0.0f;
     float currentClapProgress_ = 1.0f; // 0 = clap triggered ("Clap on"), 1 = clap finished ("Clap off")
     uint32_t triggerSerial_ = 0;

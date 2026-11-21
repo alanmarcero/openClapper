@@ -200,7 +200,10 @@ void ClapEngine::handleMidi(const EngineSettings& settings, const Transport& tra
 
     const int velocity = std::clamp(static_cast<int>(std::lround(trigger.velocity * 127.0f)), 0, 127);
     if (!trigger.audition && (trigger.noteNumber < settings.keyLow || trigger.noteNumber > settings.keyHigh
-        || velocity < settings.velocityLow || velocity > settings.velocityHigh)) return;
+        || velocity < settings.velocityLow || velocity > settings.velocityHigh)) {
+        ++droppedNoteSerial_;
+        return;
+    }
 
     const double bpm = std::isfinite(transport.bpm) && transport.bpm > 0.0 ? transport.bpm : 138.0;
     const double ppq = transport.ppqPosition.value_or(fallbackPpq_);
@@ -288,6 +291,7 @@ void ClapEngine::process(
 
     int triggerIdx = 0;
     float blockPeak = 0.0f;
+    float blockLimiterGain = 1.0f;
     const float masterGain = dbToLin(settings.effects.outputGainDb) * ccVolume_;
 
     for (int sample = 0; sample < numSamples; ++sample) {
@@ -433,6 +437,7 @@ void ClapEngine::process(
 
         // Dynamics: Brickwall Limiter
         limiter_.process(sL, sR, settings.effects.limiter);
+        blockLimiterGain = std::min(blockLimiterGain, limiter_.gain());
 
         // Apply master gain
         sL *= masterGain;
@@ -458,6 +463,7 @@ void ClapEngine::process(
 
     fallbackPpq_ = ppq;
     currentPeak_ = blockPeak;
+    currentLimiterGain_ = blockLimiterGain;
     currentBeatPhase_ = static_cast<float>(std::fmod(ppq, 1.0));
 }
 

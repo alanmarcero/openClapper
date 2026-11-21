@@ -514,4 +514,97 @@ void Waveform::paint(juce::Graphics& g) {
     });
 }
 
+namespace {
+constexpr float kMeterFloorDb = -48.0f;
+constexpr float kMeterTopDb = 6.0f;
+constexpr float kMeterFallDbPerSecond = 24.0f;
+} // namespace
+
+OutputMeter::OutputMeter() {
+    setTitle("Output meter");
+    setTooltip("Output peak in dBFS with a 1 s hold. The apricot mark is the output ceiling. "
+               "GR is limiter gain reduction. Click to clear Clip.");
+}
+
+void OutputMeter::update(float peak, float limiterGain, std::optional<float> ceilingDb, juce::uint32 nowMs) {
+    const float fallDb = kMeterFallDbPerSecond * static_cast<float>(nowMs - lastUpdateMs_) * 0.001f;
+    lastUpdateMs_ = nowMs;
+    const float peakDb = juce::Decibels::gainToDecibels(peak, -100.0f);
+    levelDb_ = std::max(peakDb, levelDb_ - fallDb);
+    reductionDb_ = std::max(-juce::Decibels::gainToDecibels(limiterGain, -100.0f), reductionDb_ - fallDb);
+    if (peakDb >= holdDb_ || nowMs >= holdUntilMs_) {
+        holdDb_ = levelDb_;
+        holdUntilMs_ = nowMs + 1000;
+    }
+    ceilingDb_ = ceilingDb;
+    clipped_ = clipped_ || peak > 1.0f;
+    repaint();
+}
+
+void OutputMeter::mouseDown(const juce::MouseEvent&) {
+    clipped_ = false;
+    repaint();
+}
+
+void OutputMeter::paint(juce::Graphics& g) {
+    auto area = getLocalBounds();
+    const auto clip = area.removeFromRight(50);
+    area.removeFromRight(8);
+    const auto labels = area.removeFromLeft(30);
+    g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
+    g.setColour(theme::secondary);
+    g.drawText("Out", labels.withHeight(20), juce::Justification::centredLeft);
+    g.drawText("GR", labels.withTrimmedTop(20), juce::Justification::centredLeft);
+
+    const auto bars = area.toFloat();
+    const auto toX = [&](float db) {
+        return bars.getX() + juce::jlimit(0.0f, 1.0f, (db - kMeterFloorDb) / (kMeterTopDb - kMeterFloorDb)) * bars.getWidth();
+    };
+    const auto peakBar = bars.withY(bars.getY() + 5.0f).withHeight(11.0f);
+    const auto reductionBar = bars.withY(bars.getY() + 24.0f).withHeight(7.0f);
+    g.setColour(theme::edge);
+    g.fillRoundedRectangle(peakBar, 3.0f);
+    g.fillRoundedRectangle(reductionBar, 3.0f);
+    g.setColour(theme::violet);
+    g.fillRoundedRectangle(peakBar.withRight(toX(levelDb_)), 3.0f);
+    g.setColour(theme::secondary);
+    g.fillRect(toX(0.0f) - 0.5f, peakBar.getY(), 1.0f, peakBar.getHeight());
+    g.setColour(theme::ink);
+    if (holdDb_ > kMeterFloorDb) g.fillRect(toX(holdDb_) - 1.0f, peakBar.getY(), 2.0f, peakBar.getHeight());
+    g.setColour(theme::apricot);
+    if (ceilingDb_) g.fillRect(toX(*ceilingDb_) - 1.0f, peakBar.getY() - 3.0f, 2.0f, peakBar.getHeight() + 6.0f);
+    g.fillRoundedRectangle(reductionBar.withWidth(reductionBar.getWidth() * juce::jlimit(0.0f, 1.0f, reductionDb_ / 12.0f)), 3.0f);
+
+    g.setColour(clipped_ ? theme::apricot : theme::edge);
+    g.fillRoundedRectangle(clip.toFloat(), 6.0f);
+    g.setColour(clipped_ ? theme::plot : theme::secondary);
+    g.drawText("Clip", clip, juce::Justification::centred);
+}
+
+HitLight::HitLight(uint32_t hits, uint32_t dropped) : hits_(hits), dropped_(dropped) {
+    setTitle("Hit light");
+    setTooltip("Flashes on each hit. An apricot ring means a note fell outside Trigger zone.");
+}
+
+void HitLight::update(uint32_t hits, uint32_t dropped) {
+    const bool wasLit = isLit();
+    const float hitFade = std::max(0.0f, hitGlow_ - 0.15f);
+    const float droppedFade = std::max(0.0f, droppedGlow_ - 0.08f);
+    hitGlow_ = hits != hits_ ? 1.0f : hitFade;
+    droppedGlow_ = dropped != dropped_ ? 1.0f : droppedFade;
+    hits_ = hits;
+    dropped_ = dropped;
+    if (wasLit || isLit()) repaint();
+}
+
+void HitLight::paint(juce::Graphics& g) {
+    const auto dot = getLocalBounds().toFloat().withSizeKeepingCentre(18.0f, 18.0f);
+    g.setColour(theme::edge);
+    g.fillEllipse(dot);
+    g.setColour(theme::violet.withAlpha(hitGlow_));
+    g.fillEllipse(dot.reduced(2.0f));
+    g.setColour(theme::apricot.withAlpha(droppedGlow_));
+    g.drawEllipse(dot, 3.0f);
+}
+
 } // namespace openclapper::ui
