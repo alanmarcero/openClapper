@@ -1,6 +1,8 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <algorithm>
+#include <array>
 #include <functional>
 
 namespace suite {
@@ -21,12 +23,16 @@ public:
     using Restore = std::function<void(const juce::ValueTree&)>;
     void setStateAccess(Capture capture, Restore restore);
 
-    [[nodiscard]] juce::UndoManager& manager() noexcept { return undo_; }
-    [[nodiscard]] bool canUndo() const { return undo_.canUndo(); }
-    [[nodiscard]] bool canRedo() const { return undo_.canRedo(); }
-    void undo() { undo_.undo(); }
-    void redo() { undo_.redo(); }
-    void clear() { undo_.clearUndoHistory(); }
+    [[nodiscard]] juce::UndoManager& manager() noexcept { return histories_[active_]; }
+    [[nodiscard]] bool canUndo() const { return histories_[active_].canUndo(); }
+    [[nodiscard]] bool canRedo() const { return histories_[active_].canRedo(); }
+    void undo() { histories_[active_].undo(); }
+    void redo() { histories_[active_].redo(); }
+    void clear() { std::ranges::for_each(histories_, [](juce::UndoManager& history) { history.clearUndoHistory(); }); }
+
+    // Each A/B slot keeps its own history. Edits, undo and redo use the selected slot's history.
+    void selectHistory(bool slotB) noexcept { active_ = slotB ? 1 : 0; }
+    void clearHistory(bool slotB) { histories_[slotB ? 1 : 0].clearUndoHistory(); }
 
     void suspend() { ++suspended_; }
     void resume() { if (suspended_ > 0) --suspended_; }
@@ -42,7 +48,8 @@ private:
     void apply(const juce::ValueTree& tree);
 
     juce::AudioProcessor* processor_ = nullptr;
-    juce::UndoManager undo_;
+    std::array<juce::UndoManager, 2> histories_;
+    size_t active_ = 0;
     Capture capture_;
     Restore restore_;
     juce::ValueTree gestureStart_;

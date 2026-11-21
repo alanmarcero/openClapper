@@ -376,10 +376,11 @@ void OpenClapperProcessor::applySoundTree(const juce::ValueTree& incoming, Apply
             editorHeight_ = std::clamp(height, 100, 8000);
         }
         if (!ab_.read(incoming)) ab_.setBoth(captureSoundState());
+        undo_.clear();
+        undo_.selectHistory(ab_.editingB());
     }
     --loading_;
     undo_.resume();
-    if (kind != ApplyKind::undo) undo_.clear();
 }
 
 void OpenClapperProcessor::getStateInformation(juce::MemoryBlock& destData) {
@@ -432,7 +433,7 @@ void OpenClapperProcessor::toggleAb() {
     ab_.setEditingB(!ab_.editingB());
     applySoundTree(ab_.slot(ab_.editingB()), ApplyKind::slot);
     undo_.resume();
-    undo_.clear();
+    undo_.selectHistory(ab_.editingB());
 }
 
 void OpenClapperProcessor::copyAbAToB() {
@@ -442,7 +443,7 @@ void OpenClapperProcessor::copyAbAToB() {
     ab_.copyAToB();
     if (ab_.editingB()) applySoundTree(ab_.slot(true), ApplyKind::slot);
     undo_.resume();
-    undo_.clear();
+    undo_.clearHistory(true);
 }
 
 void OpenClapperProcessor::copyAbBToA() {
@@ -452,7 +453,7 @@ void OpenClapperProcessor::copyAbBToA() {
     ab_.copyBToA();
     if (!ab_.editingB()) applySoundTree(ab_.slot(false), ApplyKind::slot);
     undo_.resume();
-    undo_.clear();
+    undo_.clearHistory(false);
 }
 
 void OpenClapperProcessor::loadUserPreset(const juce::String& name) {

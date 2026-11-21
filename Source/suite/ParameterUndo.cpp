@@ -64,8 +64,8 @@ void ParameterUndo::parameterGestureChanged(int, bool starting) {
 
 void ParameterUndo::commit(juce::ValueTree before, juce::ValueTree after, const juce::String& name) {
     if (!before.isValid() || before.isEquivalentTo(after)) return;
-    undo_.beginNewTransaction(name);
-    undo_.perform(new Swap(*this, std::move(before), std::move(after)), name);
+    histories_[active_].beginNewTransaction(name);
+    histories_[active_].perform(new Swap(*this, std::move(before), std::move(after)), name);
 }
 
 void ParameterUndo::apply(const juce::ValueTree& tree) {

@@ -444,3 +444,33 @@ TEST_CASE("The preset name gains a star on the first edit and loses it on undo, 
     CHECK(restored.presetDisplayName() == "Night Hit *");
     directory.deleteRecursively();
 }
+
+TEST_CASE("Each A/B slot keeps its own undo history, and copying into a slot clears it", "[plugin][suite]") {
+    using openclapper::params::kToneDecay;
+    OpenClapperProcessor processor;
+    const float original = rawValue(processor, kToneDecay);
+    gesture(processor, kToneDecay, 400.0f);
+    gesture(processor, kToneDecay, 500.0f);
+    processor.toggleAb();
+    CHECK_FALSE(processor.canUndo());
+    gesture(processor, kToneDecay, 90.0f);
+
+    processor.toggleAb();
+    REQUIRE(processor.canUndo());
+    processor.undo();
+    CHECK(rawValue(processor, kToneDecay) == Catch::Approx(400.0f));
+    processor.toggleAb();
+    CHECK(rawValue(processor, kToneDecay) == Catch::Approx(90.0f));
+    REQUIRE(processor.canUndo());
+    processor.undo();
+    CHECK(rawValue(processor, kToneDecay) == Catch::Approx(original));
+    CHECK_FALSE(processor.canUndo());
+
+    processor.toggleAb();
+    REQUIRE(processor.canUndo());
+    processor.copyAbAToB();
+    CHECK(processor.canUndo());
+    processor.toggleAb();
+    CHECK_FALSE(processor.canUndo());
+    CHECK_FALSE(processor.canRedo());
+}
