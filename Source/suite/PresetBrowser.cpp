@@ -2,6 +2,7 @@
 
 namespace suite {
 namespace {
+constexpr int kConfirmMs = 3000;
 
 class PresetRow : public juce::Component {
 public:
@@ -58,12 +59,22 @@ PresetBrowser::PresetBrowser(UserPresetStore& store, std::vector<juce::String> f
     name_.setColour(juce::TextEditor::backgroundColourId, palette_.paper);
     name_.setColour(juce::TextEditor::textColourId, palette_.ink);
     name_.setColour(juce::TextEditor::outlineColourId, palette_.edge);
+    name_.onTextChange = [this] { disarm(); };
     addAndMakeVisible(name_);
 
     save_.setTooltip("Save the current sound as a user preset. Factory presets stay unchanged.");
     rename_.setTooltip("Rename the selected user preset.");
     remove_.setTooltip("Delete the selected user preset.");
+    // Replacing or deleting a user preset takes a second click within 3 seconds.
     save_.onClick = [this] {
+        if (armed_ != &save_ && store_.load(name_.getText()).has_value()) {
+            disarm();
+            armed_ = &save_;
+            save_.setButtonText("Replace?");
+            startTimer(kConfirmMs);
+            return;
+        }
+        disarm();
         if (onSave && onSave(name_.getText())) reload();
     };
     rename_.onClick = [this] {
@@ -76,6 +87,14 @@ PresetBrowser::PresetBrowser(UserPresetStore& store, std::vector<juce::String> f
         if (selectedRow_ < 0 || selectedRow_ >= visibleCount()) return;
         const auto& entry = visible_[static_cast<size_t>(selectedRow_)];
         if (entry.factory || !onDelete) return;
+        if (armed_ != &remove_) {
+            disarm();
+            armed_ = &remove_;
+            remove_.setButtonText("Delete?");
+            startTimer(kConfirmMs);
+            return;
+        }
+        disarm();
         if (onDelete(entry.name)) {
             selectedRow_ = -1;
             reload();
@@ -92,6 +111,13 @@ PresetBrowser::PresetBrowser(UserPresetStore& store, std::vector<juce::String> f
 }
 
 PresetBrowser::~PresetBrowser() { list_.setModel(nullptr); }
+
+void PresetBrowser::disarm() {
+    stopTimer();
+    armed_ = nullptr;
+    save_.setButtonText("Save");
+    remove_.setButtonText("Delete");
+}
 
 void PresetBrowser::setPalette(SuitePalette palette) {
     palette_ = palette;
@@ -226,6 +252,7 @@ void PresetBrowser::returnKeyPressed(int row) {
 }
 
 void PresetBrowser::selectedRowsChanged(int lastRow) {
+    disarm();
     if (lastRow >= 0 && lastRow < visibleCount()) {
         selectedRow_ = lastRow;
         name_.setText(visible_[static_cast<size_t>(lastRow)].name, juce::dontSendNotification);

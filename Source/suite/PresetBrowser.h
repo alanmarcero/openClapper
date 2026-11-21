@@ -16,7 +16,7 @@ struct SuitePalette {
 };
 
 /** Factory and user presets with text search and favorites. Factory rows stay read-only. */
-class PresetBrowser : public juce::Component, private juce::ListBoxModel {
+class PresetBrowser : public juce::Component, private juce::ListBoxModel, private juce::Timer {
 public:
     PresetBrowser(UserPresetStore& store, std::vector<juce::String> factoryNames);
 
@@ -51,6 +51,9 @@ private:
     void applyFilter();
     void updateActions();
     void choose(int row, bool favoriteOnly);
+    // Puts Save and Delete back to their first step.
+    void disarm();
+    void timerCallback() override { disarm(); }
 
     UserPresetStore& store_;
     std::vector<juce::String> factoryNames_;
@@ -61,6 +64,8 @@ private:
     juce::TextButton save_{ "Save" }, rename_{ "Rename" }, remove_{ "Delete" };
     juce::ListBox list_{ "Presets", this };
     int selectedRow_ = -1;
+    // Save or Delete while it waits for the second click that commits.
+    juce::TextButton* armed_ = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PresetBrowser)
 };

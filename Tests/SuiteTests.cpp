@@ -474,3 +474,54 @@ TEST_CASE("Each A/B slot keeps its own undo history, and copying into a slot cle
     CHECK_FALSE(processor.canUndo());
     CHECK_FALSE(processor.canRedo());
 }
+
+TEST_CASE("Save asks before replacing and Delete asks before removing a user preset", "[plugin][suite]") {
+    const auto directory = tempDirectory("confirm");
+    OpenClapperProcessor processor;
+    processor.userPresets().setDirectory(directory);
+    suite::PresetBrowser browser(processor.userPresets(), { "Uplifting / Downbeat" });
+    browser.setSize(420, 440);
+    browser.setVisible(true);
+    browser.onSave = [&](const juce::String& name) { return processor.saveUserPreset(name); };
+    browser.onDelete = [&](const juce::String& name) { return processor.deleteUserPreset(name); };
+    const auto button = [&](const char* text) {
+        return findVisible<juce::TextButton>(browser, [text](const juce::TextButton& item) { return item.getButtonText() == text; });
+    };
+    const auto savedToneDecay = [&] {
+        const auto tree = processor.userPresets().load("Night Hit");
+        REQUIRE(tree.has_value());
+        return static_cast<float>(tree->getChildWithProperty("id", openclapper::params::kToneDecay).getProperty("value"));
+    };
+    auto* save = button("Save");
+    auto* remove = button("Delete");
+    REQUIRE(save != nullptr);
+    REQUIRE(remove != nullptr);
+
+    gesture(processor, openclapper::params::kToneDecay, 300.0f);
+    browser.nameEditor().setText("Night Hit", juce::dontSendNotification);
+    save->onClick();
+    CHECK(savedToneDecay() == Catch::Approx(300.0f));
+    gesture(processor, openclapper::params::kToneDecay, 600.0f);
+    save->onClick();
+    CHECK(save->getButtonText() == "Replace?");
+    CHECK(savedToneDecay() == Catch::Approx(300.0f));
+    save->onClick();
+    CHECK(save->getButtonText() == "Save");
+    CHECK(savedToneDecay() == Catch::Approx(600.0f));
+
+    browser.setSearchText("night");
+    auto* list = findVisible<juce::ListBox>(browser, [](const juce::ListBox&) { return true; });
+    REQUIRE(list != nullptr);
+    list->selectRow(0);
+    remove->onClick();
+    CHECK(remove->getButtonText() == "Delete?");
+    list->deselectAllRows();
+    list->selectRow(0);
+    CHECK(remove->getButtonText() == "Delete");
+    remove->onClick();
+    CHECK(processor.userPresets().load("Night Hit").has_value());
+    remove->onClick();
+    CHECK_FALSE(processor.userPresets().load("Night Hit").has_value());
+    CHECK(remove->getButtonText() == "Delete");
+    directory.deleteRecursively();
+}
