@@ -89,6 +89,74 @@ TEST_CASE("OpenClapper exposes automatable body sweep, body filters, and transie
     }
 }
 
+TEST_CASE("Every float parameter reads back the text it shows", "[plugin][parameters]") {
+    OpenClapperProcessor processor;
+    std::vector<juce::RangedAudioParameter*> floats;
+    std::ranges::for_each(processor.getParameters(), [&](juce::AudioProcessorParameter* parameter) {
+        if (auto* ranged = dynamic_cast<juce::AudioParameterFloat*>(parameter)) floats.push_back(ranged);
+    });
+    REQUIRE(floats.size() == 60);
+    constexpr std::array positions{ 0.0f, 0.1f, 0.25f, 0.5f, 0.75f, 0.9f, 1.0f };
+    std::vector<std::string> mismatches;
+    std::ranges::for_each(floats, [&](juce::RangedAudioParameter* parameter) {
+        std::ranges::for_each(positions, [&](float position) {
+            const auto text = parameter->getText(position, 0);
+            const auto readBack = parameter->getText(parameter->getValueForText(text), 0);
+            if (readBack != text)
+                mismatches.push_back((parameter->getParameterID() + ": " + text + " reads back as " + readBack).toStdString());
+        });
+    });
+    CAPTURE(mismatches);
+    REQUIRE(mismatches.empty());
+}
+
+TEST_CASE("Parameters show units and accept typed units, kHz, seconds and Off", "[plugin][parameters]") {
+    using namespace openclapper::params;
+    OpenClapperProcessor processor;
+    const auto shown = [&](const char* id, float value) {
+        auto* parameter = processor.parameters.getParameter(id);
+        return parameter->getText(parameter->convertTo0to1(value), 0);
+    };
+    const auto typed = [&](const char* id, const char* text) {
+        auto* parameter = processor.parameters.getParameter(id);
+        return parameter->convertFrom0to1(parameter->getValueForText(text));
+    };
+    CHECK(shown(kPreJitter, 0.04f) == "4%");
+    CHECK(shown(kStereoWidth, 0.95f) == "95%");
+    CHECK(shown(kNoiseCurve, 0.2f) == "+20%");
+    CHECK(shown(kOutputGain, 3.0f) == "+3.0 dB");
+    CHECK(shown(kEqLowDb, -0.04f) == "0.0 dB");
+    CHECK(shown(kLimiterCeiling, -1.0f) == "-1.0 dB");
+    CHECK(shown(kNoiseLPF, 850.0f) == "850 Hz");
+    CHECK(shown(kNoiseLPF, 6800.0f) == "6.80 kHz");
+    CHECK(shown(kPreSpread, 4.5f) == "4.5 ms");
+    CHECK(shown(kNoiseDecay, 160.0f) == "160 ms");
+    CHECK(shown(kNoiseDecay, 1200.0f) == "1.20 s");
+    CHECK(shown(kCompRatio, 2.5f) == "2.5:1");
+    CHECK(shown(kReverbGate, 0.0f) == "Off");
+    CHECK(shown("amp_sustain", 0.8f) == "80%");
+
+    CHECK(typed(kReverbMix, "50") == Catch::Approx(0.5f));
+    CHECK(typed(kReverbMix, "50%") == Catch::Approx(0.5f));
+    CHECK(typed(kNoiseCurve, "-25%") == Catch::Approx(-0.25f));
+    CHECK(typed(kNoiseLPF, "4.5k") == Catch::Approx(4500.0f));
+    CHECK(typed(kNoiseLPF, "4.5 kHz") == Catch::Approx(4500.0f));
+    CHECK(typed(kNoiseLPF, "4500 Hz") == Catch::Approx(4500.0f));
+    CHECK(typed(kToneDecay, "1.2 s") == Catch::Approx(1200.0f));
+    CHECK(typed(kToneDecay, "160 ms") == Catch::Approx(160.0f));
+    CHECK(typed(kOutputGain, "+3 dB") == Catch::Approx(3.0f));
+    CHECK(typed(kCompRatio, "2.5:1") == Catch::Approx(2.5f));
+    CHECK(typed(kReverbGate, "Off") == Catch::Approx(0.0f));
+
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    auto* roomMix = findVisible<juce::Slider>(*editor, [](const juce::Slider& slider) {
+        return slider.getParentComponent()->getComponentID() == kReverbMix;
+    });
+    REQUIRE(roomMix != nullptr);
+    CHECK(roomMix->getTextFromValue(roomMix->getValue()) == shown(kReverbMix, 0.0f));
+    CHECK(roomMix->getValueFromText("50%") == Catch::Approx(0.5));
+}
+
 TEST_CASE("Slapback feedback, stereo doubler, and pitch humanize shape output", "[plugin][dsp]") {
     openclapper::core::SlapbackDelay delayNoFb, delayFb;
     delayNoFb.prepare(48000.0);

@@ -7,13 +7,6 @@
 
 namespace openclapper::ui {
 
-namespace {
-juce::String formatHz(float hz) {
-    if (hz >= 1000.0f) return juce::String(hz / 1000.0f, hz >= 10000.0f ? 1 : 2) + " kHz";
-    return juce::String(juce::roundToInt(hz)) + " Hz";
-}
-} // namespace
-
 LockBadge::LockBadge(Apvts& state, const juce::String& parameterId)
     : state_(state), id_(parameterId) {
     setComponentID("lock_" + id_);
@@ -95,15 +88,6 @@ Control::Control(Apvts& state, const char* id, const char* caption)
     slider_->setTextBoxStyle(juce::Slider::TextBoxRight, false, 68, 22);
     addAndMakeVisible(*slider_);
     sliderAttachment_ = std::make_unique<Apvts::SliderAttachment>(state, id, *slider_);
-    const auto unit = parameter->getLabel().isEmpty() && juce::String(id).startsWith("amp_")
-            && juce::String(id) != "amp_sustain" ? juce::String("ms") : parameter->getLabel();
-    const auto step = parameter->getNormalisableRange().interval;
-    slider_->textFromValueFunction = [unit, step](double v) {
-        const int digits = step >= 1.0f ? 0 : step >= 0.1f ? 1 : 2;
-        return juce::String(std::abs(v) < 0.5 * step ? 0.0 : v, digits) + (unit.isEmpty() ? juce::String() : " " + unit);
-    };
-    slider_->valueFromTextFunction = [](const juce::String& s) { return s.getDoubleValue(); };
-    slider_->updateText();
 }
 
 void Control::resized() {
@@ -204,9 +188,9 @@ DualEqKnob::DualEqKnob(Apvts& state, const juce::String& freqId, const juce::Str
 }
 
 void DualEqKnob::updateDbReadout() {
-    const double val = dbSlider_.getValue();
-    const juce::String prefix = val > 0.05 ? "+" : "";
-    dbReadout_.setText(prefix + juce::String(val, 1) + " dB", juce::dontSendNotification);
+    const auto* dbParam = state_.getParameter(dbId_);
+    dbReadout_.setText(dbParam->getText(dbParam->convertTo0to1(static_cast<float>(dbSlider_.getValue())), 0),
+                       juce::dontSendNotification);
 }
 
 juce::Rectangle<float> DualEqKnob::dialBounds() const {
@@ -273,7 +257,8 @@ void DualEqKnob::paint(juce::Graphics& g) {
     g.drawRoundedRectangle(freqPill.reduced(0.5f), 4.0f, 1.0f);
     g.setColour(theme::ink);
     g.setFont(juce::FontOptions(11.5f, juce::Font::bold));
-    g.drawFittedText(formatHz(freqHz_), freqPill.toNearestInt(), juce::Justification::centred, 1);
+    if (freqParam != nullptr)
+        g.drawFittedText(freqParam->getText(norm, 0), freqPill.toNearestInt(), juce::Justification::centred, 1);
 
     g.setColour(theme::secondary);
     g.setFont(juce::FontOptions(9.5f, juce::Font::bold));

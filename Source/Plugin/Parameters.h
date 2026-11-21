@@ -109,6 +109,11 @@ inline constexpr std::array<PerformanceParameter, 11> kPerformanceParameters{{
     {"amp_enabled", "Full ADSR", 0, 1, 0}
 }};
 
+// One decimal, "+" on boosts and never "-0.0", as in "+3.0 dB".
+juce::String formatSigned(float value, const juce::String& unit);
+// "4.5 ms" below 10 ms, "160 ms" below 1 s, then "1.20 s".
+juce::String formatMilliseconds(float ms);
+
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 openclapper::core::EngineSettings readSettings(const juce::AudioProcessorValueTreeState& apvts);
 
