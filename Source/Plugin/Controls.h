@@ -28,6 +28,8 @@ class Control : public juce::Component {
 public:
     Control(Apvts&, const char* id, const char* caption);
     void resized() override;
+    // Dims the control and shows the reason as its tooltip. An empty reason restores it.
+    void setInactiveReason(const juce::String& reason);
 private:
     juce::Label label_;
     std::unique_ptr<juce::Slider> slider_;

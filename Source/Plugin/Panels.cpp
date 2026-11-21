@@ -8,6 +8,60 @@
 
 namespace openclapper::ui {
 
+namespace {
+struct Dependency {
+    const char* id;
+    const char* sourceId;
+    float activeAbove;
+    const char* reason;
+};
+
+constexpr const char* kRoomOff = "The room is off while its mix is 0%. Raise the room mix to hear this.";
+constexpr const char* kDriveOff = "Drive is off while its mix is 0%. Raise the drive mix to hear this.";
+constexpr const char* kCompressorOff = "The compressor is off while its mix is 0%. Raise its mix to hear this.";
+constexpr const char* kSlapbackOff = "The slapback is off. Pick a Slapback time to hear this.";
+constexpr const char* kReverseOff = "Reverse is off. Pick a Reverse timing to hear this.";
+constexpr const char* kOneShot = "One-shot ignores this envelope. Select Hold notes to use it.";
+constexpr const char* kRollsOff = "Rolls are off. Pick a Subdivision to hear this.";
+constexpr const char* kLimiterOff = "The limiter is off. Turn on Limiter to use this.";
+constexpr const char* kOneBurst = "With 1 burst this does almost nothing. Add bursts to hear it.";
+
+// A control is active while its source parameter is above the threshold.
+constexpr std::array<Dependency, 24> kDependencies{{
+    { params::kReverbSize, params::kReverbMix, 0.0f, kRoomOff },
+    { params::kReverbDecay, params::kReverbMix, 0.0f, kRoomOff },
+    { params::kReverbDamp, params::kReverbMix, 0.0f, kRoomOff },
+    { params::kReverbGate, params::kReverbMix, 0.0f, kRoomOff },
+    { params::kDistType, params::kDistMix, 0.0f, kDriveOff },
+    { params::kDistDrive, params::kDistMix, 0.0f, kDriveOff },
+    { params::kDistTone, params::kDistMix, 0.0f, kDriveOff },
+    { params::kCompThresh, params::kCompMix, 0.0f, kCompressorOff },
+    { params::kCompRatio, params::kCompMix, 0.0f, kCompressorOff },
+    { params::kCompAttack, params::kCompMix, 0.0f, kCompressorOff },
+    { params::kCompRelease, params::kCompMix, 0.0f, kCompressorOff },
+    { params::kCompMakeup, params::kCompMix, 0.0f, kCompressorOff },
+    { params::kSlapbackMix, params::kSlapbackDivision, 0.0f, kSlapbackOff },
+    { params::kSlapbackFeedback, params::kSlapbackDivision, 0.0f, kSlapbackOff },
+    { params::kReverseMix, params::kReverseMode, 0.0f, kReverseOff },
+    { "amp_attack", "amp_enabled", 0.5f, kOneShot },
+    { "amp_decay", "amp_enabled", 0.5f, kOneShot },
+    { "amp_sustain", "amp_enabled", 0.5f, kOneShot },
+    { "amp_release", "amp_enabled", 0.5f, kOneShot },
+    { "roll_hits", "roll_division", 0.0f, kRollsOff },
+    { params::kLimiterCeiling, params::kLimiterEnabled, 0.5f, kLimiterOff },
+    { params::kLimiterRelease, params::kLimiterEnabled, 0.5f, kLimiterOff },
+    { params::kPreSpread, params::kPreBursts, 1.0f, kOneBurst },
+    { params::kPreJitter, params::kPreBursts, 1.0f, kOneBurst },
+}};
+} // namespace
+
+juce::String inactiveReason(const Apvts& state, const juce::String& id) {
+    const auto dependency = std::ranges::find_if(kDependencies, [&](const Dependency& item) { return id == item.id; });
+    if (dependency == kDependencies.end()) return {};
+    if (state.getRawParameterValue(dependency->sourceId)->load() > dependency->activeAbove) return {};
+    return dependency->reason;
+}
+
 ControlGroup::ControlGroup(Apvts& state, const char* heading, std::initializer_list<ControlSpec> specs,
                            int columns, bool stacked, bool outputSection)
     : state_(state), heading_(heading), columns_(columns), stacked_(stacked), outputSection_(outputSection) {
@@ -43,11 +97,17 @@ ControlGroup::ControlGroup(Apvts& state, const char* heading, std::initializer_l
         refreshLockButton();
     };
     addAndMakeVisible(lockButton_);
-    refreshLockButton();
+    timerCallback();
     startTimerHz(10);
 }
 
-void ControlGroup::timerCallback() { refreshLockButton(); }
+void ControlGroup::timerCallback() {
+    refreshLockButton();
+    std::ranges::for_each(controls_, [this](const std::unique_ptr<juce::Component>& component) {
+        if (auto* control = dynamic_cast<Control*>(component.get()))
+            control->setInactiveReason(inactiveReason(state_, control->getComponentID()));
+    });
+}
 
 void ControlGroup::refreshLockButton() {
     const bool locked = static_cast<OpenClapperProcessor&>(state_.processor).isSectionLocked(paramIds_);

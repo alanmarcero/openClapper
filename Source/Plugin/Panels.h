@@ -10,6 +10,9 @@ namespace openclapper::ui {
 
 struct ControlSpec { const char* id; const char* caption; };
 
+// Why a control has no audible effect in the current state, or an empty string when it has one.
+juce::String inactiveReason(const Apvts& state, const juce::String& id);
+
 class ControlGroup : public juce::Component, private juce::Timer {
 public:
     ControlGroup(Apvts&, const char* heading, std::initializer_list<ControlSpec>, int columns, bool stacked,

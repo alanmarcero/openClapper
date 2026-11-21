@@ -47,6 +47,8 @@ void EdmLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int width
     const bool bipolar = slider.getMinimum() < 0.0 && slider.getMaximum() > 0.0;
     const float origin = bipolar ? (startAngle + endAngle) * 0.5f : startAngle;
     const auto stroke = juce::PathStrokeType(2.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
+    const bool enabled = slider.isEnabled();
+    if (!enabled) g.beginTransparencyLayer(0.4f);
 
     juce::Path base;
     base.addCentredArc(centre.x, centre.y, arcRadius, arcRadius, 0.0f, startAngle, endAngle, true);
@@ -68,17 +70,28 @@ void EdmLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int width
     const float pointerLen = capRadius * 0.68f;
     g.setColour(theme::ink);
     g.drawLine(centre.x, centre.y, centre.x + pointerLen * std::sin(angle), centre.y - pointerLen * std::cos(angle), 1.8f);
+    if (!enabled) g.endTransparencyLayer();
 }
 
 void EdmLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& button,
                                            const juce::Colour& background, bool hover, bool down) {
     auto fill = background;
     if (hover || down) fill = fill.interpolatedWith(theme::violet, down ? 0.23f : 0.10f);
+    const float alpha = button.isEnabled() ? 1.0f : 0.4f;
     const auto bounds = button.getLocalBounds().toFloat().reduced(0.5f);
-    g.setColour(fill);
+    g.setColour(fill.withMultipliedAlpha(alpha));
     g.fillRoundedRectangle(bounds, 6);
-    g.setColour(button.hasKeyboardFocus(false) ? theme::violet : theme::edge.withAlpha(0.75f));
+    const auto edge = theme::edge.withAlpha(0.75f * alpha);
+    g.setColour(button.hasKeyboardFocus(false) ? theme::violet : edge);
     g.drawRoundedRectangle(bounds, 6, 1);
+}
+
+void EdmLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool down, int buttonX, int buttonY,
+                                  int buttonW, int buttonH, juce::ComboBox& box) {
+    const bool enabled = box.isEnabled();
+    if (!enabled) g.beginTransparencyLayer(0.4f);
+    LookAndFeel_V4::drawComboBox(g, width, height, down, buttonX, buttonY, buttonW, buttonH, box);
+    if (!enabled) g.endTransparencyLayer();
 }
 
 juce::Font EdmLookAndFeel::getTextButtonFont(juce::TextButton&, int) {

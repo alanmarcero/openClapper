@@ -90,6 +90,18 @@ Control::Control(Apvts& state, const char* id, const char* caption)
     sliderAttachment_ = std::make_unique<Apvts::SliderAttachment>(state, id, *slider_);
 }
 
+void Control::setInactiveReason(const juce::String& reason) {
+    setAlpha(reason.isEmpty() ? 1.0f : 0.4f);
+    label_.setTooltip(reason);
+    if (slider_ != nullptr) slider_->setTooltip(reason);
+    if (choice_ == nullptr) return;
+    if (reason.isEmpty()) {
+        choice_->setTooltip(choice_->getName());
+        return;
+    }
+    choice_->setTooltip(reason);
+}
+
 void Control::resized() {
     auto area = getLocalBounds().reduced(4, 1);
     lock_->setBounds(area.removeFromRight(24).withSizeKeepingCentre(22, 22));

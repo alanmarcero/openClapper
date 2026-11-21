@@ -963,3 +963,68 @@ TEST_CASE("OpenClapper exposes 3-band EQ, main-page Output, and section/per-part
     CHECK(restored.isParamLocked(openclapper::params::kToneQ));
     CHECK(restored.isParamLocked(openclapper::params::kClickLevel));
 }
+
+TEST_CASE("Controls with no effect dim, stay editable and say what turns them on", "[plugin][gui]") {
+    using namespace openclapper;
+    OpenClapperProcessor processor;
+    const auto reason = [&](const char* id) { return ui::inactiveReason(processor.parameters, id); };
+    // The first factory clap has the room at 0%, one burst, and slapback, reverse and rolls off.
+    CHECK(reason(params::kReverbGate).contains("room mix"));
+    CHECK(reason(params::kPreSpread).contains("Add bursts"));
+    CHECK(reason(params::kSlapbackFeedback).contains("Slapback time"));
+    CHECK(reason(params::kReverseMix).contains("Reverse timing"));
+    CHECK(reason("amp_release").contains("Hold notes"));
+    CHECK(reason("roll_hits").contains("Subdivision"));
+    CHECK(reason(params::kLimiterCeiling).isEmpty());
+    CHECK(reason(params::kReverbMix).isEmpty());
+
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    const auto findControl = [](juce::Component& root, const char* id) {
+        return findVisible<juce::Component>(root, [id](const juce::Component& item) { return item.getComponentID() == id; });
+    };
+    auto* roomGate = findControl(*editor, params::kReverbGate);
+    REQUIRE(roomGate != nullptr);
+    CHECK(roomGate->getAlpha() == Catch::Approx(0.4f).margin(0.01f));
+    auto* gateSlider = findVisible<juce::Slider>(*roomGate, [](const juce::Slider&) { return true; });
+    REQUIRE(gateSlider != nullptr);
+    CHECK(gateSlider->isEnabled());
+    CHECK(gateSlider->getTooltip() == reason(params::kReverbGate));
+
+    performanceValue(processor, params::kReverbMix, 0.3f);
+    performanceValue(processor, params::kLimiterEnabled, 0.0f);
+    CHECK(reason(params::kReverbGate).isEmpty());
+    CHECK(reason(params::kLimiterCeiling).contains("Turn on Limiter"));
+    std::unique_ptr<juce::AudioProcessorEditor> reopened(processor.createEditor());
+    auto* activeGate = findControl(*reopened, params::kReverbGate);
+    REQUIRE(activeGate != nullptr);
+    CHECK(activeGate->getAlpha() == Catch::Approx(1.0f));
+    CHECK(findControl(*reopened, params::kLimiterCeiling)->getAlpha() == Catch::Approx(0.4f).margin(0.01f));
+}
+
+TEST_CASE("The look and feel draws disabled buttons, knobs and combo boxes dimmed", "[plugin][gui]") {
+    openclapper::ui::EdmLookAndFeel look;
+    const auto light = [&](juce::Component& component, bool enabled, juce::Rectangle<int> area) {
+        component.setLookAndFeel(&look);
+        component.setEnabled(enabled);
+        const auto image = component.createComponentSnapshot(area);
+        component.setLookAndFeel(nullptr);
+        double total = 0.0;
+        std::ranges::for_each(std::views::iota(0, image.getWidth() * image.getHeight()), [&](int pixel) {
+            const auto colour = image.getPixelAt(pixel % image.getWidth(), pixel / image.getWidth());
+            total += colour.getFloatAlpha() * colour.getPerceivedBrightness();
+        });
+        return total;
+    };
+    juce::TextButton button("Undo");
+    button.setSize(120, 40);
+    const juce::Rectangle<int> buttonEdge(0, 0, 12, 40);
+    CHECK(light(button, false, buttonEdge) < light(button, true, buttonEdge) * 0.6);
+    juce::ComboBox combo;
+    combo.setSize(160, 40);
+    const juce::Rectangle<int> comboEdge(0, 0, 8, 40);
+    CHECK(light(combo, false, comboEdge) < light(combo, true, comboEdge) * 0.6);
+    juce::Slider knob(juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox);
+    knob.setSize(60, 60);
+    knob.setValue(0.7 * knob.getMaximum());
+    CHECK(light(knob, false, knob.getLocalBounds()) < light(knob, true, knob.getLocalBounds()) * 0.6);
+}
