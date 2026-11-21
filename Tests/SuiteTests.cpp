@@ -525,3 +525,28 @@ TEST_CASE("Save asks before replacing and Delete asks before removing a user pre
     CHECK(remove->getButtonText() == "Delete");
     directory.deleteRecursively();
 }
+
+TEST_CASE("Every slider, combo box and button has a screen reader title", "[plugin][suite][gui]") {
+    OpenClapperProcessor processor;
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    std::vector<std::string> untitled;
+    std::vector<juce::String> titles;
+    const auto collect = [&](auto&& self, juce::Component& parent) -> void {
+        std::ranges::for_each(parent.getChildren(), [&](juce::Component* child) {
+            const bool widget = dynamic_cast<juce::Slider*>(child) != nullptr || dynamic_cast<juce::ComboBox*>(child) != nullptr
+                || dynamic_cast<juce::Button*>(child) != nullptr;
+            if (widget && child->getTitle().isEmpty()) untitled.push_back(child->getName().toStdString());
+            if (widget) titles.push_back(child->getTitle());
+            self(self, *child);
+        });
+    };
+    collect(collect, *editor);
+    CAPTURE(untitled);
+    CHECK(untitled.empty());
+    CHECK(titles.size() > 150);
+    CHECK(std::ranges::count(titles, juce::String("Copy A to B")) == 1);
+    CHECK(std::ranges::count(titles, juce::String("Slot B")) == 1);
+    CHECK(std::ranges::count(titles, juce::String("Mute Noise")) == 2);
+    CHECK(std::ranges::count(titles, juce::String("Lock Hand spacing")) == 1);
+    CHECK(std::ranges::count(titles, juce::String("Room gate")) == 1);
+}

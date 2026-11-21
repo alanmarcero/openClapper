@@ -65,6 +65,9 @@ PresetBrowser::PresetBrowser(UserPresetStore& store, std::vector<juce::String> f
     save_.setTooltip("Save the current sound as a user preset. Factory presets stay unchanged.");
     rename_.setTooltip("Rename the selected user preset.");
     remove_.setTooltip("Delete the selected user preset.");
+    save_.setTitle("Save");
+    rename_.setTitle("Rename");
+    remove_.setTitle("Delete");
     // Replacing or deleting a user preset takes a second click within 3 seconds.
     save_.onClick = [this] {
         if (armed_ != &save_ && store_.load(name_.getText()).has_value()) {

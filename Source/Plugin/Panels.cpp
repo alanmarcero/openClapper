@@ -141,6 +141,7 @@ ControlGroup::ControlGroup(Apvts& state, const char* heading, std::initializer_l
     });
 
     lockButton_.setComponentID("section_lock_" + heading_);
+    lockButton_.setTitle("Lock " + heading_);
     lockButton_.setTooltip("Lock or unlock all settings in " + heading_ + " when browsing presets.");
     lockButton_.setColour(juce::TextButton::buttonOnColourId, theme::violet);
     lockButton_.setColour(juce::TextButton::textColourOnId, theme::plot);

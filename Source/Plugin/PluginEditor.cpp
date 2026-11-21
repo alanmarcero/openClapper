@@ -45,6 +45,7 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& instrument)
     addAndMakeVisible(content_);
     content_.setBounds(0, 0, kDesignWidth, kDesignHeight);
     presets_.setName("Factory preset");
+    presets_.setTitle("Preset");
     presets_.setTooltip("Choose a factory clap across six dance styles.");
     presets_.setTextWhenNothingSelected("Custom sound");
     presets_.onChange = [this] {
@@ -58,6 +59,9 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& instrument)
     previous_.setTooltip("Load the previous factory clap.");
     next_.setTooltip("Load the next factory clap.");
     audition_.setTooltip("Play the current sound at A4.");
+    previous_.setTitle("Previous preset");
+    next_.setTitle("Next preset");
+    audition_.setTitle("Audition A4");
     previous_.onClick = [this] { stepPreset(-1); };
     next_.onClick = [this] { stepPreset(1); };
     audition_.onClick = [this] { processor_.triggerAudition(); };
@@ -113,6 +117,7 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& instrument)
         pages_[i] = std::make_unique<ui::ControlPage>(processor_.parameters, static_cast<ui::Page>(i));
         content_.addChildComponent(*pages_[i]);
         tabs_[i].setButtonText(names[i]);
+        tabs_[i].setTitle(names[i]);
         tabs_[i].setTooltip("Open the " + juce::String(names[i]) + " page.");
         tabs_[i].onClick = [this, i] { setPage(static_cast<int>(i)); };
         content_.addAndMakeVisible(tabs_[i]);

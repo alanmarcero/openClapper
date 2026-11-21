@@ -10,6 +10,14 @@ SuiteBar::SuiteBar() {
     aToB_.setTooltip("Copy slot A onto slot B.");
     bToA_.setTooltip("Copy slot B onto slot A.");
     presets_.setTooltip("Browse factory and user presets.");
+    undo_.setTitle("Undo");
+    redo_.setTitle("Redo");
+    a_.setTitle("Slot A");
+    b_.setTitle("Slot B");
+    aToB_.setTitle("Copy A to B");
+    bToA_.setTitle("Copy B to A");
+    presets_.setTitle("Presets");
+    drag_.setTitle("Drag WAV");
     a_.setClickingTogglesState(false);
     b_.setClickingTogglesState(false);
     undo_.onClick = [this] { if (onUndo) onUndo(); };

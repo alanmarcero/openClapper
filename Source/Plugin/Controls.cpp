@@ -70,6 +70,9 @@ Control::Control(Apvts& state, const char* id, const char* caption)
     if (dynamic_cast<juce::AudioParameterBool*>(parameter) != nullptr) {
         toggle_ = std::make_unique<juce::TextButton>();
         toggle_->setName(parameter->getName(80));
+        toggle_->setTitle(caption);
+        // The host name tells a screen reader which layer a Mute or Solo button belongs to.
+        toggle_->setDescription(parameter->getName(80));
         toggle_->setTooltip(parameter->getName(80));
         toggle_->setClickingTogglesState(true);
         const bool mute = juce::String(id).endsWith("_mute");
@@ -92,6 +95,7 @@ Control::Control(Apvts& state, const char* id, const char* caption)
     if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(parameter)) {
         choice_ = std::make_unique<juce::ComboBox>();
         choice_->setName(parameter->getName(80));
+        choice_->setTitle(caption);
         choice_->setTooltip(parameter->getName(80));
         choice_->addItemList(choice->choices, 1);
         addAndMakeVisible(*choice_);
@@ -101,6 +105,7 @@ Control::Control(Apvts& state, const char* id, const char* caption)
 
     slider_ = std::make_unique<FineSlider>();
     slider_->setName(parameter->getName(80));
+    slider_->setTitle(caption);
     slider_->setSliderStyle(juce::Slider::LinearHorizontal);
     slider_->setColour(juce::Slider::textBoxTextColourId, theme::ink);
     slider_->setColour(juce::Slider::textBoxBackgroundColourId, theme::paper);
@@ -149,6 +154,8 @@ NoteGate::NoteGate(Apvts& state)
     setComponentID("amp_enabled");
     oneShot_.setTooltip("Play each layer through its one-shot decay.");
     held_.setTooltip("Sustain the body and noise until a matching MIDI note-off.");
+    oneShot_.setTitle("One-shot");
+    held_.setTitle("Hold notes");
     oneShot_.onClick = [this] { attachment_.setValueAsCompleteGesture(0.0f); };
     held_.onClick = [this] { attachment_.setValueAsCompleteGesture(1.0f); };
     addAndMakeVisible(oneShot_);
@@ -183,6 +190,7 @@ DualEqKnob::DualEqKnob(Apvts& state, const juce::String& freqId, const juce::Str
     addAndMakeVisible(title_);
 
     dbSlider_.setName(title + " Gain");
+    dbSlider_.setTitle(title + " gain");
     dbSlider_.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     dbSlider_.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     dbSlider_.setColour(juce::Slider::rotarySliderFillColourId, theme::violet);
