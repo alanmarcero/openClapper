@@ -1,5 +1,4 @@
 #include "PluginEditor.h"
-#include "Parameters.h"
 #include "Presets.h"
 #include "BinaryData.h"
 #include "Theme.h"
@@ -149,8 +148,7 @@ void OpenClapperEditor::stepPreset(int delta) {
     const int current = processor_.getSelectedPresetIndex();
     const int next = current < 0 ? (delta > 0 ? 0 : size - 1) : (current + delta + size) % size;
     processor_.selectPreset(next);
-    presets_.setText(processor_.presetDisplayName(), juce::dontSendNotification);
-    waveform_.refresh();
+    refreshChrome();
 }
 
 void OpenClapperEditor::refreshChrome() {
@@ -201,13 +199,8 @@ void OpenClapperEditor::timerCallback() {
     suite_.setAbSlotB(processor_.isAbSlotB());
     suite_.setUndoEnabled(processor_.canUndo(), processor_.canRedo());
     if (page_ == 0 && isShowing()) waveform_.refresh();
-    const auto value = [this](const char* id) { return processor_.parameters.getRawParameterValue(id)->load(); };
-    const auto ceiling = [&]() -> std::optional<float> {
-        if (value(params::kLimiterEnabled) < 0.5f) return std::nullopt;
-        return value(params::kLimiterCeiling) + value(params::kOutputGain);
-    }();
-    meter_.update(processor_.displayPeak.exchange(0.0f), processor_.displayLimiterGain.exchange(1.0f), ceiling,
-                  juce::Time::getMillisecondCounter());
+    meter_.update(processor_.displayPeak.exchange(0.0f), processor_.displayLimiterGain.exchange(1.0f),
+                  ui::outputCeilingDb(processor_.parameters), juce::Time::getMillisecondCounter());
     hitLight_.update(processor_.displayTriggerCount.load(), processor_.displayDroppedCount.load());
     const int handTop = kHeaderHeight + kSuiteHeight;
     content_.repaint(kDesignWidth - 180, handTop, 170, 80);

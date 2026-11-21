@@ -12,11 +12,13 @@ struct ControlSpec { const char* id; const char* caption; };
 
 enum class LayerState { audible, muted, notSoloed };
 
-// Whether a layer sounds, from the layer Mute and Solo buttons.
 LayerState layerState(const Apvts& state, size_t layer);
 
 // Why a control has no audible effect in the current state, or an empty string when it has one.
 juce::String inactiveReason(const Apvts& state, const juce::String& id);
+
+// Where limited peaks land: Ceiling plus Output gain, which runs after the limiter. Empty while the limiter is off.
+std::optional<float> outputCeilingDb(const Apvts& state);
 
 class ControlGroup : public juce::Component, private juce::Timer {
 public:

@@ -66,7 +66,7 @@ struct LayerControl {
 constexpr unsigned kBodyBit = 1u << kBody, kNoiseBit = 1u << kNoise, kTransientBit = 1u << kTransient,
                    kPreClapBit = 1u << kPreClap;
 
-// The layers each control shapes. Texture, the noise filters, noise width and Impact shape more than one.
+// Texture, the noise filters, noise width and Impact shape more than one layer.
 constexpr std::array<LayerControl, 30> kLayerControls{{
     { params::kToneQ, kBodyBit }, { params::kToneDecay, kBodyBit }, { params::kTonePitchEnv, kBodyBit },
     { params::kTonePitchDecay, kBodyBit }, { params::kToneHPF, kBodyBit }, { params::kToneLPF, kBodyBit },
@@ -107,6 +107,12 @@ juce::String inactiveReason(const Apvts& state, const juce::String& id) {
     const juce::String name(params::kLayerNames[layer]);
     if (layerState(state, layer) == LayerState::muted) return "The " + name + " layer is muted. Unmute it to hear this.";
     return "Another layer is soloed. Solo " + name + " too to hear this.";
+}
+
+std::optional<float> outputCeilingDb(const Apvts& state) {
+    const auto value = [&](const char* id) { return state.getRawParameterValue(id)->load(); };
+    if (value(params::kLimiterEnabled) < 0.5f) return std::nullopt;
+    return value(params::kLimiterCeiling) + value(params::kOutputGain);
 }
 
 ControlGroup::ControlGroup(Apvts& state, const char* heading, std::initializer_list<ControlSpec> specs,
@@ -181,10 +187,10 @@ void ControlGroup::refresh() {
             control->setInactiveReason(inactiveReason(state_, control->getComponentID()));
     });
     if (outputSection_) {
-        const auto value = [this](const char* id) { return state_.getRawParameterValue(id)->load(); };
+        const auto ceiling = outputCeilingDb(state_);
         const juce::String off("Output ceiling off");
-        const auto on = "Output ceiling " + params::formatSigned(value(params::kLimiterCeiling) + value(params::kOutputGain), "dB");
-        outputCeiling_.setText(value(params::kLimiterEnabled) > 0.5f ? on : off, juce::dontSendNotification);
+        const auto on = "Output ceiling " + params::formatSigned(ceiling.value_or(0.0f), "dB");
+        outputCeiling_.setText(ceiling ? on : off, juce::dontSendNotification);
     }
     if (layer_ < 0) return;
 
@@ -366,7 +372,6 @@ constexpr int kSamplesPerMs = 48;
 constexpr int kHandsMs = 10;
 constexpr float kMinPlotPeak = 0.12f;
 
-// Draws one bar per bin, from the lowest to the highest sample in the bin.
 void drawBars(juce::Graphics& g, juce::Rectangle<float> plot, std::span<const float> upper,
               std::span<const float> lower, float gain) {
     const float step = plot.getWidth() / static_cast<float>(upper.size());
@@ -376,7 +381,6 @@ void drawBars(juce::Graphics& g, juce::Rectangle<float> plot, std::span<const fl
     });
 }
 
-// Records the lowest and highest sample of each bin.
 void binFrames(std::span<const core::StereoFrame> frames, std::span<float> upper, std::span<float> lower) {
     std::ranges::fill(upper, 0.0f);
     std::ranges::fill(lower, 0.0f);
@@ -475,8 +479,7 @@ void Waveform::paint(juce::Graphics& g) {
     g.setColour(theme::lilac);
     drawBars(g, plot, upper_, lower_, plot.getHeight() * 0.45f / maxPeak);
 
-    // The inset zooms into the flam. Peach is the hand bursts at their own scale, and a tick marks
-    // where each burst starts. Mint is the whole clap.
+    // The bursts use their own scale, so a quiet flam stays visible.
     const auto handsTitle = hands.removeFromTop(30);
     g.setColour(theme::ink);
     g.setFont(juce::FontOptions(16.0f, juce::Font::bold));

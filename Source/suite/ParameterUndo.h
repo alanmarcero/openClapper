@@ -30,7 +30,7 @@ public:
     void redo() { histories_[active_].redo(); }
     void clear() { std::ranges::for_each(histories_, [](juce::UndoManager& history) { history.clearUndoHistory(); }); }
 
-    // Each A/B slot keeps its own history. Edits, undo and redo use the selected slot's history.
+    // Each A/B slot has its own history. Edits, undo and redo use the selected one.
     void selectHistory(bool slotB) noexcept { active_ = slotB ? 1 : 0; }
     void clearHistory(bool slotB) { histories_[slotB ? 1 : 0].clearUndoHistory(); }
 

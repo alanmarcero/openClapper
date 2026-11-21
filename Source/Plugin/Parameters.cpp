@@ -20,7 +20,7 @@ juce::String formatMilliseconds(float ms) {
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
     using Attributes = juce::AudioParameterFloatAttributes;
-    // Each text function parses what it shows. Without a parser, JUCE reads the leading number.
+    // dB, st, ct and ratio text use the JUCE parser, which reads the leading number.
     const auto percent = Attributes()
         .withStringFromValueFunction([](float value, int) { return juce::String(juce::roundToInt(value * 100.0f)) + "%"; })
         .withValueFromStringFunction([](const juce::String& text) { return text.getFloatValue() / 100.0f; });
