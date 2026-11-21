@@ -125,6 +125,10 @@ ControlGroup::ControlGroup(Apvts& state, const char* heading, std::initializer_l
             addAndMakeVisible(*knob);
             controls_.push_back(std::move(knob));
         });
+        outputCeiling_.setFont(juce::FontOptions(14.0f, juce::Font::bold));
+        outputCeiling_.setColour(juce::Label::textColourId, theme::ink);
+        outputCeiling_.setTooltip("Ceiling plus Output gain. Output gain comes after the limiter, so limited peaks land here.");
+        addAndMakeVisible(outputCeiling_);
     }
     std::ranges::for_each(specs, [&](const ControlSpec& spec) {
         paramIds_.add(spec.id);
@@ -174,6 +178,12 @@ void ControlGroup::refresh() {
         if (auto* control = dynamic_cast<Control*>(component.get()))
             control->setInactiveReason(inactiveReason(state_, control->getComponentID()));
     });
+    if (outputSection_) {
+        const auto value = [this](const char* id) { return state_.getRawParameterValue(id)->load(); };
+        const juce::String off("Output ceiling off");
+        const auto on = "Output ceiling " + params::formatSigned(value(params::kLimiterCeiling) + value(params::kOutputGain), "dB");
+        outputCeiling_.setText(value(params::kLimiterEnabled) > 0.5f ? on : off, juce::dontSendNotification);
+    }
     if (layer_ < 0) return;
 
     constexpr std::array<const char*, 3> statusText{ "", "Muted", "Silent: solo on" };
@@ -203,6 +213,7 @@ void ControlGroup::paint(juce::Graphics& g) {
         g.drawText(heading_, 17, 10, getWidth() - 94, 32, juce::Justification::centredLeft);
         g.setColour(theme::edge);
         g.drawHorizontalLine(layer_ < 0 ? 49 : 88, 17, static_cast<float>(getWidth() - 17));
+        if (outputSection_) g.drawRoundedRectangle(limiterArea_.toFloat(), 6, 1);
         if (layer_ < 0) return;
         g.setColour(theme::secondary);
         g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
@@ -240,19 +251,19 @@ void ControlGroup::resized() {
         std::ranges::for_each(std::views::iota(0, 3), [&](int i) {
             controls_[static_cast<size_t>(i)]->setBounds(eqArea.removeFromLeft(eqW));
         });
-        area.removeFromLeft(8);
-        const int gridCols = 3;
-        const int otherCount = static_cast<int>(controls_.size()) - 3;
-        const int gridRows = std::max(1, (otherCount + gridCols - 1) / gridCols);
-        std::ranges::for_each(std::views::iota(0, otherCount), [&](int i) {
-            const int col = i % gridCols;
-            const int row = i / gridCols;
-            const int left = area.getX() + col * area.getWidth() / gridCols;
-            const int top = area.getY() + row * area.getHeight() / gridRows;
-            const int right = area.getX() + (col + 1) * area.getWidth() / gridCols;
-            const int bottom = area.getY() + (row + 1) * area.getHeight() / gridRows;
-            controls_[static_cast<size_t>(i + 3)]->setBounds(left, top, right - left, bottom - top);
-        });
+        area.removeFromLeft(12);
+        const int rowHeight = area.getHeight() / 2;
+        auto levels = area.removeFromLeft(190);
+        controls_[3]->setBounds(levels.removeFromTop(rowHeight));
+        controls_[4]->setBounds(levels);
+        area.removeFromLeft(12);
+        limiterArea_ = area;
+        auto limiter = area.reduced(6, 0);
+        auto switchRow = limiter.removeFromTop(rowHeight);
+        controls_[5]->setBounds(switchRow.removeFromLeft(160));
+        controls_[6]->setBounds(switchRow);
+        outputCeiling_.setBounds(limiter.removeFromLeft(160));
+        controls_[7]->setBounds(limiter);
         return;
     }
     // The Mute and Solo chips add a second header row to a stacked layer card.
@@ -288,7 +299,7 @@ ControlPage::ControlPage(Apvts& state, Page page) : page_(page) {
             group("Tuned body", 1, {{kToneLevel,"Body level"}, {kToneQ,"Resonance"}, {kToneDecay,"Body decay"}, {kImpactPunch,"Impact"}}, false, kBody);
             group("Noise tail", 1, {{kNoiseType,"Texture"}, {kNoiseHPF,"Low cut"}, {kNoiseDecay,"Noise decay"}, {kNoiseLevel,"Noise level"}}, false, kNoise);
             group("Finish", 1, {{kClickLevel,"Transient level"}, {kReverbMix,"Room mix"}, {kReverbGate,"Room gate"}, {kClapDoubler,"Doubler"}}, false, kTransient);
-            group("Output", 5, {{kStereoWidth,"Stereo width"}, {kOutputGain,"Output gain"}, {kLimiterCeiling,"Ceiling"}, {kLimiterEnabled,"Limiter"}, {kLimiterRelease,"Recovery"}}, true);
+            group("Output", 5, {{kStereoWidth,"Stereo width"}, {kOutputGain,"Output gain"}, {kLimiterEnabled,"Limiter"}, {kLimiterCeiling,"Ceiling"}, {kLimiterRelease,"Recovery"}}, true);
             break;
         case Page::layers:
             group("Pre-clap", 3, {{kPreBursts,"Bursts"}, {kPreSpread,"Spacing"}, {kPreLevel,"Level"},

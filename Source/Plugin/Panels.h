@@ -38,6 +38,9 @@ private:
     bool outputSection_ = false;
     int layer_ = -1;
     juce::String layerStatus_;
+    // The Output card frames the limiter and shows where limited peaks land after Output gain.
+    juce::Rectangle<int> limiterArea_;
+    juce::Label outputCeiling_;
     juce::StringArray paramIds_;
     juce::TextButton lockButton_;
     std::array<juce::TextButton, 2> chips_;

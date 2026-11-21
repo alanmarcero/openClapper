@@ -1145,3 +1145,30 @@ TEST_CASE("Layer cards carry Mute and Solo chips and dim the controls a silent l
     performanceValue(processor, params::kLimiterEnabled, 0.0f);
     CHECK(limiter->getButtonText() == "Limiter off");
 }
+
+TEST_CASE("The Output card groups the limiter and shows where limited peaks land", "[plugin][gui]") {
+    using namespace openclapper;
+    OpenClapperProcessor processor;
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    editor->setVisible(true);
+    const auto control = [&](const char* id) {
+        return findVisible<juce::Component>(*editor, [id](const juce::Component& item) { return item.getComponentID() == id; });
+    };
+    REQUIRE(control(params::kOutputGain) != nullptr);
+    const int gainRight = control(params::kOutputGain)->getRight();
+    CHECK(control(params::kLimiterEnabled)->getX() > gainRight);
+    CHECK(control(params::kLimiterCeiling)->getX() > gainRight);
+    CHECK(control(params::kLimiterRelease)->getX() > gainRight);
+
+    auto* ceiling = findVisible<juce::Label>(*editor, [](const juce::Label& label) {
+        return label.getText().startsWith("Output ceiling");
+    });
+    REQUIRE(ceiling != nullptr);
+    CHECK(ceiling->getText() == "Output ceiling +4.0 dB");
+    performanceValue(processor, params::kOutputGain, -3.0f);
+    refreshCards(*editor);
+    CHECK(ceiling->getText() == "Output ceiling -4.0 dB");
+    performanceValue(processor, params::kLimiterEnabled, 0.0f);
+    refreshCards(*editor);
+    CHECK(ceiling->getText() == "Output ceiling off");
+}
