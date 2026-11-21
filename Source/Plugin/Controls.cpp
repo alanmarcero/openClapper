@@ -21,30 +21,39 @@ public:
 };
 } // namespace
 
-LockBadge::LockBadge(Apvts& state, const juce::String& parameterId)
+LockBadge::LockBadge(Apvts& state, const juce::String& parameterId, const juce::String& lockedName)
     : state_(state), id_(parameterId) {
     setComponentID("lock_" + id_);
+    setTitle("Lock " + lockedName);
+    setDescription(state_.getParameter(id_)->getName(80));
     setMouseCursor(juce::MouseCursor::PointingHandCursor);
     setTooltip("Lock or unlock this setting for factory presets.");
-    lastLocked_ = static_cast<OpenClapperProcessor&>(state_.processor).isParamLocked(id_);
+    setTriggeredOnMouseDown(true);
+    timerCallback();
     startTimerHz(10);
 }
 
 void LockBadge::timerCallback() {
-    const bool locked = static_cast<OpenClapperProcessor&>(state_.processor).isParamLocked(id_);
-    if (locked != lastLocked_) {
-        lastLocked_ = locked;
-        repaint();
-    }
+    setToggleState(static_cast<OpenClapperProcessor&>(state_.processor).isParamLocked(id_), juce::dontSendNotification);
 }
 
-void LockBadge::paint(juce::Graphics& g) {
-    const bool locked = static_cast<OpenClapperProcessor&>(state_.processor).isParamLocked(id_);
-    lastLocked_ = locked;
+void LockBadge::clicked() {
+    static_cast<OpenClapperProcessor&>(state_.processor).setParamLocked(id_, getToggleState());
+}
+
+// JUCE buttons answer only Return, and only on the next message loop pass.
+bool LockBadge::keyPressed(const juce::KeyPress& key) {
+    if (!key.isKeyCode(juce::KeyPress::spaceKey) && !key.isKeyCode(juce::KeyPress::returnKey)) return false;
+    setToggleState(!getToggleState(), juce::sendNotification);
+    return true;
+}
+
+void LockBadge::paintButton(juce::Graphics& g, bool highlighted, bool) {
+    const bool locked = getToggleState();
     const auto cx = static_cast<float>(getWidth()) * 0.5f;
     const auto cy = static_cast<float>(getHeight()) * 0.5f;
     const auto colour = locked ? theme::violet : theme::secondary;
-    g.setColour(colour.withAlpha(locked || isMouseOver() ? 1.0f : 0.6f));
+    g.setColour(colour.withAlpha(locked || highlighted ? 1.0f : 0.6f));
     juce::Path shackle;
     shackle.startNewSubPath(cx - 3.5f, cy - 1.0f);
     shackle.lineTo(cx - 3.5f, cy - 4.0f);
@@ -52,17 +61,13 @@ void LockBadge::paint(juce::Graphics& g) {
     if (locked) shackle.lineTo(cx + 3.5f, cy - 1.0f);
     g.strokePath(shackle, juce::PathStrokeType(1.5f));
     g.drawRoundedRectangle(cx - 5.5f, cy - 1.5f, 11.0f, 8.5f, 1.8f, 1.5f);
-}
-
-void LockBadge::mouseDown(const juce::MouseEvent&) {
-    auto& proc = static_cast<OpenClapperProcessor&>(state_.processor);
-    proc.setParamLocked(id_, !proc.isParamLocked(id_));
-    lastLocked_ = proc.isParamLocked(id_);
-    repaint();
+    if (!hasKeyboardFocus(false)) return;
+    g.setColour(theme::violet);
+    g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(0.5f), 4.0f, 1.0f);
 }
 
 Control::Control(Apvts& state, const char* id, const char* caption)
-    : lock_(std::make_unique<LockBadge>(state, id)) {
+    : lock_(std::make_unique<LockBadge>(state, id, caption)) {
     setComponentID(id);
     addAndMakeVisible(*lock_);
     auto* parameter = state.getParameter(id);
@@ -150,7 +155,7 @@ NoteGate::NoteGate(Apvts& state)
         oneShot_.setToggleState(value < 0.5f, juce::dontSendNotification);
         held_.setToggleState(value >= 0.5f, juce::dontSendNotification);
       }),
-      lock_(state, "amp_enabled") {
+      lock_(state, "amp_enabled", "One-shot or Hold notes") {
     setComponentID("amp_enabled");
     oneShot_.setTooltip("Play each layer through its one-shot decay.");
     held_.setTooltip("Sustain the body and noise until a matching MIDI note-off.");
@@ -181,7 +186,8 @@ bool DualEqKnob::GainSlider::hitTest(int x, int y) {
 
 DualEqKnob::DualEqKnob(Apvts& state, const juce::String& freqId, const juce::String& dbId,
                        const juce::String& title)
-    : state_(state), freqId_(freqId), dbId_(dbId), dbLock_(state, dbId), freqLock_(state, freqId) {
+    : state_(state), freqId_(freqId), dbId_(dbId), dbLock_(state, dbId, title + " gain"),
+      freqLock_(state, freqId, title + " frequency") {
     setComponentID(dbId);
     title_.setText(title, juce::dontSendNotification);
     title_.setFont(juce::FontOptions(13.0f, juce::Font::bold));

@@ -9,19 +9,20 @@ namespace openclapper::ui {
 using Apvts = juce::AudioProcessorValueTreeState;
 
 /** Small clickable padlock icon for locking/unlocking an individual parameter against preset changes. */
-class LockBadge final : public juce::Component, public juce::SettableTooltipClient, private juce::Timer {
+class LockBadge final : public juce::ToggleButton, private juce::Timer {
 public:
-    LockBadge(Apvts& state, const juce::String& parameterId);
-    void paint(juce::Graphics& g) override;
-    void mouseDown(const juce::MouseEvent&) override;
-    void mouseEnter(const juce::MouseEvent&) override { repaint(); }
-    void mouseExit(const juce::MouseEvent&) override { repaint(); }
+    // lockedName is the label of the control it locks, as in "Lock Body level".
+    LockBadge(Apvts& state, const juce::String& parameterId, const juce::String& lockedName);
+    bool keyPressed(const juce::KeyPress& key) override;
+
+protected:
+    void paintButton(juce::Graphics& g, bool highlighted, bool down) override;
+    void clicked() override;
 
 private:
     void timerCallback() override;
     Apvts& state_;
     juce::String id_;
-    bool lastLocked_ = false;
 };
 
 class Control : public juce::Component {

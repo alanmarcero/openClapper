@@ -1304,3 +1304,65 @@ TEST_CASE("No two controls overlap on any page and the EQ dials keep their size"
     CHECK(dial->getWidth() >= 44);
     CHECK(dial->getHeight() >= 44);
 }
+
+TEST_CASE("Every padlock has a spoken name for its control and toggles from the keyboard", "[plugin][gui][locks]") {
+    using openclapper::ui::LockBadge;
+    OpenClapperProcessor processor;
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    editor->setVisible(true);
+    std::vector<LockBadge*> badges;
+    const auto collect = [&](auto&& self, juce::Component& parent) -> void {
+        std::ranges::for_each(parent.getChildren(), [&](juce::Component* child) {
+            if (auto* badge = dynamic_cast<LockBadge*>(child)) badges.push_back(badge);
+            self(self, *child);
+        });
+    };
+    collect(collect, *editor);
+    REQUIRE(badges.size() == 99);
+
+    // A padlock in a Control repeats the title of the control's slider, combo box or switch.
+    std::vector<std::string> unnamed;
+    std::ranges::for_each(badges, [&](LockBadge* badge) {
+        if (badge->getTitle().length() <= 5 || !badge->getTitle().startsWith("Lock ")) unnamed.push_back(badge->getComponentID().toStdString());
+        if (dynamic_cast<openclapper::ui::Control*>(badge->getParentComponent()) == nullptr) return;
+        const auto& siblings = badge->getParentComponent()->getChildren();
+        const auto widget = std::ranges::find_if(siblings, [](juce::Component* item) {
+            return dynamic_cast<juce::Slider*>(item) != nullptr || dynamic_cast<juce::ComboBox*>(item) != nullptr
+                || dynamic_cast<juce::TextButton*>(item) != nullptr;
+        });
+        if (widget == siblings.end() || badge->getTitle() != "Lock " + (*widget)->getTitle())
+            unnamed.push_back(badge->getComponentID().toStdString());
+    });
+    CAPTURE(unnamed);
+    CHECK(unnamed.empty());
+
+    const auto badge = [&](const char* id) {
+        const auto found = std::ranges::find_if(badges, [id](LockBadge* item) { return item->getComponentID() == id; });
+        REQUIRE(found != badges.end());
+        return *found;
+    };
+    CHECK(badge("lock_tone_level")->getTitle() == "Lock Body level");
+    CHECK(badge("lock_eq_low_db")->getTitle() == "Lock Low EQ gain");
+    CHECK(badge("lock_eq_low_freq")->getTitle() == "Lock Low EQ frequency");
+    CHECK(badge("lock_amp_enabled")->getTitle() == "Lock One-shot or Hold notes");
+
+    auto* bodyLevel = badge("lock_tone_level");
+    CHECK(bodyLevel->getWantsKeyboardFocus());
+    CHECK(bodyLevel->createAccessibilityHandler()->getRole() == juce::AccessibilityRole::toggleButton);
+    REQUIRE_FALSE(processor.isParamLocked(openclapper::params::kToneLevel));
+    CHECK(bodyLevel->keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)));
+    CHECK(processor.isParamLocked(openclapper::params::kToneLevel));
+    CHECK(bodyLevel->createAccessibilityHandler()->getCurrentState().isChecked());
+    CHECK(bodyLevel->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    CHECK_FALSE(processor.isParamLocked(openclapper::params::kToneLevel));
+    CHECK_FALSE(bodyLevel->keyPressed(juce::KeyPress('a')));
+
+    const auto now = juce::Time::getCurrentTime();
+    juce::Component& press = *bodyLevel;
+    press.mouseDown(juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), { 5.0f, 5.0f },
+        juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier), juce::MouseInputSource::defaultPressure,
+        juce::MouseInputSource::defaultOrientation, juce::MouseInputSource::defaultRotation,
+        juce::MouseInputSource::defaultTiltX, juce::MouseInputSource::defaultTiltY,
+        bodyLevel, bodyLevel, now, { 5.0f, 5.0f }, now, 1, false));
+    CHECK(processor.isParamLocked(openclapper::params::kToneLevel));
+}
