@@ -25,7 +25,9 @@ Widget* findVisible(juce::Component& root, Predicate matches) {
 }
 
 void click(juce::Component& editor, const juce::String& name) {
-    auto* button = findVisible<juce::TextButton>(editor, [&](const auto& b) { return b.getButtonText() == name; });
+    auto* button = findVisible<juce::Button>(editor, [&](const auto& b) {
+        return b.getButtonText() == name || b.getName() == name;
+    });
     INFO(name);
     REQUIRE(button != nullptr);
     REQUIRE(button->getHeight() >= 36);

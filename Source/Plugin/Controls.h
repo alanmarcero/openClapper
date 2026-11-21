@@ -13,6 +13,7 @@ class LockBadge final : public juce::ToggleButton, private juce::Timer {
 public:
     // lockedName is the label of the control it locks, as in "Lock Body level".
     LockBadge(Apvts& state, const juce::String& parameterId, const juce::String& lockedName);
+    ~LockBadge() override;
     bool keyPressed(const juce::KeyPress& key) override;
 
 protected:

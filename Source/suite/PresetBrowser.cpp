@@ -45,6 +45,7 @@ private:
 PresetBrowser::PresetBrowser(UserPresetStore& store, std::vector<juce::String> factoryNames)
     : store_(store), factoryNames_(std::move(factoryNames)) {
     search_.setName("Preset search");
+    search_.setTitle("Preset search");
     search_.setTooltip("Search factory and user presets.");
     search_.setTextToShowWhenEmpty("Search presets", palette_.secondary);
     search_.setColour(juce::TextEditor::backgroundColourId, palette_.paper);
@@ -54,6 +55,7 @@ PresetBrowser::PresetBrowser(UserPresetStore& store, std::vector<juce::String> f
     addAndMakeVisible(search_);
 
     name_.setName("Preset name");
+    name_.setTitle("Preset name");
     name_.setTooltip("Name used when saving or renaming a user preset.");
     name_.setTextToShowWhenEmpty("Preset name", palette_.secondary);
     name_.setColour(juce::TextEditor::backgroundColourId, palette_.paper);
@@ -113,7 +115,10 @@ PresetBrowser::PresetBrowser(UserPresetStore& store, std::vector<juce::String> f
     reload();
 }
 
-PresetBrowser::~PresetBrowser() { list_.setModel(nullptr); }
+PresetBrowser::~PresetBrowser() {
+    stopTimer();
+    list_.setModel(nullptr);
+}
 
 void PresetBrowser::disarm() {
     stopTimer();

@@ -26,7 +26,24 @@ private:
     // Holds every control at the design size. resized() scales it to fit the window.
     juce::Component content_;
     juce::ComboBox presets_;
-    juce::TextButton previous_{ "Previous" }, next_{ "Next" }, audition_{ "Audition A4" };
+    struct PresetStepButton final : juce::Button {
+        PresetStepButton(const juce::String& name, float direction)
+            : juce::Button(name), direction_(direction) {}
+        void paintButton(juce::Graphics& g, bool highlighted, bool down) override {
+            getLookAndFeel().drawButtonBackground(g, *this, findColour(juce::TextButton::buttonColourId), highlighted, down);
+            const auto c = getLocalBounds().toFloat().getCentre();
+            juce::Path arrow;
+            arrow.startNewSubPath(c.x + direction_ * 3.0f, c.y - 5.0f);
+            arrow.lineTo(c.x - direction_ * 3.0f, c.y);
+            arrow.lineTo(c.x + direction_ * 3.0f, c.y + 5.0f);
+            g.setColour(findColour(juce::TextButton::textColourOffId));
+            g.strokePath(arrow, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
+        float direction_;
+    };
+
+    PresetStepButton previous_{ "Previous", 1.0f }, next_{ "Next", -1.0f };
+    juce::TextButton audition_{ "Audition A4" };
     suite::SuiteBar suite_;
     suite::PresetBrowser browser_;
     std::array<juce::TextButton, 4> tabs_;

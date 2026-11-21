@@ -33,6 +33,8 @@ LockBadge::LockBadge(Apvts& state, const juce::String& parameterId, const juce::
     startTimerHz(10);
 }
 
+LockBadge::~LockBadge() { stopTimer(); }
+
 void LockBadge::timerCallback() {
     setToggleState(static_cast<OpenClapperProcessor&>(state_.processor).isParamLocked(id_), juce::dontSendNotification);
 }
@@ -207,6 +209,7 @@ DualEqKnob::DualEqKnob(Apvts& state, const juce::String& freqId, const juce::Str
     dbSlider_.onValueChange = [this] { updateDbReadout(); };
     addAndMakeVisible(dbSlider_);
 
+    dbReadout_.setTitle(title + " gain readout");
     dbReadout_.setFont(juce::FontOptions(11.5f, juce::Font::bold));
     dbReadout_.setJustificationType(juce::Justification::centred);
     dbReadout_.setColour(juce::Label::textColourId, theme::ink);

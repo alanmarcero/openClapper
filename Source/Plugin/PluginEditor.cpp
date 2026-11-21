@@ -55,8 +55,8 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& instrument)
         }
     };
     content_.addAndMakeVisible(presets_);
-    previous_.setTooltip("Load the previous factory clap.");
-    next_.setTooltip("Load the next factory clap.");
+    previous_.setTooltip("Previous preset");
+    next_.setTooltip("Next preset");
     audition_.setTooltip("Play the current sound at A4.");
     previous_.setTitle("Previous preset");
     next_.setTitle("Next preset");
@@ -66,7 +66,10 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& instrument)
     audition_.onClick = [this] { processor_.triggerAudition(); };
     audition_.setColour(juce::TextButton::buttonColourId, theme::apricot);
     audition_.setColour(juce::TextButton::textColourOffId, theme::plot);
-    for (auto* button : { &previous_, &next_, &audition_ }) content_.addAndMakeVisible(*button);
+    for (juce::Button* button : { static_cast<juce::Button*>(&previous_),
+                                   static_cast<juce::Button*>(&next_),
+                                   static_cast<juce::Button*>(&audition_) })
+        content_.addAndMakeVisible(*button);
     content_.addAndMakeVisible(hitLight_);
     content_.addAndMakeVisible(meter_);
 
@@ -265,9 +268,9 @@ void OpenClapperEditor::resized() {
     header.removeFromRight(6);
     hitLight_.setBounds(header.removeFromRight(40));
     header.removeFromRight(6);
-    next_.setBounds(header.removeFromRight(70));
+    next_.setBounds(header.removeFromRight(40).withSizeKeepingCentre(40, 40));
     header.removeFromRight(5);
-    previous_.setBounds(header.removeFromRight(91));
+    previous_.setBounds(header.removeFromRight(40).withSizeKeepingCentre(40, 40));
     header.removeFromRight(6);
     presets_.setBounds(header);
 
