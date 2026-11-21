@@ -3,6 +3,7 @@
 #include "PluginProcessor.h"
 #include "Theme.h"
 #include <algorithm>
+#include <bit>
 #include <numeric>
 #include <ranges>
 #include <tuple>
@@ -26,6 +27,7 @@ constexpr const char* kOneShot = "One-shot ignores this envelope. Select Hold no
 constexpr const char* kRollsOff = "Rolls are off. Pick a Subdivision to hear this.";
 constexpr const char* kLimiterOff = "The limiter is off. Turn on Limiter to use this.";
 constexpr const char* kOneBurst = "With 1 burst this does almost nothing. Add bursts to hear it.";
+constexpr int kBody = 0, kNoise = 1, kTransient = 2, kPreClap = 3;
 
 // A control is active while its source parameter is above the threshold.
 constexpr std::array<Dependency, 24> kDependencies{{
@@ -54,18 +56,62 @@ constexpr std::array<Dependency, 24> kDependencies{{
     { params::kPreSpread, params::kPreBursts, 1.0f, kOneBurst },
     { params::kPreJitter, params::kPreBursts, 1.0f, kOneBurst },
 }};
+
+struct LayerControl {
+    const char* id;
+    unsigned layers;
+};
+
+constexpr unsigned kBodyBit = 1u << kBody, kNoiseBit = 1u << kNoise, kTransientBit = 1u << kTransient,
+                   kPreClapBit = 1u << kPreClap;
+
+// The layers each control shapes. Texture, the noise filters, noise width and Impact shape more than one.
+constexpr std::array<LayerControl, 30> kLayerControls{{
+    { params::kToneQ, kBodyBit }, { params::kToneDecay, kBodyBit }, { params::kTonePitchEnv, kBodyBit },
+    { params::kTonePitchDecay, kBodyBit }, { params::kToneHPF, kBodyBit }, { params::kToneLPF, kBodyBit },
+    { params::kToneLevel, kBodyBit }, { "body_velocity", kBodyBit }, { params::kImpactPunch, kBodyBit | kNoiseBit },
+    { params::kNoiseType, kBodyBit | kNoiseBit | kTransientBit }, { params::kNoiseAttack, kNoiseBit },
+    { params::kNoiseHold, kNoiseBit }, { params::kNoiseDecay, kNoiseBit }, { params::kNoiseCurve, kNoiseBit },
+    { params::kNoiseLevel, kNoiseBit }, { "noise_velocity", kNoiseBit }, { params::kNoiseHPF, kNoiseBit | kPreClapBit },
+    { params::kNoiseLPF, kNoiseBit | kPreClapBit }, { params::kNoiseStereoWidth, kNoiseBit | kPreClapBit },
+    { params::kClickType, kTransientBit }, { params::kClickFreq, kTransientBit }, { params::kClickDecay, kTransientBit },
+    { params::kClickLevel, kTransientBit }, { "click_velocity", kTransientBit },
+    { params::kPreBursts, kPreClapBit }, { params::kPreSpread, kPreClapBit }, { params::kPreDecay, kPreClapBit },
+    { params::kPreJitter, kPreClapBit }, { params::kFlamSpread, kPreClapBit }, { params::kPreLevel, kPreClapBit },
+}};
 } // namespace
+
+LayerState layerState(const Apvts& state, size_t layer) {
+    const auto isOn = [&](const char* id) { return state.getRawParameterValue(id)->load() > 0.5f; };
+    if (isOn(params::kLayerMute[layer])) return LayerState::muted;
+    if (std::ranges::any_of(params::kLayerSolo, isOn) && !isOn(params::kLayerSolo[layer])) return LayerState::notSoloed;
+    return LayerState::audible;
+}
 
 juce::String inactiveReason(const Apvts& state, const juce::String& id) {
     const auto dependency = std::ranges::find_if(kDependencies, [&](const Dependency& item) { return id == item.id; });
-    if (dependency == kDependencies.end()) return {};
-    if (state.getRawParameterValue(dependency->sourceId)->load() > dependency->activeAbove) return {};
-    return dependency->reason;
+    if (dependency != kDependencies.end()
+        && state.getRawParameterValue(dependency->sourceId)->load() <= dependency->activeAbove)
+        return dependency->reason;
+
+    const auto control = std::ranges::find_if(kLayerControls, [&](const LayerControl& item) { return id == item.id; });
+    if (control == kLayerControls.end()) return {};
+    const auto shapesAudibleLayer = [&](size_t layer) {
+        return ((control->layers >> layer) & 1u) != 0 && layerState(state, layer) == LayerState::audible;
+    };
+    if (std::ranges::any_of(std::views::iota(size_t{ 0 }, params::kLayerNames.size()), shapesAudibleLayer)) return {};
+    if (std::popcount(control->layers) > 1) return "Every layer this shapes is silent. Unmute or solo one to hear this.";
+
+    const auto layer = static_cast<size_t>(std::countr_zero(control->layers));
+    const juce::String name(params::kLayerNames[layer]);
+    if (layerState(state, layer) == LayerState::muted) return "The " + name + " layer is muted. Unmute it to hear this.";
+    return "Another layer is soloed. Solo " + name + " too to hear this.";
 }
 
 ControlGroup::ControlGroup(Apvts& state, const char* heading, std::initializer_list<ControlSpec> specs,
-                           int columns, bool stacked, bool outputSection)
-    : state_(state), heading_(heading), columns_(columns), stacked_(stacked), outputSection_(outputSection) {
+                           int columns, bool stacked, bool outputSection, int layer)
+    : state_(state), heading_(heading), columns_(columns), stacked_(stacked), outputSection_(outputSection),
+      layer_(layer) {
     if (outputSection_) {
         std::ranges::for_each(std::array<std::tuple<const char*, const char*, const char*>, 3>{{
             { params::kEqLowFreq, params::kEqLowDb, "Low EQ" },
@@ -98,6 +144,24 @@ ControlGroup::ControlGroup(Apvts& state, const char* heading, std::initializer_l
         refreshLockButton();
     };
     addAndMakeVisible(lockButton_);
+    if (layer_ >= 0) {
+        const auto index = static_cast<size_t>(layer_);
+        const juce::String layerName(params::kLayerNames[index]);
+        const std::array<juce::String, 2> actions{ "Mute", "Solo" };
+        const std::array<const char*, 2> ids{ params::kLayerMute[index], params::kLayerSolo[index] };
+        const std::array<juce::Colour, 2> onColours{ theme::apricot, theme::violet };
+        std::ranges::for_each(std::views::iota(size_t{ 0 }, chips_.size()), [&](size_t i) {
+            auto& chip = chips_[i];
+            chip.setButtonText(actions[i].substring(0, 1));
+            chip.setTitle(actions[i] + " " + layerName);
+            chip.setTooltip(actions[i] + " the " + layerName + " layer.");
+            chip.setClickingTogglesState(true);
+            chip.setColour(juce::TextButton::buttonOnColourId, onColours[i]);
+            chip.setColour(juce::TextButton::textColourOnId, theme::plot);
+            addAndMakeVisible(chip);
+            chipAttachments_[i] = std::make_unique<Apvts::ButtonAttachment>(state, ids[i], chip);
+        });
+    }
     refresh();
     startTimerHz(10);
 }
@@ -110,6 +174,13 @@ void ControlGroup::refresh() {
         if (auto* control = dynamic_cast<Control*>(component.get()))
             control->setInactiveReason(inactiveReason(state_, control->getComponentID()));
     });
+    if (layer_ < 0) return;
+
+    constexpr std::array<const char*, 3> statusText{ "", "Muted", "Silent: solo on" };
+    const juce::String status(statusText[static_cast<size_t>(layerState(state_, static_cast<size_t>(layer_)))]);
+    if (status == layerStatus_) return;
+    layerStatus_ = status;
+    repaint();
 }
 
 void ControlGroup::refreshLockButton() {
@@ -131,12 +202,22 @@ void ControlGroup::paint(juce::Graphics& g) {
     if (stacked_) {
         g.drawText(heading_, 17, 10, getWidth() - 94, 32, juce::Justification::centredLeft);
         g.setColour(theme::edge);
-        g.drawHorizontalLine(49, 17, static_cast<float>(getWidth() - 17));
+        g.drawHorizontalLine(layer_ < 0 ? 49 : 88, 17, static_cast<float>(getWidth() - 17));
+        if (layer_ < 0) return;
+        g.setColour(theme::secondary);
+        g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
+        g.drawText(juce::String(params::kLayerNames[static_cast<size_t>(layer_)]) + " layer",
+                   119, 46, getWidth() - 131, 18, juce::Justification::centredLeft);
+        g.setColour(theme::apricot);
+        g.drawText(layerStatus_, 119, 64, getWidth() - 131, 18, juce::Justification::centredLeft);
         return;
     }
     g.drawFittedText(heading_, 16, 10, 111, getHeight() - 56, juce::Justification::topLeft, 2);
     g.setColour(theme::edge);
     g.drawVerticalLine(134, 11, static_cast<float>(getHeight() - 11));
+    g.setColour(theme::apricot);
+    g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
+    g.drawText(layerStatus_, 16, 76, 118, 16, juce::Justification::centredLeft);
 }
 
 void ControlGroup::resized() {
@@ -145,6 +226,12 @@ void ControlGroup::resized() {
     }
     if (!stacked_) {
         lockButton_.setBounds(16, std::max(8, getHeight() - 44), 66, 36);
+    }
+    if (layer_ >= 0) {
+        const int chipsX = stacked_ ? 17 : 16;
+        const int chipsY = stacked_ ? 46 : 36;
+        chips_[0].setBounds(chipsX, chipsY, 44, 36);
+        chips_[1].setBounds(chipsX + 50, chipsY, 44, 36);
     }
     if (outputSection_) {
         auto area = getLocalBounds().withTrimmedTop(52).reduced(12, 6);
@@ -168,8 +255,12 @@ void ControlGroup::resized() {
         });
         return;
     }
-    auto area = stacked_ ? getLocalBounds().withTrimmedTop(53).reduced(12, 5)
-                         : getLocalBounds().withTrimmedLeft(143).reduced(5, 4);
+    // The Mute and Solo chips add a second header row to a stacked layer card.
+    const int headerHeight = layer_ < 0 ? 53 : 92;
+    const int padding = layer_ < 0 ? 5 : 2;
+    const auto stackedArea = getLocalBounds().withTrimmedTop(headerHeight).reduced(12, padding);
+    const auto sideArea = getLocalBounds().withTrimmedLeft(143).reduced(5, 4);
+    const auto area = stacked_ ? stackedArea : sideArea;
     const int rowCount = rows();
     std::ranges::for_each(std::views::iota(0, static_cast<int>(controls_.size())), [&](int index) {
         const int col = index % columns_;
@@ -184,27 +275,29 @@ void ControlGroup::resized() {
 
 ControlPage::ControlPage(Apvts& state, Page page) : page_(page) {
     using namespace params;
-    const auto group = [&](const char* name, int cols, std::initializer_list<ControlSpec> specs, bool isOutput = false) {
-        auto item = std::make_unique<ControlGroup>(state, name, specs, cols, page == Page::clap || isOutput, isOutput);
+    const auto group = [&](const char* name, int cols, std::initializer_list<ControlSpec> specs, bool isOutput = false,
+                           int layer = -1) {
+        auto item = std::make_unique<ControlGroup>(state, name, specs, cols, page == Page::clap || isOutput, isOutput,
+                                                   layer);
         addAndMakeVisible(*item);
         groups_.push_back(std::move(item));
     };
     switch (page) {
         case Page::clap:
-            group("Hand spacing", 1, {{kPreBursts,"Bursts"}, {kPreSpread,"Spacing"}, {kPreJitter,"Humanize"}, {kFlamSpread,"Pan spread"}});
-            group("Tuned body", 1, {{kToneLevel,"Body level"}, {kToneQ,"Resonance"}, {kToneDecay,"Body decay"}, {kImpactPunch,"Impact"}});
-            group("Noise tail", 1, {{kNoiseType,"Texture"}, {kNoiseHPF,"Low cut"}, {kNoiseDecay,"Noise decay"}, {kNoiseLevel,"Noise level"}});
-            group("Finish", 1, {{kClickLevel,"Transient level"}, {kReverbMix,"Room mix"}, {kReverbGate,"Room gate"}, {kClapDoubler,"Doubler"}});
+            group("Hand spacing", 1, {{kPreBursts,"Bursts"}, {kPreSpread,"Spacing"}, {kPreJitter,"Humanize"}, {kFlamSpread,"Pan spread"}}, false, kPreClap);
+            group("Tuned body", 1, {{kToneLevel,"Body level"}, {kToneQ,"Resonance"}, {kToneDecay,"Body decay"}, {kImpactPunch,"Impact"}}, false, kBody);
+            group("Noise tail", 1, {{kNoiseType,"Texture"}, {kNoiseHPF,"Low cut"}, {kNoiseDecay,"Noise decay"}, {kNoiseLevel,"Noise level"}}, false, kNoise);
+            group("Finish", 1, {{kClickLevel,"Transient level"}, {kReverbMix,"Room mix"}, {kReverbGate,"Room gate"}, {kClapDoubler,"Doubler"}}, false, kTransient);
             group("Output", 5, {{kStereoWidth,"Stereo width"}, {kOutputGain,"Output gain"}, {kLimiterCeiling,"Ceiling"}, {kLimiterEnabled,"Limiter"}, {kLimiterRelease,"Recovery"}}, true);
             break;
         case Page::layers:
             group("Pre-clap", 3, {{kPreBursts,"Bursts"}, {kPreSpread,"Spacing"}, {kPreLevel,"Level"},
-                {kPreDecay,"Burst decay"}, {kPreJitter,"Humanize"}, {kFlamSpread,"Pan spread"}});
+                {kPreDecay,"Burst decay"}, {kPreJitter,"Humanize"}, {kFlamSpread,"Pan spread"}}, false, kPreClap);
             group("Tuned body", 4, {{kToneQ,"Resonance"}, {kToneDecay,"Decay"}, {kToneLevel,"Level"}, {kImpactPunch,"Impact"},
-                {kTonePitchEnv,"Pitch sweep"}, {kTonePitchDecay,"Sweep time"}, {kToneHPF,"Low cut"}, {kToneLPF,"High cut"}});
+                {kTonePitchEnv,"Pitch sweep"}, {kTonePitchDecay,"Sweep time"}, {kToneHPF,"Low cut"}, {kToneLPF,"High cut"}}, false, kBody);
             group("Noise", 3, {{kNoiseType,"Texture"}, {kNoiseAttack,"Attack"}, {kNoiseHold,"Hold"}, {kNoiseDecay,"Decay"}, {kNoiseCurve,"Curve"},
-                {kNoiseHPF,"Low cut"}, {kNoiseLPF,"High cut"}, {kNoiseStereoWidth,"Stereo width"}, {kNoiseLevel,"Level"}});
-            group("Transient", 4, {{kClickType,"Shape"}, {kClickFreq,"Frequency"}, {kClickDecay,"Decay"}, {kClickLevel,"Level"}});
+                {kNoiseHPF,"Low cut"}, {kNoiseLPF,"High cut"}, {kNoiseStereoWidth,"Stereo width"}, {kNoiseLevel,"Level"}}, false, kNoise);
+            group("Transient", 2, {{kClickType,"Shape"}, {kClickFreq,"Frequency"}, {kClickDecay,"Decay"}, {kClickLevel,"Level"}}, false, kTransient);
             break;
         case Page::effects:
             group("Drive", 3, {{kDistType,"Type"}, {kDistDrive,"Drive"}, {kDistTone,"Tone"}, {kDistMix,"Mix"}, {kClapDoubler,"Doubler"}});
@@ -233,8 +326,7 @@ void ControlPage::resized() {
     const int count = static_cast<int>(groups_.size());
     constexpr int gap = 8;
     if (page_ == Page::clap) {
-        const int outputH = juce::jlimit(160, 280, getHeight() * 36 / 100);
-        auto outputCard = area.removeFromBottom(outputH);
+        auto outputCard = area.removeFromBottom(160);
         area.removeFromBottom(gap);
         constexpr int topCount = 4;
         std::ranges::for_each(std::views::iota(0, topCount), [&](int index) {

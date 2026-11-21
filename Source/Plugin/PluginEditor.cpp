@@ -281,8 +281,7 @@ void OpenClapperEditor::resized() {
     }
     area.removeFromBottom(14);
     if (page_ == 0) {
-        const int wave = juce::jlimit(150, 320, area.getHeight() * 26 / 100);
-        waveform_.setBounds(area.removeFromTop(wave));
+        waveform_.setBounds(area.removeFromTop(165));
         area.removeFromTop(8);
     }
     if (page_ >= 0 && page_ < static_cast<int>(pages_.size()) && pages_[static_cast<size_t>(page_)] != nullptr)

@@ -2,6 +2,7 @@
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
 #include "Presets.h"
+#include "Theme.h"
 #include <algorithm>
 #include <array>
 #include <catch2/catch_test_macros.hpp>
@@ -47,15 +48,16 @@ void checkTargets(juce::Component& root, juce::Component& parent) {
     }
 }
 
+// Card timers do not run in tests. This applies the current dimming at once.
+void refreshCards(juce::Component& parent) {
+    std::ranges::for_each(parent.getChildren(), [](juce::Component* child) {
+        if (auto* card = dynamic_cast<openclapper::ui::ControlGroup*>(child)) card->refresh();
+        refreshCards(*child);
+    });
+}
+
 void snapshot(juce::Component& editor, const char* filename) {
-    // Card timers do not run in tests, so refresh the cards to capture the current dimming.
-    const auto refreshCards = [](auto&& self, juce::Component& parent) -> void {
-        std::ranges::for_each(parent.getChildren(), [&](juce::Component* child) {
-            if (auto* card = dynamic_cast<openclapper::ui::ControlGroup*>(child)) card->refresh();
-            self(self, *child);
-        });
-    };
-    refreshCards(refreshCards, editor);
+    refreshCards(editor);
     checkTargets(editor, editor);
     const auto image = editor.createComponentSnapshot(editor.getLocalBounds());
     REQUIRE(image.isValid());
@@ -1095,4 +1097,51 @@ TEST_CASE("A slider click does not jump and Shift-drag is ten times finer", "[pl
     const double fine = drag(track.getX() + 10.0f, track.getX() + 40.0f, juce::ModifierKeys(juce::ModifierKeys::shiftModifier));
     CHECK(normal > 100.0);
     CHECK(fine == Catch::Approx(normal / 10.0).margin(normal * 0.03));
+}
+
+TEST_CASE("Layer cards carry Mute and Solo chips and dim the controls a silent layer ignores", "[plugin][gui]") {
+    using namespace openclapper;
+    OpenClapperProcessor processor;
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    editor->setVisible(true);
+    const auto chip = [&](const char* title) {
+        return findVisible<juce::TextButton>(*editor, [title](const juce::TextButton& button) { return button.getTitle() == title; });
+    };
+    const auto control = [&](const char* id) {
+        return findVisible<juce::Component>(*editor, [id](const juce::Component& item) { return item.getComponentID() == id; });
+    };
+    REQUIRE(chip("Mute Pre-clap") != nullptr);
+    REQUIRE(chip("Solo Transient") != nullptr);
+    auto* muteNoise = chip("Mute Noise");
+    REQUIRE(muteNoise != nullptr);
+    CHECK(muteNoise->getButtonText() == "M");
+    CHECK(muteNoise->getHeight() >= 36);
+    CHECK(muteNoise->findColour(juce::TextButton::buttonOnColourId) == theme::apricot);
+    CHECK(chip("Solo Body")->findColour(juce::TextButton::buttonOnColourId) == theme::violet);
+
+    muteNoise->setToggleState(true, juce::sendNotificationSync);
+    REQUIRE(processor.parameters.getRawParameterValue("noise_mute")->load() > 0.5f);
+    CHECK(ui::layerState(processor.parameters, 1) == ui::LayerState::muted);
+    CHECK(ui::inactiveReason(processor.parameters, params::kNoiseDecay).contains("Noise layer is muted"));
+    CHECK(ui::inactiveReason(processor.parameters, params::kNoiseHPF).isEmpty());
+    refreshCards(*editor);
+    CHECK(control(params::kNoiseDecay)->getAlpha() == Catch::Approx(0.4f).margin(0.01f));
+    CHECK(control(params::kNoiseHPF)->getAlpha() == Catch::Approx(1.0f));
+    performanceValue(processor, "pre_mute", 1.0f);
+    CHECK(ui::inactiveReason(processor.parameters, params::kNoiseHPF).contains("Every layer"));
+    performanceValue(processor, "pre_mute", 0.0f);
+
+    chip("Solo Body")->setToggleState(true, juce::sendNotificationSync);
+    CHECK(ui::layerState(processor.parameters, 0) == ui::LayerState::audible);
+    CHECK(ui::layerState(processor.parameters, 2) == ui::LayerState::notSoloed);
+    CHECK(ui::inactiveReason(processor.parameters, params::kClickLevel).contains("Solo Transient"));
+    refreshCards(*editor);
+    CHECK(control(params::kClickLevel)->getAlpha() == Catch::Approx(0.4f).margin(0.01f));
+    CHECK(control(params::kToneLevel)->getAlpha() == Catch::Approx(1.0f));
+
+    auto* limiter = findVisible<juce::TextButton>(*control(params::kLimiterEnabled), [](const juce::TextButton&) { return true; });
+    REQUIRE(limiter != nullptr);
+    CHECK(limiter->getButtonText() == "Limiter on");
+    performanceValue(processor, params::kLimiterEnabled, 0.0f);
+    CHECK(limiter->getButtonText() == "Limiter off");
 }

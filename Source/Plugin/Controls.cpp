@@ -69,12 +69,18 @@ Control::Control(Apvts& state, const char* id, const char* caption)
     jassert(parameter != nullptr);
     if (dynamic_cast<juce::AudioParameterBool*>(parameter) != nullptr) {
         toggle_ = std::make_unique<juce::TextButton>();
-        toggle_->setButtonText(caption);
         toggle_->setName(parameter->getName(80));
         toggle_->setTooltip(parameter->getName(80));
         toggle_->setClickingTogglesState(true);
+        const bool mute = juce::String(id).endsWith("_mute");
+        toggle_->setColour(juce::TextButton::buttonOnColourId, mute ? theme::apricot : theme::violet);
+        toggle_->setColour(juce::TextButton::textColourOnId, theme::plot);
+        toggle_->onStateChange = [this, text = juce::String(caption)] {
+            toggle_->setButtonText(text + (toggle_->getToggleState() ? " on" : " off"));
+        };
         addAndMakeVisible(*toggle_);
         toggleAttachment_ = std::make_unique<Apvts::ButtonAttachment>(state, id, *toggle_);
+        toggle_->onStateChange();
         return;
     }
 
