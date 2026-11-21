@@ -56,10 +56,10 @@ public:
     [[nodiscard]] bool isAbSlotB() const noexcept { return ab_.editingB(); }
 
     [[nodiscard]] juce::String userPresetName() const;
-    // True after any parameter edit since the last preset load or save.
-    [[nodiscard]] bool isPresetEdited() const noexcept { return presetEdited_.load(); }
-    // The loaded factory or user preset name, with " *" once it is edited.
-    [[nodiscard]] juce::String presetDisplayName() const;
+    // The loaded user or factory preset name, or "Custom sound".
+    [[nodiscard]] juce::String presetName() const;
+    // presetName() with " *" after any parameter edit since the last load or save.
+    [[nodiscard]] juce::String presetDisplayName() const { return presetName() + (presetEdited_.load() ? " *" : ""); }
     void loadUserPreset(const juce::String& name);
     bool saveUserPreset(const juce::String& name);
     bool renameUserPreset(const juce::String& from, const juce::String& to);

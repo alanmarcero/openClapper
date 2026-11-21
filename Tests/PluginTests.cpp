@@ -994,7 +994,7 @@ TEST_CASE("Controls with no effect dim, stay editable and say what turns them on
     };
     auto* roomGate = findControl(*editor, params::kReverbGate);
     REQUIRE(roomGate != nullptr);
-    CHECK(roomGate->getAlpha() == Catch::Approx(0.4f).margin(0.01f));
+    CHECK(roomGate->getAlpha() == Catch::Approx(openclapper::theme::dimmedAlpha).margin(0.01f));
     auto* gateSlider = findVisible<juce::Slider>(*roomGate, [](const juce::Slider&) { return true; });
     REQUIRE(gateSlider != nullptr);
     CHECK(gateSlider->isEnabled());
@@ -1008,7 +1008,7 @@ TEST_CASE("Controls with no effect dim, stay editable and say what turns them on
     auto* activeGate = findControl(*reopened, params::kReverbGate);
     REQUIRE(activeGate != nullptr);
     CHECK(activeGate->getAlpha() == Catch::Approx(1.0f));
-    CHECK(findControl(*reopened, params::kLimiterCeiling)->getAlpha() == Catch::Approx(0.4f).margin(0.01f));
+    CHECK(findControl(*reopened, params::kLimiterCeiling)->getAlpha() == Catch::Approx(openclapper::theme::dimmedAlpha).margin(0.01f));
 }
 
 TEST_CASE("The look and feel draws disabled buttons, knobs and combo boxes dimmed", "[plugin][gui]") {
@@ -1125,7 +1125,7 @@ TEST_CASE("Layer cards carry Mute and Solo chips and dim the controls a silent l
     CHECK(ui::inactiveReason(processor.parameters, params::kNoiseDecay).contains("Noise layer is muted"));
     CHECK(ui::inactiveReason(processor.parameters, params::kNoiseHPF).isEmpty());
     refreshCards(*editor);
-    CHECK(control(params::kNoiseDecay)->getAlpha() == Catch::Approx(0.4f).margin(0.01f));
+    CHECK(control(params::kNoiseDecay)->getAlpha() == Catch::Approx(openclapper::theme::dimmedAlpha).margin(0.01f));
     CHECK(control(params::kNoiseHPF)->getAlpha() == Catch::Approx(1.0f));
     performanceValue(processor, "pre_mute", 1.0f);
     CHECK(ui::inactiveReason(processor.parameters, params::kNoiseHPF).contains("Every layer"));
@@ -1136,14 +1136,8 @@ TEST_CASE("Layer cards carry Mute and Solo chips and dim the controls a silent l
     CHECK(ui::layerState(processor.parameters, 2) == ui::LayerState::notSoloed);
     CHECK(ui::inactiveReason(processor.parameters, params::kClickLevel).contains("Solo Transient"));
     refreshCards(*editor);
-    CHECK(control(params::kClickLevel)->getAlpha() == Catch::Approx(0.4f).margin(0.01f));
+    CHECK(control(params::kClickLevel)->getAlpha() == Catch::Approx(openclapper::theme::dimmedAlpha).margin(0.01f));
     CHECK(control(params::kToneLevel)->getAlpha() == Catch::Approx(1.0f));
-
-    auto* limiter = findVisible<juce::TextButton>(*control(params::kLimiterEnabled), [](const juce::TextButton&) { return true; });
-    REQUIRE(limiter != nullptr);
-    CHECK(limiter->getButtonText() == "Limiter on");
-    performanceValue(processor, params::kLimiterEnabled, 0.0f);
-    CHECK(limiter->getButtonText() == "Limiter off");
 }
 
 TEST_CASE("The Output card groups the limiter and shows where limited peaks land", "[plugin][gui]") {
@@ -1163,14 +1157,18 @@ TEST_CASE("The Output card groups the limiter and shows where limited peaks land
     auto* ceiling = findVisible<juce::Label>(*editor, [](const juce::Label& label) {
         return label.getText().startsWith("Output ceiling");
     });
+    auto* limiter = findVisible<juce::TextButton>(*control(params::kLimiterEnabled), [](const juce::TextButton&) { return true; });
     REQUIRE(ceiling != nullptr);
+    REQUIRE(limiter != nullptr);
     CHECK(ceiling->getText() == "Output ceiling +4.0 dB");
+    CHECK(limiter->getButtonText() == "Limiter on");
     performanceValue(processor, params::kOutputGain, -3.0f);
     refreshCards(*editor);
     CHECK(ceiling->getText() == "Output ceiling -4.0 dB");
     performanceValue(processor, params::kLimiterEnabled, 0.0f);
     refreshCards(*editor);
     CHECK(ceiling->getText() == "Output ceiling off");
+    CHECK(limiter->getButtonText() == "Limiter off");
 }
 
 TEST_CASE("The waveform ends with the noise and the hands caption shows the spacing that plays", "[plugin][gui]") {

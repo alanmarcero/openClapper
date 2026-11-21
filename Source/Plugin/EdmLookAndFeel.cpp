@@ -48,7 +48,7 @@ void EdmLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int width
     const float origin = bipolar ? (startAngle + endAngle) * 0.5f : startAngle;
     const auto stroke = juce::PathStrokeType(2.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
     const bool enabled = slider.isEnabled();
-    if (!enabled) g.beginTransparencyLayer(0.4f);
+    if (!enabled) g.beginTransparencyLayer(theme::dimmedAlpha);
 
     juce::Path base;
     base.addCentredArc(centre.x, centre.y, arcRadius, arcRadius, 0.0f, startAngle, endAngle, true);
@@ -77,7 +77,7 @@ void EdmLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& butto
                                            const juce::Colour& background, bool hover, bool down) {
     auto fill = background;
     if (hover || down) fill = fill.interpolatedWith(theme::violet, down ? 0.23f : 0.10f);
-    const float alpha = button.isEnabled() ? 1.0f : 0.4f;
+    const float alpha = button.isEnabled() ? 1.0f : theme::dimmedAlpha;
     const auto bounds = button.getLocalBounds().toFloat().reduced(0.5f);
     g.setColour(fill.withMultipliedAlpha(alpha));
     g.fillRoundedRectangle(bounds, 6);
@@ -89,7 +89,7 @@ void EdmLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& butto
 void EdmLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool down, int buttonX, int buttonY,
                                   int buttonW, int buttonH, juce::ComboBox& box) {
     const bool enabled = box.isEnabled();
-    if (!enabled) g.beginTransparencyLayer(0.4f);
+    if (!enabled) g.beginTransparencyLayer(theme::dimmedAlpha);
     LookAndFeel_V4::drawComboBox(g, width, height, down, buttonX, buttonY, buttonW, buttonH, box);
     if (!enabled) g.endTransparencyLayer();
 }

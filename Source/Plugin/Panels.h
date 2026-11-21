@@ -28,7 +28,7 @@ public:
     void paint(juce::Graphics&) override;
     void resized() override;
     int rows() const;
-    // Updates the Lock button and dims the controls that have no effect now.
+    // Updates the Lock button, the dimmed controls, the layer status line and the output ceiling text.
     void refresh();
 private:
     void timerCallback() override;
@@ -61,7 +61,7 @@ private:
     std::vector<std::unique_ptr<ControlGroup>> groups_;
 };
 
-// Plot length in 50 ms steps. It ends where the noise stops or the body has faded.
+// A one-shot plot ends where the noise stops or the body has faded. A held note shows 150 ms plus Release.
 int waveformDurationMs(const core::ClapSynthSettings& settings);
 // "3 bursts, 1.1 ms apart". "(capped)" marks a Spacing that the 5 ms flam limit shortens.
 juce::String handsCaption(const core::ClapSynthSettings& settings);

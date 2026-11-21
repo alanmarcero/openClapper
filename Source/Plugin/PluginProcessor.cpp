@@ -409,14 +409,13 @@ juce::String OpenClapperProcessor::userPresetName() const {
     return userPresetName_;
 }
 
-juce::String OpenClapperProcessor::presetDisplayName() const {
-    const juce::String suffix = presetEdited_.load() ? " *" : "";
+juce::String OpenClapperProcessor::presetName() const {
     const auto user = userPresetName();
-    if (user.isNotEmpty()) return user + suffix;
+    if (user.isNotEmpty()) return user;
     const auto& bank = openclapper::presets::factoryPresets();
     const int index = selectedPreset_.load();
-    if (index < 0 || index >= static_cast<int>(bank.size())) return "Custom sound" + suffix;
-    return bank[static_cast<size_t>(index)].name + suffix;
+    if (index < 0 || index >= static_cast<int>(bank.size())) return "Custom sound";
+    return bank[static_cast<size_t>(index)].name;
 }
 
 void OpenClapperProcessor::setEditorSize(int width, int height) noexcept {

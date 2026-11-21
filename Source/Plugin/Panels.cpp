@@ -370,6 +370,7 @@ void ControlPage::resized() {
 namespace {
 constexpr int kSamplesPerMs = 48;
 constexpr int kHandsMs = 10;
+constexpr int kHeldNoteMs = 150;
 constexpr float kMinPlotPeak = 0.12f;
 
 void drawBars(juce::Graphics& g, juce::Rectangle<float> plot, std::span<const float> upper,
@@ -393,7 +394,7 @@ void binFrames(std::span<const core::StereoFrame> frames, std::span<float> upper
 } // namespace
 
 int waveformDurationMs(const core::ClapSynthSettings& settings) {
-    if (settings.ampEnabled) return juce::jlimit(300, 1500, 150 + juce::roundToInt(settings.ampReleaseMs));
+    if (settings.ampEnabled) return juce::jlimit(300, 1500, kHeldNoteMs + juce::roundToInt(settings.ampReleaseMs));
     const float noiseEndMs = settings.noiseAttackMs + settings.noiseHoldMs + settings.noiseDecayMs;
     return juce::jmax(100, 50 * static_cast<int>(std::ceil(std::max(noiseEndMs, 2.5f * settings.toneDecayMs) / 50.0f)));
 }
@@ -421,24 +422,15 @@ void Waveform::refresh() {
     voice.prepare(kSamplesPerMs * 1000);
     voice.trigger(settings, 69, 1.0f);
     std::vector<core::StereoFrame> frames(static_cast<size_t>(durationMs_ * kSamplesPerMs));
+    std::vector<core::StereoFrame> bursts(static_cast<size_t>(kHandsMs * kSamplesPerMs));
     std::ranges::for_each(std::views::iota(size_t{ 0 }, frames.size()), [&](size_t i) {
-        if (settings.ampEnabled && i == 150 * kSamplesPerMs) voice.noteOff(settings);
-        frames[i] = voice.processSample(settings);
+        if (settings.ampEnabled && i == kHeldNoteMs * kSamplesPerMs) voice.noteOff(settings);
+        std::array<core::StereoFrame, 4> layers{};
+        frames[i] = voice.processSample(settings, nullptr, &layers);
+        if (i < bursts.size()) bursts[i] = layers[kPreClap];
     });
-    const auto handsSamples = static_cast<size_t>(kHandsMs * kSamplesPerMs);
     binFrames(frames, upper_, lower_);
-    binFrames(std::span(frames).first(handsSamples), handsUpper_, handsLower_);
-
-    // Muting the other layers keeps the same random hand timing as the whole clap.
-    auto handsOnly = settings;
-    handsOnly.layers[0].mute = true;
-    handsOnly.layers[1].mute = true;
-    handsOnly.layers[2].mute = true;
-    core::ClapSynth hands;
-    hands.prepare(kSamplesPerMs * 1000);
-    hands.trigger(handsOnly, 69, 1.0f);
-    std::vector<core::StereoFrame> bursts(handsSamples);
-    std::ranges::generate(bursts, [&] { return hands.processSample(handsOnly); });
+    binFrames(std::span(frames).first(bursts.size()), handsUpper_, handsLower_);
     binFrames(bursts, burstsUpper_, burstsLower_);
     repaint();
 }
@@ -531,6 +523,13 @@ OutputMeter::OutputMeter() {
 }
 
 void OutputMeter::update(float peak, float limiterGain, std::optional<float> ceilingDb, juce::uint32 nowMs) {
+    // The drawn values in quarter dB. The meter repaints only when one of them moves.
+    const auto drawn = [this] {
+        const auto quarterDb = [](float db) { return juce::roundToInt(db * 4.0f); };
+        return std::array<int, 5>{ quarterDb(levelDb_), quarterDb(holdDb_), quarterDb(reductionDb_),
+                                   quarterDb(ceilingDb_.value_or(-100.0f)), clipped_ ? 1 : 0 };
+    };
+    const auto drawnBefore = drawn();
     const float fallDb = kMeterFallDbPerSecond * static_cast<float>(nowMs - lastUpdateMs_) * 0.001f;
     lastUpdateMs_ = nowMs;
     const float peakDb = juce::Decibels::gainToDecibels(peak, -100.0f);
@@ -542,7 +541,7 @@ void OutputMeter::update(float peak, float limiterGain, std::optional<float> cei
     }
     ceilingDb_ = ceilingDb;
     clipped_ = clipped_ || peak > 1.0f;
-    repaint();
+    if (drawn() != drawnBefore) repaint();
 }
 
 void OutputMeter::mouseDown(const juce::MouseEvent&) {

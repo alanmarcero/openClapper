@@ -55,12 +55,6 @@ void clickAt(juce::Component& root, juce::Point<int> point) {
     target->mouseDown(press);
     target->mouseUp(press);
 }
-
-bool samePixels(const juce::Image& first, const juce::Image& second) {
-    const juce::Image::BitmapData a(first, juce::Image::BitmapData::readOnly);
-    const juce::Image::BitmapData b(second, juce::Image::BitmapData::readOnly);
-    return a.size == b.size && std::memcmp(a.data, b.data, a.size) == 0;
-}
 }
 
 TEST_CASE("Parameter gestures undo and redo as one step", "[plugin][suite]") {
@@ -275,7 +269,11 @@ TEST_CASE("Clicking a browser row loads factory and user presets", "[plugin][sui
     clickAt(*editor, rowArea(1).getTopLeft() + juce::Point<int>(16, 18));
     REQUIRE(processor.userPresets().isFavorite(browser->rowName(1), true));
     REQUIRE(processor.getSelectedPresetIndex() == 3);
-    REQUIRE_FALSE(samePixels(starBefore, list->createComponentSnapshot(list->getRowPosition(1, true))));
+    const auto starAfter = list->createComponentSnapshot(list->getRowPosition(1, true));
+    const juce::Image::BitmapData before(starBefore, juce::Image::BitmapData::readOnly);
+    const juce::Image::BitmapData after(starAfter, juce::Image::BitmapData::readOnly);
+    REQUIRE(before.size == after.size);
+    REQUIRE(std::memcmp(before.data, after.data, before.size) != 0);
 
     REQUIRE(list->keyPressed(juce::KeyPress(juce::KeyPress::downKey)));
     REQUIRE(processor.getSelectedPresetIndex() == 3);
@@ -517,6 +515,9 @@ TEST_CASE("Save asks before replacing and Delete asks before removing a user pre
     CHECK(remove->getButtonText() == "Delete?");
     list->deselectAllRows();
     list->selectRow(0);
+    CHECK(remove->getButtonText() == "Delete");
+    remove->onClick();
+    browser.nameEditor().onTextChange();
     CHECK(remove->getButtonText() == "Delete");
     remove->onClick();
     CHECK(processor.userPresets().load("Night Hit").has_value());

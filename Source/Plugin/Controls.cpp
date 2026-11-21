@@ -116,7 +116,7 @@ Control::Control(Apvts& state, const char* id, const char* caption)
 }
 
 void Control::setInactiveReason(const juce::String& reason) {
-    setAlpha(reason.isEmpty() ? 1.0f : 0.4f);
+    setAlpha(reason.isEmpty() ? 1.0f : theme::dimmedAlpha);
     label_.setTooltip(reason);
     if (slider_ != nullptr) slider_->setTooltip(reason);
     if (choice_ == nullptr) return;
@@ -228,9 +228,7 @@ DualEqKnob::DualEqKnob(Apvts& state, const juce::String& freqId, const juce::Str
 }
 
 void DualEqKnob::updateDbReadout() {
-    const auto* dbParam = state_.getParameter(dbId_);
-    dbReadout_.setText(dbParam->getText(dbParam->convertTo0to1(static_cast<float>(dbSlider_.getValue())), 0),
-                       juce::dontSendNotification);
+    dbReadout_.setText(dbSlider_.getTextFromValue(dbSlider_.getValue()), juce::dontSendNotification);
 }
 
 juce::Rectangle<float> DualEqKnob::dialBounds() const {

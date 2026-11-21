@@ -78,12 +78,7 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& instrument)
     suite_.onCopyBToA = [this] { processor_.copyAbBToA(); refreshChrome(); };
     suite_.onPresets = [this] { showPresetBrowser(); };
     suite_.onDragWav = [this] {
-        const auto name = processor_.userPresetName().isNotEmpty()
-            ? processor_.userPresetName()
-            : (processor_.getSelectedPresetIndex() >= 0
-                ? processor_.getProgramName(processor_.getSelectedPresetIndex())
-                : juce::String("Custom sound"));
-        auto stem = suite::UserPresetStore::sanitise(name);
+        auto stem = suite::UserPresetStore::sanitise(processor_.presetName());
         stem = stem.replaceCharacters("\\/:*?\"<>|", "_________");
         if (stem.isEmpty()) stem = "openClapper";
         auto file = juce::File::getSpecialLocation(juce::File::tempDirectory)
@@ -195,7 +190,9 @@ bool OpenClapperEditor::keyPressed(const juce::KeyPress& key) {
 }
 
 void OpenClapperEditor::timerCallback() {
-    presets_.setText(processor_.presetDisplayName(), juce::dontSendNotification);
+    // setText repaints the box whenever no menu item matches, which is every edited name.
+    const auto name = processor_.presetDisplayName();
+    if (presets_.getText() != name) presets_.setText(name, juce::dontSendNotification);
     suite_.setAbSlotB(processor_.isAbSlotB());
     suite_.setUndoEnabled(processor_.canUndo(), processor_.canRedo());
     if (page_ == 0 && isShowing()) waveform_.refresh();

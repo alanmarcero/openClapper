@@ -82,6 +82,7 @@ void ClapEngine::reset() noexcept {
     reverseDuration_ = 0;
     isReversing_ = false;
     currentPeak_ = 0.0f;
+    currentLimiterGain_ = 1.0f;
     currentBeatPhase_ = 0.0f;
     currentClapProgress_ = 1.0f;
     ccVolume_ = 1.0f;
