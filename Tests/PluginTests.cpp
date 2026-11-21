@@ -1266,3 +1266,43 @@ TEST_CASE("The hit light flashes on hits and dropped notes, then fades", "[plugi
     light.update(4, 2);
     CHECK(light.isLit());
 }
+
+TEST_CASE("No two controls overlap on any page and the EQ dials keep their size", "[plugin][gui][layout]") {
+    OpenClapperProcessor processor;
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    editor->setVisible(true);
+    auto* audition = findVisible<juce::TextButton>(*editor, [](const juce::TextButton& button) {
+        return button.getButtonText() == "Audition A4";
+    });
+    REQUIRE(audition != nullptr);
+    auto& content = *audition->getParentComponent();
+    const auto overlaps = [&](const char* page) {
+        click(*editor, page);
+        std::vector<std::string> pairs;
+        const auto check = [&](auto&& self, juce::Component& parent) -> void {
+            const auto& children = parent.getChildren();
+            std::ranges::for_each(std::views::iota(0, children.size()), [&](int i) {
+                auto* first = children[i];
+                if (!first->isVisible()) return;
+                std::ranges::for_each(std::views::iota(i + 1, children.size()), [&](int j) {
+                    if (children[j]->isVisible() && first->getBounds().intersects(children[j]->getBounds()))
+                        pairs.push_back((first->getComponentID() + first->getName() + " / " + children[j]->getComponentID()
+                            + children[j]->getName()).toStdString());
+                });
+                self(self, *first);
+            });
+        };
+        check(check, content);
+        return pairs;
+    };
+    CHECK(overlaps("Clap").empty());
+    CHECK(overlaps("Layers").empty());
+    CHECK(overlaps("Effects").empty());
+    CHECK(overlaps("MIDI & envelope").empty());
+
+    click(*editor, "Clap");
+    auto* dial = findVisible<juce::Slider>(*editor, [](const juce::Slider& slider) { return slider.isRotary(); });
+    REQUIRE(dial != nullptr);
+    CHECK(dial->getWidth() >= 44);
+    CHECK(dial->getHeight() >= 44);
+}
