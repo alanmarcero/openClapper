@@ -114,6 +114,18 @@ juce::String formatSigned(float value, const juce::String& unit);
 // "4.5 ms" below 10 ms, "160 ms" below 1 s, then "1.20 s".
 juce::String formatMilliseconds(float ms);
 
+inline constexpr int kEqLowMinMidi = 28;   // E1 (41.20 Hz)
+inline constexpr int kEqLowMaxMidi = 52;   // E3 (164.81 Hz)
+inline constexpr int kEqMidMinMidi = 71;   // B4 (493.88 Hz)
+inline constexpr int kEqMidMaxMidi = 95;   // B6 (1975.53 Hz)
+inline constexpr int kEqHighMinMidi = 106; // A#7 (3729.31 Hz)
+inline constexpr int kEqHighMaxMidi = 130; // A#9 (14917.24 Hz)
+
+float eqNoteToHz(int midiNote) noexcept;
+int eqHzToNearestMidi(float hz, int minMidi, int maxMidi) noexcept;
+juce::String formatEqNote(float hz, int minMidi, int maxMidi);
+float parseEqNoteOrHz(const juce::String& text, int minMidi, int maxMidi);
+
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 openclapper::core::EngineSettings readSettings(const juce::AudioProcessorValueTreeState& apvts);
 

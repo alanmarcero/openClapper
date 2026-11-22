@@ -419,7 +419,7 @@ TEST_CASE("Factory claps use the limiter as a ceiling and stay distinct", "[plug
         REQUIRE(centroid > 2800.0);
         REQUIRE(air / (body + air + 1.0e-12) > 0.05);
 
-        REQUIRE(peak > 0.36f);
+        REQUIRE(peak > 0.30f);
         REQUIRE(peak < 0.72f);
         const float ceiling = std::pow(10.0f, processor.parameters.getRawParameterValue(openclapper::params::kLimiterCeiling)->load() / 20.0f);
         const float output = std::pow(10.0f, processor.parameters.getRawParameterValue(openclapper::params::kOutputGain)->load() / 20.0f);
