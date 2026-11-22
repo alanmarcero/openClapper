@@ -2,6 +2,7 @@
 
 #include "EdmLookAndFeel.h"
 #include "Panels.h"
+#include "Parameters.h"
 #include "PluginProcessor.h"
 #include "suite/PresetBrowser.h"
 #include "suite/SuiteBar.h"
@@ -26,6 +27,7 @@ private:
     // Holds every control at the design size. resized() scales it to fit the window.
     juce::Component content_;
     juce::ComboBox presets_;
+    openclapper::ui::LockBadge presetLock_{ processor_.parameters, openclapper::params::kPreset, "Preset" };
     struct PresetStepButton final : juce::Button {
         PresetStepButton(const juce::String& name, float direction)
             : juce::Button(name), direction_(direction) {}

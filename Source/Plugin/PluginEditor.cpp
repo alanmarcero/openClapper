@@ -55,6 +55,7 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& instrument)
         }
     };
     content_.addAndMakeVisible(presets_);
+    content_.addAndMakeVisible(presetLock_);
     previous_.setTooltip("Previous preset");
     next_.setTooltip("Next preset");
     audition_.setTooltip("Play the current sound at A4.");
@@ -272,6 +273,8 @@ void OpenClapperEditor::resized() {
     header.removeFromRight(5);
     previous_.setBounds(header.removeFromRight(40).withSizeKeepingCentre(40, 40));
     header.removeFromRight(6);
+    presetLock_.setBounds(header.removeFromRight(24).withSizeKeepingCentre(22, 22));
+    header.removeFromRight(4);
     presets_.setBounds(header);
 
     suite_.setBounds(area.removeFromTop(kSuiteHeight).reduced(0, 0));

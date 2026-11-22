@@ -231,7 +231,7 @@ void OpenClapperProcessor::selectPreset(int index) {
         presetEdited_ = false;
         currentProgram_ = index;
         // Preset Index automation stays on the original 44 positions.
-        if (index < openclapper::params::kHostProgramCount)
+        if (index < openclapper::params::kHostProgramCount && !isParamLocked(openclapper::params::kPreset))
             if (auto* parameter = parameters.getParameter(openclapper::params::kPreset))
                 parameter->setValueNotifyingHost(parameter->convertTo0to1(static_cast<float>(index)));
     });

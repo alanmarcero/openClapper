@@ -1320,7 +1320,7 @@ TEST_CASE("Every padlock has a spoken name for its control and toggles from the 
         });
     };
     collect(collect, *editor);
-    REQUIRE(badges.size() == 99);
+    REQUIRE(badges.size() == 100);
 
     // A padlock in a Control repeats the title of the control's slider, combo box or switch.
     std::vector<std::string> unnamed;
@@ -1367,4 +1367,63 @@ TEST_CASE("Every padlock has a spoken name for its control and toggles from the 
         juce::MouseInputSource::defaultTiltX, juce::MouseInputSource::defaultTiltY,
         bodyLevel, bodyLevel, now, { 5.0f, 5.0f }, now, 1, false));
     CHECK(processor.isParamLocked(openclapper::params::kToneLevel));
+}
+
+TEST_CASE("Every RangedAudioParameter can be locked, persists in state, and survives preset load", "[plugin][locks]") {
+    using openclapper::ui::LockBadge;
+    OpenClapperProcessor reference;
+    reference.setCurrentProgram(5);
+    std::vector<std::pair<juce::String, float>> preset5Values;
+    for (auto* baseParam : reference.getParameters()) {
+        auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(baseParam);
+        REQUIRE(ranged != nullptr);
+        preset5Values.emplace_back(ranged->getParameterID(), ranged->getValue());
+    }
+    REQUIRE(preset5Values.size() == 84);
+
+    OpenClapperProcessor processor;
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    REQUIRE(editor != nullptr);
+    std::set<juce::String> badgeIds;
+    const auto collect = [&](auto&& self, juce::Component& parent) -> void {
+        for (auto* child : parent.getChildren()) {
+            if (auto* badge = dynamic_cast<LockBadge*>(child)) badgeIds.insert(badge->getComponentID());
+            self(self, *child);
+        }
+    };
+    collect(collect, *editor);
+
+    std::vector<std::pair<juce::String, float>> lockedTargets;
+    for (const auto& [id, preset5Norm] : preset5Values) {
+        INFO("Parameter ID: " << id.toStdString());
+        CHECK(badgeIds.contains("lock_" + id));
+        auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(processor.parameters.getParameter(id));
+        REQUIRE(ranged != nullptr);
+        const float targetNorm = preset5Norm < 0.5f ? 1.0f : 0.0f;
+        ranged->setValueNotifyingHost(targetNorm);
+        processor.setParamLocked(id, true);
+        REQUIRE(processor.isParamLocked(id));
+        lockedTargets.emplace_back(id, ranged->getValue());
+    }
+
+    juce::MemoryBlock state;
+    processor.getStateInformation(state);
+
+    OpenClapperProcessor restored;
+    restored.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+    for (const auto& [id, targetNorm] : lockedTargets) {
+        INFO("Restored parameter ID: " << id.toStdString());
+        CHECK(restored.isParamLocked(id));
+        auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(restored.parameters.getParameter(id));
+        REQUIRE(ranged != nullptr);
+        CHECK(ranged->getValue() == Catch::Approx(targetNorm).margin(1e-4f));
+    }
+
+    restored.setCurrentProgram(5);
+    for (const auto& [id, targetNorm] : lockedTargets) {
+        INFO("Post-preset parameter ID: " << id.toStdString());
+        auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(restored.parameters.getParameter(id));
+        REQUIRE(ranged != nullptr);
+        CHECK(ranged->getValue() == Catch::Approx(targetNorm).margin(1e-4f));
+    }
 }
