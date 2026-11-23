@@ -1062,7 +1062,7 @@ TEST_CASE("Cards that had five columns give each slider at least 120 px of trave
         collect(collect, *editor);
         return narrow;
     };
-    CHECK(shortTracks("Layers", "noise_").empty());
+    CHECK(shortTracks("Layers", "").empty());
     CHECK(shortTracks("Effects", "").empty());
     CHECK(shortTracks("MIDI & envelope", "").empty());
 }

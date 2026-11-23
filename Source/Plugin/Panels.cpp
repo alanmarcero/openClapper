@@ -231,12 +231,12 @@ void ControlGroup::paint(juce::Graphics& g) {
         g.drawText(layerStatus_, 119, 64, getWidth() - 131, 18, juce::Justification::centredLeft);
         return;
     }
-    g.drawFittedText(heading_, 16, 10, 111, getHeight() - 56, juce::Justification::topLeft, 2);
+    g.drawFittedText(heading_, 16, 8, 111, getHeight() - 56, juce::Justification::topLeft, 2);
     g.setColour(theme::edge);
     g.drawVerticalLine(134, 11, static_cast<float>(getHeight() - 11));
     g.setColour(theme::apricot);
     g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
-    g.drawText(layerStatus_, 16, 76, 118, 16, juce::Justification::centredLeft);
+    g.drawText(layerStatus_, 16, 68, 118, 16, juce::Justification::centredLeft);
 }
 
 void ControlGroup::resized() {
@@ -244,11 +244,11 @@ void ControlGroup::resized() {
         lockButton_.setBounds(getWidth() - 78, 6, 66, 36);
     }
     if (!stacked_) {
-        lockButton_.setBounds(16, std::max(8, getHeight() - 44), 66, 36);
+        lockButton_.setBounds(16, std::max(layer_ >= 0 ? 88 : 8, getHeight() - 44), 66, 36);
     }
     if (layer_ >= 0) {
         const int chipsX = stacked_ ? 17 : 16;
-        const int chipsY = stacked_ ? 46 : 36;
+        const int chipsY = stacked_ ? 46 : 30;
         chips_[0].setBounds(chipsX, chipsY, 44, 36);
         chips_[1].setBounds(chipsX + 50, chipsY, 44, 36);
     }
@@ -312,7 +312,7 @@ ControlPage::ControlPage(Apvts& state, Page page) : page_(page) {
         case Page::layers:
             group("Pre-clap", 3, {{kPreBursts,"Bursts"}, {kPreSpread,"Spacing"}, {kPreLevel,"Level"},
                 {kPreDecay,"Burst decay"}, {kPreJitter,"Humanize"}, {kFlamSpread,"Pan spread"}}, false, kPreClap);
-            group("Tuned body", 4, {{kToneQ,"Resonance"}, {kToneDecay,"Decay"}, {kToneLevel,"Level"}, {kImpactPunch,"Impact"},
+            group("Tuned body", 3, {{kToneQ,"Resonance"}, {kToneDecay,"Decay"}, {kToneLevel,"Level"}, {kImpactPunch,"Impact"},
                 {kTonePitchEnv,"Pitch sweep"}, {kTonePitchDecay,"Sweep time"}, {kToneHPF,"Low cut"}, {kToneLPF,"High cut"}}, false, kBody);
             group("Noise", 3, {{kNoiseType,"Texture"}, {kNoiseAttack,"Attack"}, {kNoiseHold,"Hold"}, {kNoiseDecay,"Decay"}, {kNoiseCurve,"Curve"},
                 {kNoiseHPF,"Low cut"}, {kNoiseLPF,"High cut"}, {kNoiseStereoWidth,"Stereo width"}, {kNoiseLevel,"Level"}}, false, kNoise);
@@ -503,11 +503,14 @@ void Waveform::paint(juce::Graphics& g) {
     drawBars(g, handsPlot, handsUpper_, handsLower_, handsPlot.getHeight() * 0.45f / handsPeak);
     g.setColour(theme::apricot);
     drawBars(g, handsPlot, burstsUpper_, burstsLower_, handsPlot.getHeight() * 0.45f / burstsPeak);
-    const float spacing = core::flamSpacingMs(previous_->preClapCount, previous_->preClapSpreadMs);
-    std::ranges::for_each(std::views::iota(0, previous_->preClapCount), [&](int i) {
-        const float x = handsPlot.getX() + static_cast<float>(i) * spacing / kHandsMs * handsPlot.getWidth();
-        g.fillRect(x - 1.0f, handsPlot.getY(), 2.0f, 8.0f);
-    });
+    if (previous_->preClapCount > 1) {
+        const float spacing = core::flamSpacingMs(previous_->preClapCount, previous_->preClapSpreadMs);
+        std::ranges::for_each(std::views::iota(0, previous_->preClapCount), [&](int i) {
+            const float x = handsPlot.getX() + static_cast<float>(i) * spacing / kHandsMs * handsPlot.getWidth();
+            const float clampedX = std::clamp(x - 1.0f, handsPlot.getX(), handsPlot.getRight() - 2.0f);
+            g.fillRect(clampedX, handsPlot.getY(), 2.0f, 8.0f);
+        });
+    }
 }
 
 namespace {

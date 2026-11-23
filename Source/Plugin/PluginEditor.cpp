@@ -51,7 +51,7 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& instrument)
         if (presets_.getSelectedId() > 0) {
             processor_.selectPreset(presets_.getSelectedId() - 1);
             waveform_.refresh();
-            browser_.setVisible(false);
+            setBrowserVisible(false);
         }
     };
     content_.addAndMakeVisible(presets_);
@@ -158,16 +158,31 @@ void OpenClapperEditor::refreshChrome() {
     repaint();
 }
 
+void OpenClapperEditor::setBrowserVisible(bool visible) {
+    browser_.setVisible(visible);
+    suite_.setPresetsOpen(visible);
+    if (visible) browser_.toFront(false);
+}
+
 void OpenClapperEditor::showPresetBrowser() {
-    browser_.reload();
-    browser_.setVisible(!browser_.isVisible());
-    if (browser_.isVisible()) browser_.toFront(false);
+    const bool opening = !browser_.isVisible();
+    if (opening) {
+        browser_.reload();
+        const auto user = processor_.userPresetName();
+        if (user.isNotEmpty()) {
+            browser_.selectPreset(user, false);
+        } else if (processor_.getSelectedPresetIndex() >= 0) {
+            browser_.selectPreset(processor_.presetName(), true);
+        }
+    }
+    setBrowserVisible(opening);
     resized();
 }
 
 void OpenClapperEditor::setPage(int index) {
+    setBrowserVisible(false);
     page_ = index;
-    for (size_t i = 0; i < pages_.size(); ++i) {
+    for (size_t i = 0; i < tabs_.size(); ++i) {
         const bool active = static_cast<int>(i) == index;
         pages_[i]->setVisible(active);
         tabs_[i].setToggleState(active, juce::dontSendNotification);
@@ -179,7 +194,7 @@ void OpenClapperEditor::setPage(int index) {
 
 bool OpenClapperEditor::keyPressed(const juce::KeyPress& key) {
     if (key == juce::KeyPress::escapeKey && browser_.isVisible()) {
-        browser_.setVisible(false);
+        setBrowserVisible(false);
         return true;
     }
     const auto mods = key.getModifiers();
@@ -204,7 +219,7 @@ void OpenClapperEditor::timerCallback() {
                   ui::outputCeilingDb(processor_.parameters), juce::Time::getMillisecondCounter());
     hitLight_.update(processor_.displayTriggerCount.load(), processor_.displayDroppedCount.load());
     const int handTop = kHeaderHeight + kSuiteHeight;
-    content_.repaint(kDesignWidth - 180, handTop, 170, 80);
+    content_.repaint(kDesignWidth - 180, handTop, 170, kNavHeight);
 }
 
 void OpenClapperEditor::paint(juce::Graphics& g) {
@@ -226,15 +241,15 @@ void OpenClapperEditor::paint(juce::Graphics& g) {
         g.strokePath(stroke, juce::PathStrokeType(5.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
     g.setColour(theme::ink);
-    g.setFont(juce::FontOptions(32.0f, juce::Font::bold));
-    g.drawText("openClapper", 62, 11, 200, 40, juce::Justification::centredLeft);
+    g.setFont(juce::FontOptions(30.0f, juce::Font::bold));
+    g.drawText("openClapper", 62, 11, 184, 40, juce::Justification::centredLeft);
     g.setColour(theme::secondary);
-    g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
-    g.drawText("v" JucePlugin_VersionString, 256, 20, 56, 24, juce::Justification::centredLeft);
+    g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
+    g.drawText("v" JucePlugin_VersionString, 248, 20, 48, 24, juce::Justification::centredLeft);
     g.setFont(juce::FontOptions(14.0f));
     g.drawText("Pitched clap synthesizer", 64, 47, 220, 22, juce::Justification::centredLeft);
     g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
-    g.drawText("Preset", presets_.getX(), 8, 280, 20, juce::Justification::centredLeft);
+    g.drawText("Preset", presets_.getX(), 10, 280, 18, juce::Justification::centredLeft);
 
     const float beat = processor_.displayBeatPhase.load(std::memory_order_relaxed);
     const bool running = beat >= 0.0f;

@@ -44,6 +44,10 @@ void SuiteBar::setUndoEnabled(bool canUndo, bool canRedo) {
     redo_.setEnabled(canRedo);
 }
 
+void SuiteBar::setPresetsOpen(bool open) {
+    presets_.setToggleState(open, juce::dontSendNotification);
+}
+
 void SuiteBar::resized() {
     auto area = getLocalBounds();
     auto takeLeft = [&](juce::Component& component, int width) {

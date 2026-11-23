@@ -21,6 +21,7 @@ private:
     void stepPreset(int delta);
     void setPage(int index);
     void showPresetBrowser();
+    void setBrowserVisible(bool visible);
 
     OpenClapperProcessor& processor_;
     openclapper::ui::EdmLookAndFeel look_;

@@ -54,7 +54,7 @@ private:
 };
 
 /** Dual concentric EQ knob: inner cap sets -12..+12 dB, outer collar glides Hz smoothly. */
-class DualEqKnob final : public juce::Component {
+class DualEqKnob final : public juce::Component, public juce::SettableTooltipClient {
 public:
     DualEqKnob(Apvts& state, const juce::String& freqId, const juce::String& dbId,
                const juce::String& title);
@@ -80,12 +80,14 @@ private:
     [[nodiscard]] juce::Rectangle<int> freqPillBounds() const;
     [[nodiscard]] bool hitsOuterRing(juce::Point<float> pos) const;
     void updateDbReadout();
+    void updateFreqReadout();
 
     Apvts& state_;
     juce::String freqId_;
     juce::String dbId_;
     juce::Label title_;
     juce::Label dbReadout_;
+    juce::Label freqReadout_;
     GainSlider dbSlider_;
     std::unique_ptr<Apvts::SliderAttachment> dbAttachment_;
     std::unique_ptr<juce::ParameterAttachment> freqAttachment_;

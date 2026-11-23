@@ -108,7 +108,7 @@ FactoryPreset makePreset(const Clap& clap) {
         {kSlapbackDivision, static_cast<float>(SlapbackDivision::Off)}, {kSlapbackMix, 0}, {kSlapbackFeedback, 0},
         {kClapDoubler, clap.doubler}, {kPitchHumanize, clap.humanize},
         {kReverseMode, static_cast<float>(ReverseSyncMode::Off)}, {kReverseMix, 0},
-        {kEqLowFreq, 420.0f}, {kEqLowDb, clap.eqLowDb}, {kEqMidFreq, clap.eqMidHz}, {kEqMidDb, clap.eqMidDb},
+        {kEqLowFreq, params::eqNoteToHz(40)}, {kEqLowDb, clap.eqLowDb}, {kEqMidFreq, clap.eqMidHz}, {kEqMidDb, clap.eqMidDb},
         {kEqHighFreq, 8000.0f}, {kEqHighDb, clap.eqHighDb}, {kStereoWidth, clap.masterWidth}, {kOutputGain, clap.outDb}
     };
     std::ranges::for_each(kPerformanceParameters, [&](const auto& parameter) {

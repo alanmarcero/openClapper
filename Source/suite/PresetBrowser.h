@@ -22,6 +22,7 @@ public:
 
     void setPalette(SuitePalette palette);
     void reload();
+    void selectPreset(const juce::String& name, bool factory);
     void setSearchText(const juce::String& text);
 
     std::function<void(int factoryIndex)> onFactoryPreset;
@@ -38,6 +39,7 @@ public:
     ~PresetBrowser() override;
     void paint(juce::Graphics&) override;
     void resized() override;
+    void visibilityChanged() override;
 
 private:
     int getNumRows() override { return visibleCount(); }

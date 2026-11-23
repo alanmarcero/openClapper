@@ -127,6 +127,10 @@ void PresetBrowser::disarm() {
     remove_.setButtonText("Delete");
 }
 
+void PresetBrowser::visibilityChanged() {
+    disarm();
+}
+
 void PresetBrowser::setPalette(SuitePalette palette) {
     palette_ = palette;
     search_.setColour(juce::TextEditor::backgroundColourId, palette_.paper);
@@ -144,6 +148,7 @@ void PresetBrowser::setPalette(SuitePalette palette) {
 }
 
 void PresetBrowser::reload() {
+    disarm();
     const auto selected = selectedRow_ >= 0 && selectedRow_ < visibleCount()
         ? visible_[static_cast<size_t>(selectedRow_)].name : juce::String();
     const bool selectedFactory = selectedRow_ >= 0 && selectedRow_ < visibleCount()
@@ -162,6 +167,20 @@ void PresetBrowser::reload() {
         if (entry.name == selected && entry.factory == selectedFactory) selectedRow_ = row;
     }
     if (selectedRow_ >= 0) list_.selectRow(selectedRow_);
+    updateActions();
+}
+
+void PresetBrowser::selectPreset(const juce::String& name, bool factory) {
+    selectedRow_ = -1;
+    list_.deselectAllRows();
+    for (int row = 0; row < visibleCount(); ++row) {
+        const auto& entry = visible_[static_cast<size_t>(row)];
+        if (entry.name == name && entry.factory == factory) {
+            selectedRow_ = row;
+            list_.selectRow(row);
+            break;
+        }
+    }
     updateActions();
 }
 
@@ -201,6 +220,7 @@ void PresetBrowser::resized() {
 }
 
 void PresetBrowser::applyFilter() {
+    disarm();
     const auto query = search_.getText().trim();
     visible_.clear();
     for (const auto& entry : all_)

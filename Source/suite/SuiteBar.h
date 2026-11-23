@@ -12,6 +12,7 @@ public:
     void resized() override;
     void setAbSlotB(bool editingB);
     void setUndoEnabled(bool canUndo, bool canRedo);
+    void setPresetsOpen(bool open);
 
     std::function<void()> onUndo, onRedo, onShowA, onShowB, onCopyAToB, onCopyBToA, onPresets;
     std::function<juce::File()> onDragWav;
