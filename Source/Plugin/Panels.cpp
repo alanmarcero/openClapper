@@ -132,7 +132,7 @@ ControlGroup::ControlGroup(Apvts& state, const char* heading, std::initializer_l
             addAndMakeVisible(*knob);
             controls_.push_back(std::move(knob));
         });
-        outputCeiling_.setFont(juce::FontOptions(14.0f, juce::Font::bold));
+        outputCeiling_.setFont(juce::FontOptions(13.5f, juce::Font::bold));
         outputCeiling_.setColour(juce::Label::textColourId, theme::ink);
         outputCeiling_.setTooltip("Ceiling plus Output gain. Output gain comes after the limiter, so limited peaks land here.");
         addAndMakeVisible(outputCeiling_);
@@ -188,8 +188,8 @@ void ControlGroup::refresh() {
     });
     if (outputSection_) {
         const auto ceiling = outputCeilingDb(state_);
-        const juce::String off("Output ceiling off");
-        const auto on = "Output ceiling " + params::formatSigned(ceiling.value_or(0.0f), "dB");
+        const juce::String off("Post-gain ceiling off");
+        const auto on = "Post-gain ceiling " + params::formatSigned(ceiling.value_or(0.0f), "dB");
         outputCeiling_.setText(ceiling ? on : off, juce::dontSendNotification);
     }
     if (layer_ < 0) return;
@@ -223,8 +223,8 @@ void ControlGroup::paint(juce::Graphics& g) {
         g.drawHorizontalLine(layer_ < 0 ? 49 : 88, 17, static_cast<float>(getWidth() - 17));
         if (outputSection_) g.drawRoundedRectangle(limiterArea_.toFloat(), 6, 1);
         if (layer_ < 0) return;
-        g.setColour(theme::secondary);
-        g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
+        g.setColour(theme::ink.withAlpha(0.78f));
+        g.setFont(juce::FontOptions(14.0f, juce::Font::bold));
         g.drawText(juce::String(params::kLayerNames[static_cast<size_t>(layer_)]) + " layer",
                    119, 46, getWidth() - 131, 18, juce::Justification::centredLeft);
         g.setColour(theme::apricot);
@@ -237,6 +237,12 @@ void ControlGroup::paint(juce::Graphics& g) {
     g.setColour(theme::apricot);
     g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
     g.drawText(layerStatus_, 16, 68, 118, 16, juce::Justification::centredLeft);
+    if (columns_ == 2 && controls_.size() == 2) {
+        const auto bottomRow = getLocalBounds().withTrimmedLeft(143).reduced(5, 4).withTrimmedTop(54);
+        g.setColour(theme::secondary);
+        g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
+        g.drawText("Fixed velocity", bottomRow.reduced(4, 0), juce::Justification::centredLeft);
+    }
 }
 
 void ControlGroup::resized() {
@@ -280,8 +286,8 @@ void ControlGroup::resized() {
     const auto stackedArea = getLocalBounds().withTrimmedTop(headerHeight).reduced(12, padding);
     const auto sideArea = getLocalBounds().withTrimmedLeft(143).reduced(5, 4);
     const auto area = stacked_ ? stackedArea : sideArea;
-    const int rowCount = rows();
     const int totalControls = static_cast<int>(controls_.size());
+    const int rowCount = (!stacked_ && columns_ == 2 && totalControls == 2) ? 2 : rows();
     std::ranges::for_each(std::views::iota(0, totalControls), [&](int index) {
         const int col = index % columns_;
         const int row = index / columns_;
@@ -309,7 +315,7 @@ ControlPage::ControlPage(Apvts& state, Page page) : page_(page) {
             group("Tuned body", 1, {{kToneLevel,"Body level"}, {kToneQ,"Resonance"}, {kToneDecay,"Body decay"}, {kImpactPunch,"Impact"}}, false, kBody);
             group("Noise tail", 1, {{kNoiseType,"Texture"}, {kNoiseHPF,"Low cut"}, {kNoiseDecay,"Noise decay"}, {kNoiseLevel,"Noise level"}}, false, kNoise);
             group("Finish", 1, {{kClickLevel,"Transient level"}, {kReverbMix,"Room mix"}, {kReverbGate,"Room gate"}, {kClapDoubler,"Doubler"}}, false, kTransient);
-            group("Output", 5, {{kStereoWidth,"Stereo width"}, {kOutputGain,"Output gain"}, {kLimiterEnabled,"Limiter"}, {kLimiterCeiling,"Ceiling"}, {kLimiterRelease,"Recovery"}}, true);
+            group("Output", 5, {{kStereoWidth,"Stereo width"}, {kOutputGain,"Output gain"}, {kLimiterEnabled,"Limiter"}, {kLimiterCeiling,"Limiter ceiling"}, {kLimiterRelease,"Recovery"}}, true);
             break;
         case Page::layers:
             group("Pre-clap", 3, {{kPreBursts,"Bursts"}, {kPreSpread,"Spacing"}, {kPreLevel,"Level"},
@@ -470,7 +476,7 @@ void Waveform::paint(juce::Graphics& g) {
     g.drawText("Clap waveform", caption, juce::Justification::centredLeft);
     g.setColour(theme::lilac);
     g.setFont(juce::FontOptions(14.0f));
-    g.drawText("Dry signal   /   A4", caption, juce::Justification::centredRight);
+    g.drawText("Dry signal / A4", caption, juce::Justification::centredRight);
 
     inner.removeFromTop(3);
     const auto ruler = inner.removeFromBottom(19);
@@ -578,11 +584,12 @@ void OutputMeter::paint(juce::Graphics& g) {
     auto area = getLocalBounds();
     const auto clip = area.removeFromRight(50);
     area.removeFromRight(8);
-    const auto labels = area.removeFromLeft(30);
-    g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
-    g.setColour(theme::secondary);
-    g.drawText("Out", labels.withHeight(20), juce::Justification::centredLeft);
-    g.drawText("GR", labels.withTrimmedTop(20), juce::Justification::centredLeft);
+    const auto labels = area.removeFromLeft(34);
+    area.removeFromLeft(4);
+    g.setFont(juce::FontOptions(13.5f, juce::Font::bold));
+    g.setColour(theme::ink.withAlpha(0.82f));
+    g.drawText("Out", labels.withY(area.getY() + 2).withHeight(15), juce::Justification::centredLeft);
+    g.drawText("GR", labels.withY(area.getY() + 18).withHeight(15), juce::Justification::centredLeft);
 
     const auto bars = area.toFloat();
     const auto toX = [&](float db) {

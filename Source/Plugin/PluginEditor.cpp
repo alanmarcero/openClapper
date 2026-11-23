@@ -244,9 +244,10 @@ void OpenClapperEditor::paint(juce::Graphics& g) {
     g.setColour(theme::ink);
     g.setFont(juce::FontOptions(30.0f, juce::Font::bold));
     g.drawText("openClapper", 62, 11, 184, 40, juce::Justification::centredLeft);
+    g.setColour(theme::ink.withAlpha(0.75f));
+    g.setFont(juce::FontOptions(13.5f, juce::Font::bold));
+    g.drawText("v" JucePlugin_VersionString, 246, 20, 52, 24, juce::Justification::centredLeft);
     g.setColour(theme::secondary);
-    g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
-    g.drawText("v" JucePlugin_VersionString, 248, 20, 48, 24, juce::Justification::centredLeft);
     g.setFont(juce::FontOptions(14.0f));
     g.drawText("Pitched clap synthesizer", 64, 47, 220, 22, juce::Justification::centredLeft);
     g.setColour(theme::ink.withAlpha(0.85f));
@@ -267,9 +268,10 @@ void OpenClapperEditor::paint(juce::Graphics& g) {
             hand_->draw(g, running ? 1.0f : 0.6f, transform);
         }
     }
-    g.setColour(theme::secondary);
+    g.setColour(theme::ink.withAlpha(0.85f));
+    g.setFont(juce::FontOptions(15.0f, juce::Font::bold));
     g.drawText(running ? juce::String(juce::roundToInt(processor_.displayBpm.load())) + " BPM" : "Stopped",
-               kDesignWidth - 164, kHeaderHeight + kSuiteHeight + 11, 64, 38, juce::Justification::centredRight);
+               kDesignWidth - 178, kHeaderHeight + kSuiteHeight + 11, 78, 38, juce::Justification::centredRight);
 }
 
 void OpenClapperEditor::resized() {

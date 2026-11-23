@@ -118,7 +118,7 @@ Control::Control(Apvts& state, const char* id, const char* caption)
     slider_->setColour(juce::Slider::textBoxTextColourId, theme::ink);
     slider_->setColour(juce::Slider::textBoxBackgroundColourId, theme::paper);
     slider_->setColour(juce::Slider::textBoxOutlineColourId, theme::edge);
-    slider_->setTextBoxStyle(juce::Slider::TextBoxRight, false, 68, 22);
+    slider_->setTextBoxStyle(juce::Slider::TextBoxRight, false, 70, 22);
     addAndMakeVisible(*slider_);
     sliderAttachment_ = std::make_unique<Apvts::SliderAttachment>(state, id, *slider_);
 }
@@ -148,7 +148,7 @@ void Control::resized() {
         return;
     }
     lock_->setBounds(area.removeFromRight(24).withSizeKeepingCentre(22, 22));
-    area.removeFromRight(6);
+    area.removeFromRight(10);
     const int contentHeight = choiceAttachment_ ? 54 : 44;
     area = area.withSizeKeepingCentre(area.getWidth(), juce::jmin(contentHeight, area.getHeight()));
     label_.setBounds(area.removeFromTop(18));
@@ -360,10 +360,10 @@ void DualEqKnob::paint(juce::Graphics& g) {
     g.drawRoundedRectangle(freqPill.reduced(0.5f), 4.0f, 1.0f);
 
     g.setColour(theme::secondary);
-    g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
-    g.drawText("dB", dbLock_.getBounds().withSizeKeepingCentre(28, 14).withY(dbLock_.getBottom() + 2),
+    g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
+    g.drawText("dB", dbLock_.getBounds().withSizeKeepingCentre(30, 15).withY(dbLock_.getBottom() + 1),
                juce::Justification::centred);
-    g.drawText("Note", freqLock_.getBounds().withSizeKeepingCentre(32, 14).withY(freqLock_.getBottom() + 2),
+    g.drawText("Note", freqLock_.getBounds().withSizeKeepingCentre(36, 15).withY(freqLock_.getBottom() + 1),
                juce::Justification::centred);
 }
 

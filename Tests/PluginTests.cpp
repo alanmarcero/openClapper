@@ -1157,19 +1157,19 @@ TEST_CASE("The Output card groups the limiter and shows where limited peaks land
     CHECK(control(params::kLimiterRelease)->getX() > gainRight);
 
     auto* ceiling = findVisible<juce::Label>(*editor, [](const juce::Label& label) {
-        return label.getText().startsWith("Output ceiling");
+        return label.getText().startsWith("Post-gain ceiling");
     });
     auto* limiter = findVisible<juce::TextButton>(*control(params::kLimiterEnabled), [](const juce::TextButton&) { return true; });
     REQUIRE(ceiling != nullptr);
     REQUIRE(limiter != nullptr);
-    CHECK(ceiling->getText() == "Output ceiling +4.0 dB");
+    CHECK(ceiling->getText() == "Post-gain ceiling +4.0 dB");
     CHECK(limiter->getButtonText() == "Limiter on");
     performanceValue(processor, params::kOutputGain, -3.0f);
     refreshCards(*editor);
-    CHECK(ceiling->getText() == "Output ceiling -4.0 dB");
+    CHECK(ceiling->getText() == "Post-gain ceiling -4.0 dB");
     performanceValue(processor, params::kLimiterEnabled, 0.0f);
     refreshCards(*editor);
-    CHECK(ceiling->getText() == "Output ceiling off");
+    CHECK(ceiling->getText() == "Post-gain ceiling off");
     CHECK(limiter->getButtonText() == "Limiter off");
 }
 

@@ -15,6 +15,6 @@ inline const juce::Colour selected{ 0xff1f4842 };
 inline const juce::Colour apricot{ 0xffffbe3b };
 inline const juce::Colour lilac{ 0xff48f0c8 };
 // Opacity of a control that has no effect now, or that cannot act.
-inline constexpr float dimmedAlpha = 0.4f;
+inline constexpr float dimmedAlpha = 0.55f;
 
 } // namespace openclapper::theme
