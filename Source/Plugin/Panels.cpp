@@ -254,7 +254,7 @@ void ControlGroup::resized() {
     }
     if (outputSection_) {
         auto area = getLocalBounds().withTrimmedTop(52).reduced(12, 6);
-        auto eqArea = area.removeFromLeft(std::min(436, area.getWidth() * 44 / 100));
+        auto eqArea = area.removeFromLeft(std::min(462, area.getWidth() * 46 / 100));
         const int eqW = eqArea.getWidth() / 3;
         std::ranges::for_each(std::views::iota(0, 3), [&](int i) {
             controls_[static_cast<size_t>(i)]->setBounds(eqArea.removeFromLeft(eqW));
@@ -281,12 +281,14 @@ void ControlGroup::resized() {
     const auto sideArea = getLocalBounds().withTrimmedLeft(143).reduced(5, 4);
     const auto area = stacked_ ? stackedArea : sideArea;
     const int rowCount = rows();
-    std::ranges::for_each(std::views::iota(0, static_cast<int>(controls_.size())), [&](int index) {
+    const int totalControls = static_cast<int>(controls_.size());
+    std::ranges::for_each(std::views::iota(0, totalControls), [&](int index) {
         const int col = index % columns_;
         const int row = index / columns_;
-        const int left = area.getX() + col * area.getWidth() / columns_;
+        const int itemsInRow = std::min(columns_, totalControls - row * columns_);
+        const int left = area.getX() + col * area.getWidth() / itemsInRow;
         const int top = area.getY() + row * area.getHeight() / rowCount;
-        const int right = area.getX() + (col + 1) * area.getWidth() / columns_;
+        const int right = area.getX() + (col + 1) * area.getWidth() / itemsInRow;
         const int bottom = area.getY() + (row + 1) * area.getHeight() / rowCount;
         controls_[static_cast<size_t>(index)]->setBounds(left, top, right - left, bottom - top);
     });
@@ -331,10 +333,10 @@ ControlPage::ControlPage(Apvts& state, Page page) : page_(page) {
             group("Roll & fill", 3, {{"roll_division","Subdivision"}, {"roll_hits","Hit count"}, {kPitchHumanize,"Pitch humanize"}});
             std::ranges::for_each(std::views::iota(size_t{0}, kLayerNames.size()), [&](size_t layer) {
                 if (layer < kLayerVelocity.size()) {
-                    group(kLayerNames[layer], 3, {{kLayerMute[layer],"Mute"}, {kLayerSolo[layer],"Solo"}, {kLayerVelocity[layer],"Velocity response"}});
+                    group(kLayerNames[layer], 2, {{kLayerMute[layer],"Mute"}, {kLayerSolo[layer],"Solo"}, {kLayerVelocity[layer],"Velocity response"}});
                     return;
                 }
-                group(kLayerNames[layer], 3, {{kLayerMute[layer],"Mute"}, {kLayerSolo[layer],"Solo"}});
+                group(kLayerNames[layer], 2, {{kLayerMute[layer],"Mute"}, {kLayerSolo[layer],"Solo"}});
             });
             break;
     }
@@ -358,13 +360,33 @@ void ControlPage::resized() {
     }
     // Every card keeps room for its heading and Lock button. Rows past the first share the rest.
     constexpr int minCardHeight = 80;
-    const int rows = std::accumulate(groups_.begin(), groups_.end(), 0,
-        [](int total, const std::unique_ptr<ControlGroup>& group) { return total + group->rows(); });
-    const int extraRowHeight = (area.getHeight() - (count - 1) * gap - count * minCardHeight) / (rows - count);
-    std::ranges::for_each(groups_, [&](const std::unique_ptr<ControlGroup>& group) {
-        group->setBounds(area.removeFromTop(minCardHeight + (group->rows() - 1) * extraRowHeight));
-        area.removeFromTop(gap);
-    });
+    const auto layoutStacked = [&](juce::Rectangle<int> target, size_t start, size_t end) {
+        const int n = static_cast<int>(end - start);
+        const int rows = std::accumulate(groups_.begin() + static_cast<ptrdiff_t>(start),
+                                         groups_.begin() + static_cast<ptrdiff_t>(end), 0,
+            [](int total, const std::unique_ptr<ControlGroup>& group) { return total + group->rows(); });
+        const int extraRowHeight = (target.getHeight() - (n - 1) * gap - n * minCardHeight) / std::max(1, rows - n);
+        for (size_t i = start; i < end; ++i) {
+            groups_[i]->setBounds(target.removeFromTop(minCardHeight + (groups_[i]->rows() - 1) * extraRowHeight));
+            target.removeFromTop(gap);
+        }
+    };
+    if (page_ == Page::midi && count == 7) {
+        constexpr int gridRowHeight = 116;
+        auto gridArea = area.removeFromBottom(gridRowHeight * 2 + gap);
+        area.removeFromBottom(gap);
+        layoutStacked(area, 0, 3);
+        const int colWidth = (gridArea.getWidth() - gap) / 2;
+        for (int row = 0; row < 2; ++row) {
+            auto rowArea = gridArea.removeFromTop(gridRowHeight);
+            groups_[static_cast<size_t>(3 + row * 2)]->setBounds(rowArea.removeFromLeft(colWidth));
+            rowArea.removeFromLeft(gap);
+            groups_[static_cast<size_t>(4 + row * 2)]->setBounds(rowArea);
+            gridArea.removeFromTop(gap);
+        }
+        return;
+    }
+    layoutStacked(area, 0, groups_.size());
 }
 
 namespace {
@@ -472,14 +494,14 @@ void Waveform::paint(juce::Graphics& g) {
     drawBars(g, plot, upper_, lower_, plot.getHeight() * 0.45f / maxPeak);
 
     // The bursts use their own scale, so a quiet flam stays visible.
-    const auto handsTitle = hands.removeFromTop(30);
+    const auto handsTitle = hands.removeFromTop(22);
     g.setColour(theme::ink);
     g.setFont(juce::FontOptions(16.0f, juce::Font::bold));
     g.drawText("Hands", handsTitle, juce::Justification::centredLeft);
     g.setColour(theme::apricot);
     g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
     g.drawText(handsCaption_, handsTitle, juce::Justification::centredRight);
-    hands.removeFromTop(3);
+    hands.removeFromTop(4);
     const auto handsRuler = hands.removeFromBottom(19);
     const auto handsPlot = hands.toFloat();
     g.setColour(theme::ink.withAlpha(0.06f));
@@ -566,11 +588,14 @@ void OutputMeter::paint(juce::Graphics& g) {
     const auto toX = [&](float db) {
         return bars.getX() + juce::jlimit(0.0f, 1.0f, (db - kMeterFloorDb) / (kMeterTopDb - kMeterFloorDb)) * bars.getWidth();
     };
-    const auto peakBar = bars.withY(bars.getY() + 5.0f).withHeight(11.0f);
-    const auto reductionBar = bars.withY(bars.getY() + 24.0f).withHeight(7.0f);
+    const auto peakBar = bars.withY(bars.getY() + 4.0f).withHeight(11.0f);
+    const auto reductionBar = bars.withY(bars.getY() + 20.0f).withHeight(11.0f);
     g.setColour(theme::edge);
     g.fillRoundedRectangle(peakBar, 3.0f);
+    g.setColour(theme::plot);
     g.fillRoundedRectangle(reductionBar, 3.0f);
+    g.setColour(theme::edge);
+    g.drawRoundedRectangle(reductionBar.reduced(0.5f), 3.0f, 1.0f);
     g.setColour(theme::violet);
     g.fillRoundedRectangle(peakBar.withRight(toX(levelDb_)), 3.0f);
     g.setColour(theme::secondary);

@@ -114,6 +114,7 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& instrument)
     for (size_t i = 0; i < tabs_.size(); ++i) {
         pages_[i] = std::make_unique<ui::ControlPage>(processor_.parameters, static_cast<ui::Page>(i));
         content_.addChildComponent(*pages_[i]);
+        tabs_[i].setComponentID("tab_" + juce::String(i));
         tabs_[i].setButtonText(names[i]);
         tabs_[i].setTitle(names[i]);
         tabs_[i].setTooltip("Open the " + juce::String(names[i]) + " page.");
@@ -248,8 +249,9 @@ void OpenClapperEditor::paint(juce::Graphics& g) {
     g.drawText("v" JucePlugin_VersionString, 248, 20, 48, 24, juce::Justification::centredLeft);
     g.setFont(juce::FontOptions(14.0f));
     g.drawText("Pitched clap synthesizer", 64, 47, 220, 22, juce::Justification::centredLeft);
-    g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
-    g.drawText("Preset", presets_.getX(), 10, 280, 18, juce::Justification::centredLeft);
+    g.setColour(theme::ink.withAlpha(0.85f));
+    g.setFont(juce::FontOptions(14.0f, juce::Font::bold));
+    g.drawText("Preset", presets_.getX(), 8, 280, 20, juce::Justification::centredLeft);
 
     const float beat = processor_.displayBeatPhase.load(std::memory_order_relaxed);
     const bool running = beat >= 0.0f;

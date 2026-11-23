@@ -199,16 +199,16 @@ void PresetBrowser::paint(juce::Graphics& g) {
     g.fillRoundedRectangle(getLocalBounds().toFloat(), 8.0f);
     g.setColour(palette_.edge);
     g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(0.5f), 8.0f, 1.0f);
-    g.setColour(palette_.secondary);
-    g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
-    g.drawText("Presets", 12, 8, 120, 18, juce::Justification::centredLeft);
+    g.setColour(palette_.ink);
+    g.setFont(juce::FontOptions(16.0f, juce::Font::bold));
+    g.drawText("Presets", 12, 10, 140, 22, juce::Justification::centredLeft);
 }
 
 void PresetBrowser::resized() {
-    auto area = getLocalBounds().reduced(10, 8);
-    area.removeFromTop(22);
+    auto area = getLocalBounds().reduced(12, 10);
+    area.removeFromTop(28);
     search_.setBounds(area.removeFromTop(32));
-    area.removeFromTop(6);
+    area.removeFromTop(8);
     auto footer = area.removeFromBottom(76);
     name_.setBounds(footer.removeFromTop(32));
     footer.removeFromTop(6);

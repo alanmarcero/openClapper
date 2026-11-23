@@ -75,15 +75,22 @@ void EdmLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int width
 
 void EdmLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& button,
                                            const juce::Colour& background, bool hover, bool down) {
-    auto fill = background;
+    const bool activeSelected = button.getToggleState() && background == theme::selected;
+    auto fill = activeSelected ? theme::selected.brighter(0.22f) : background;
     if (hover || down) fill = fill.interpolatedWith(theme::violet, down ? 0.23f : 0.10f);
     const float alpha = button.isEnabled() ? 1.0f : theme::dimmedAlpha;
     const auto bounds = button.getLocalBounds().toFloat().reduced(0.5f);
     g.setColour(fill.withMultipliedAlpha(alpha));
     g.fillRoundedRectangle(bounds, 6);
-    const auto edge = theme::edge.withAlpha(0.75f * alpha);
-    g.setColour(button.hasKeyboardFocus(false) ? theme::violet : edge);
-    g.drawRoundedRectangle(bounds, 6, 1);
+    const auto borderColour = button.hasKeyboardFocus(false) ? theme::violet
+                            : activeSelected               ? theme::violet.withAlpha(0.85f * alpha)
+                                                           : theme::edge.withAlpha(0.75f * alpha);
+    g.setColour(borderColour);
+    g.drawRoundedRectangle(bounds, 6, activeSelected ? 1.5f : 1.0f);
+    if (activeSelected && button.getComponentID().startsWith("tab_")) {
+        g.setColour(theme::violet.withMultipliedAlpha(alpha));
+        g.fillRoundedRectangle(bounds.getX() + 6.0f, bounds.getBottom() - 3.0f, bounds.getWidth() - 12.0f, 2.5f, 1.25f);
+    }
 }
 
 void EdmLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool down, int buttonX, int buttonY,
