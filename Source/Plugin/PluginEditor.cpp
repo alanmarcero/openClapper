@@ -2,6 +2,7 @@
 #include "Presets.h"
 #include "BinaryData.h"
 #include "Theme.h"
+#include "suite/FamilyLayout.h"
 
 using namespace openclapper;
 
@@ -9,7 +10,7 @@ namespace {
 constexpr int kHeaderHeight = 88;
 constexpr int kSuiteHeight = 44;
 constexpr int kNavHeight = 61;
-constexpr int kDesignWidth = 1080;
+constexpr int kDesignWidth = suite::kFamilyDesignWidth;
 constexpr int kDesignHeight = 868;
 constexpr float kMinScale = 0.75f;
 constexpr float kMaxScale = 1.5f;

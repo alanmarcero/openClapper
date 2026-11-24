@@ -336,7 +336,7 @@ ControlPage::ControlPage(Apvts& state, Page page) : page_(page) {
         case Page::midi:
             group("Note envelope", 3, {{"amp_enabled",""}, {"amp_attack","Attack"}, {"amp_decay","Decay"}, {"amp_sustain","Sustain"}, {"amp_release","Release"}});
             group("Trigger zone", 3, {{"key_low","Lowest note"}, {"key_high","Highest note"}, {"velocity_low","Min velocity"}, {"velocity_high","Max velocity"}, {"choke_group","Choke group"}});
-            group("Roll & fill", 3, {{"roll_division","Subdivision"}, {"roll_hits","Hit count"}, {kPitchHumanize,"Pitch humanize"}});
+            group("Roll & fill", 3, {{"roll_division","Subdivision"}, {"roll_hits","Hit count"}, {kPitchHumanize,"Pitch humanize"}, {kKeyTracking,"Key tracking"}});
             std::ranges::for_each(std::views::iota(size_t{0}, kLayerNames.size()), [&](size_t layer) {
                 if (layer < kLayerVelocity.size()) {
                     group(kLayerNames[layer], 2, {{kLayerMute[layer],"Mute"}, {kLayerSolo[layer],"Solo"}, {kLayerVelocity[layer],"Velocity response"}});

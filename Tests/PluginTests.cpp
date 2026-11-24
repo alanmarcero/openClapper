@@ -7,11 +7,14 @@
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <cmath>
 #include <numeric>
 #include <ranges>
 #include <utility>
 #include <vector>
+
+using Catch::Matchers::WithinAbs;
 
 namespace {
 template <typename Widget, typename Predicate>
@@ -107,7 +110,7 @@ TEST_CASE("Every float parameter reads back the text it shows", "[plugin][parame
     std::ranges::for_each(processor.getParameters(), [&](juce::AudioProcessorParameter* parameter) {
         if (auto* ranged = dynamic_cast<juce::AudioParameterFloat*>(parameter)) floats.push_back(ranged);
     });
-    REQUIRE(floats.size() == 60);
+    REQUIRE(floats.size() == 61);
     constexpr std::array positions{ 0.0f, 0.1f, 0.25f, 0.5f, 0.75f, 0.9f, 1.0f };
     std::vector<std::string> mismatches;
     std::ranges::for_each(floats, [&](juce::RangedAudioParameter* parameter) {
@@ -210,7 +213,7 @@ TEST_CASE("Slapback feedback, stereo doubler, and pitch humanize shape output", 
 TEST_CASE("Host program list matches the 56 factory claps in editor order", "[plugin]") {
     OpenClapperProcessor processor;
     const auto& bank = openclapper::presets::factoryPresets();
-    REQUIRE(processor.getNumPrograms() == 56);
+    REQUIRE(processor.getNumPrograms() == openclapper::presets::kFactoryProgramCount);
     REQUIRE(bank.size() == 56);
     for (int index = 0; index < processor.getNumPrograms(); ++index) {
         INFO(index);
@@ -1320,7 +1323,7 @@ TEST_CASE("Every padlock has a spoken name for its control and toggles from the 
         });
     };
     collect(collect, *editor);
-    REQUIRE(badges.size() == 100);
+    REQUIRE(badges.size() == 101);
 
     // A padlock in a Control repeats the title of the control's slider, combo box or switch.
     std::vector<std::string> unnamed;
@@ -1379,7 +1382,7 @@ TEST_CASE("Every RangedAudioParameter can be locked, persists in state, and surv
         REQUIRE(ranged != nullptr);
         preset5Values.emplace_back(ranged->getParameterID(), ranged->getValue());
     }
-    REQUIRE(preset5Values.size() == 84);
+    REQUIRE(preset5Values.size() == 85);
 
     OpenClapperProcessor processor;
     std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
@@ -1426,4 +1429,29 @@ TEST_CASE("Every RangedAudioParameter can be locked, persists in state, and surv
         REQUIRE(ranged != nullptr);
         CHECK(ranged->getValue() == Catch::Approx(targetNorm).margin(1e-4f));
     }
+}
+
+TEST_CASE("EQ bands snap to chromatic notes across two octaves", "[plugin][eq][notes]") {
+    namespace params = openclapper::params;
+    OpenClapperProcessor processor;
+
+    auto checkBand = [&](const char* id, int minMidi, int maxMidi, const char* lowName, const char* midName,
+                         const char* highName, const char* parsedName) {
+        auto* param = processor.parameters.getParameter(id);
+        REQUIRE(param != nullptr);
+        REQUIRE(maxMidi - minMidi == 24);
+        REQUIRE(param->getText(0.0f, 16) == lowName);
+        REQUIRE(param->getText(0.5f, 16) == midName);
+        REQUIRE(param->getText(1.0f, 16) == highName);
+
+        const float parsedNorm = param->getValueForText(parsedName);
+        REQUIRE(param->getText(parsedNorm, 16) == parsedName);
+        const float hz = param->convertFrom0to1(parsedNorm);
+        const float snapped = param->getNormalisableRange().snapToLegalValue(hz * 1.01f);
+        REQUIRE_THAT(snapped, WithinAbs(hz, 0.01f));
+    };
+
+    checkBand(params::kEqLowFreq, params::kEqLowMinMidi, params::kEqLowMaxMidi, "A0", "A1", "A2", "G#1");
+    checkBand(params::kEqMidFreq, params::kEqMidMinMidi, params::kEqMidMaxMidi, "A3", "A4", "A5", "G#4");
+    checkBand(params::kEqHighFreq, params::kEqHighMinMidi, params::kEqHighMaxMidi, "A6", "A7", "A8", "G#7");
 }

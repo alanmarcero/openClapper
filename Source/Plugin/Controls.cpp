@@ -1,4 +1,5 @@
 #include "Controls.h"
+#include "Parameters.h"
 #include "PluginProcessor.h"
 #include "Theme.h"
 
@@ -281,7 +282,11 @@ void DualEqKnob::updateFreqReadout() {
     const float norm = freqParam->convertTo0to1(freqHz_);
     const auto note = freqParam->getText(norm, 0);
     freqReadout_.setText(note, juce::dontSendNotification);
-    const auto tip = title_.getText() + " frequency: " + note + " (" + juce::String(freqHz_, 1) + " Hz)";
+    const char* range = "A0 to A2";
+    if (freqId_ == "eq_mid_freq") range = "A3 to A5";
+    if (freqId_ == "eq_high_freq") range = "A6 to A8";
+    const auto tip = title_.getText() + " steps chromatic notes from " + range
+        + ". Now " + note + " (" + juce::String(freqHz_, 1) + " Hz)";
     setTooltip(tip);
     freqReadout_.setTooltip(tip + " — double-click to type a note or Hz");
 }
@@ -338,14 +343,18 @@ void DualEqKnob::paint(juce::Graphics& g) {
     g.setColour(ringColour);
     g.strokePath(value, juce::PathStrokeType(3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-    // Mark root, +1 octave, and +2 octave positions on the outer note ring.
+    const auto [minMidi, maxMidi] = params::eqBandMidiLimits(freqId_);
+    const int semitoneSpan = std::max(1, maxMidi - minMidi);
     g.setColour(theme::secondary.withAlpha(0.55f));
-    for (const float markNorm : { 0.0f, 0.5f, 1.0f }) {
+    for (int step = 0; step <= semitoneSpan; ++step) {
+        const float markNorm = static_cast<float>(step) / static_cast<float>(semitoneSpan);
         const float markAngle = startAngle + markNorm * (endAngle - startAngle);
-        const float innerTick = outerR - 3.0f;
-        const float outerTick = outerR + 3.0f;
+        const bool octaveRoot = ((minMidi + step) % 12) == 9;
+        const float innerTick = outerR - (octaveRoot ? 4.0f : 2.0f);
+        const float outerTick = outerR + (octaveRoot ? 4.0f : 2.0f);
         g.drawLine(centre.x + innerTick * std::sin(markAngle), centre.y - innerTick * std::cos(markAngle),
-                   centre.x + outerTick * std::sin(markAngle), centre.y - outerTick * std::cos(markAngle), 1.1f);
+                   centre.x + outerTick * std::sin(markAngle), centre.y - outerTick * std::cos(markAngle),
+                   octaveRoot ? 1.2f : 0.75f);
     }
 
     const float dotX = centre.x + outerR * std::sin(angle);
@@ -440,9 +449,10 @@ void DualEqKnob::mouseWheelMove(const juce::MouseEvent& event, const juce::Mouse
     if (!hitsOuterRing(event.position) || freqAttachment_ == nullptr) return;
     auto* param = state_.getParameter(freqId_);
     if (param == nullptr || wheel.deltaY == 0.0f) return;
-    constexpr float kSemitoneStep = 1.0f / 24.0f;
+    const auto [minMidi, maxMidi] = params::eqBandMidiLimits(freqId_);
+    const float semitoneStep = 1.0f / static_cast<float>(std::max(1, maxMidi - minMidi));
     const float direction = wheel.deltaY > 0.0f ? 1.0f : -1.0f;
-    const float nextNorm = std::clamp(param->convertTo0to1(freqHz_) + direction * kSemitoneStep, 0.0f, 1.0f);
+    const float nextNorm = std::clamp(param->convertTo0to1(freqHz_) + direction * semitoneStep, 0.0f, 1.0f);
     const float nextHz = param->convertFrom0to1(nextNorm);
     freqHz_ = nextHz;
     freqAttachment_->setValueAsCompleteGesture(nextHz);

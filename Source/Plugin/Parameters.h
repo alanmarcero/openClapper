@@ -1,7 +1,9 @@
 #pragma once
 
 #include "ClapEngine.h"
+#include "../suite/EqNotes.h"
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <utility>
 
 namespace openclapper::params {
 
@@ -114,12 +116,15 @@ juce::String formatSigned(float value, const juce::String& unit);
 // "4.5 ms" below 10 ms, "160 ms" below 1 s, then "1.20 s".
 juce::String formatMilliseconds(float ms);
 
-inline constexpr int kEqLowMinMidi = 28;   // E1 (41.20 Hz)
-inline constexpr int kEqLowMaxMidi = 52;   // E3 (164.81 Hz)
-inline constexpr int kEqMidMinMidi = 71;   // B4 (493.88 Hz)
-inline constexpr int kEqMidMaxMidi = 95;   // B6 (1975.53 Hz)
-inline constexpr int kEqHighMinMidi = 106; // A#7 (3729.31 Hz)
-inline constexpr int kEqHighMaxMidi = 130; // A#9 (14917.24 Hz)
+inline constexpr int kEqLowMinMidi = suite::eq::kLowMinMidi;
+inline constexpr int kEqLowMaxMidi = suite::eq::kLowMaxMidi;
+inline constexpr int kEqMidMinMidi = suite::eq::kMidMinMidi;
+inline constexpr int kEqMidMaxMidi = suite::eq::kMidMaxMidi;
+inline constexpr int kEqHighMinMidi = suite::eq::kHighMinMidi;
+inline constexpr int kEqHighMaxMidi = suite::eq::kHighMaxMidi;
+inline constexpr const char* kKeyTracking = "key_tracking";
+
+[[nodiscard]] std::pair<int, int> eqBandMidiLimits(const juce::String& freqParamId) noexcept;
 
 float eqNoteToHz(int midiNote) noexcept;
 int eqHzToNearestMidi(float hz, int minMidi, int maxMidi) noexcept;

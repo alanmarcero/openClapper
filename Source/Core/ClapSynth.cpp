@@ -412,7 +412,11 @@ void ClapSynth::trigger(const ClapSynthSettings& settings, int midiNote, float v
     const float spreadSamples = flamSpacingMs(burstCount_, settings.preClapSpreadMs) * 0.001f * static_cast<float>(sampleRate_);
     const int maxOffsetSamples = std::max(0, static_cast<int>(std::lround(kMaxTimingOffsetMs * 0.001 * sampleRate_)));
 
-    const float baseFormantHz = std::clamp(1350.0f + midiNoteToHz(midiNote_) * 0.35f, 1000.0f, 2400.0f);
+    const float track = std::clamp(settings.keyTracking, 0.0f, 1.0f);
+    const float fromRoot = midiNoteToHz(midiNote_) / midiNoteToHz(69);
+    keyTrackingRatio_ = std::pow(std::max(fromRoot, 1.0e-4f), track);
+    const float trackedHz = midiNoteToHz(69) * keyTrackingRatio_;
+    const float baseFormantHz = std::clamp(1350.0f + trackedHz * 0.35f, 1000.0f, 2400.0f);
     std::ranges::for_each(std::views::iota(0, burstCount_), [&](int i) {
         const auto idx = static_cast<size_t>(i);
         const float jitter = std::clamp(settings.preClapJitter, 0.0f, 1.0f);
@@ -699,7 +703,7 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
             * std::exp(-std::max(0.0f, mainAge) / pitchDecaySamples);
         const float pitchRatio = std::exp2(pitchSemitones / 12.0f);
         const float nyquistGuard = static_cast<float>(sampleRate_) * 0.48f;
-        const float fundamental = std::clamp(midiNoteToHz(midiNote_) * pitchHumanizeRatio_ * pitchRatio,
+        const float fundamental = std::clamp(midiNoteToHz(69) * keyTrackingRatio_ * pitchHumanizeRatio_ * pitchRatio,
                                              20.0f, nyquistGuard);
         const float toneQ = std::clamp(settings.toneQ, 0.5f, 12.0f);
         const float detuneL = std::exp2(-8.5f / 1200.0f);
