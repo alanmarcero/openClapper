@@ -333,7 +333,7 @@ TEST_CASE("Dragging a hit writes a WAV of the current sound", "[plugin][suite]")
     directory.deleteRecursively();
 }
 
-TEST_CASE("Editor scales uniformly from 75% to 150% and remembers its size", "[plugin][suite][gui]") {
+TEST_CASE("Editor scales uniformly from 70% to 200% and remembers its size", "[plugin][suite][gui]") {
     OpenClapperProcessor processor;
     std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
     REQUIRE(editor->getWidth() == 1080);
@@ -341,25 +341,25 @@ TEST_CASE("Editor scales uniformly from 75% to 150% and remembers its size", "[p
     auto* constrainer = editor->getConstrainer();
     REQUIRE(constrainer != nullptr);
     REQUIRE(constrainer->getFixedAspectRatio() == Catch::Approx(1080.0 / 868.0));
-    REQUIRE(constrainer->getMinimumWidth() == 810);
-    REQUIRE(constrainer->getMinimumHeight() == 651);
-    REQUIRE(constrainer->getMaximumWidth() == 1620);
-    REQUIRE(constrainer->getMaximumHeight() == 1302);
+    REQUIRE(constrainer->getMinimumWidth() == 756);
+    REQUIRE(constrainer->getMinimumHeight() == 608);
+    REQUIRE(constrainer->getMaximumWidth() == 2160);
+    REQUIRE(constrainer->getMaximumHeight() == 1736);
     REQUIRE(editor->isResizable());
 
     auto* audition = findVisible<juce::TextButton>(*editor, [](const juce::TextButton& button) {
         return button.getButtonText() == "Audition A4";
     });
     REQUIRE(audition != nullptr);
-    editor->setBoundsConstrained({ 0, 0, 2000, 1302 });
+    editor->setBoundsConstrained({ 0, 0, 1620, 1302 });
     REQUIRE(editor->getWidth() == 1620);
     REQUIRE(editor->getHeight() == 1302);
     const auto scaled = editor->getLocalArea(audition, audition->getLocalBounds());
     REQUIRE(scaled.getWidth() == audition->getWidth() * 3 / 2);
     REQUIRE(scaled.getHeight() == audition->getHeight() * 3 / 2);
     editor->setBoundsConstrained({ 0, 0, 400, 300 });
-    REQUIRE(editor->getWidth() == 810);
-    REQUIRE(editor->getHeight() == 651);
+    REQUIRE(editor->getWidth() == 756);
+    REQUIRE(editor->getHeight() == 608);
     editor->setBoundsConstrained({ 0, 0, 1296, 1042 });
     REQUIRE(processor.editorWidth() == 1296);
     REQUIRE(processor.editorHeight() == 1042);

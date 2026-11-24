@@ -22,7 +22,6 @@ void ClapEngine::prepare(double sampleRate) {
         voice.synth.prepare(sampleRate);
     }
     reverseSynth_.prepare(sampleRate);
-    slapback_.prepare(sampleRate);
     reverb_.prepare(sampleRate);
     distL_.reset();
     distR_.reset();
@@ -33,13 +32,10 @@ void ClapEngine::prepare(double sampleRate) {
     const int maxReverseSamples = static_cast<int>(sampleRate * 2.0);
     reverseBufferL_.assign(maxReverseSamples, 0.0f);
     reverseBufferR_.assign(maxReverseSamples, 0.0f);
-    const size_t maxDoublerSamples = std::max<size_t>(32, static_cast<size_t>(sampleRate * 0.045));
-    doublerBufferL_.assign(maxDoublerSamples, 0.0f);
-    doublerBufferR_.assign(maxDoublerSamples, 0.0f);
-    doublerApL1_.prepare(std::max<size_t>(4, static_cast<size_t>(sampleRate * 0.00053)), 0.62f, 0);
-    doublerApL2_.prepare(std::max<size_t>(4, static_cast<size_t>(sampleRate * 0.00089)), -0.58f, 0);
-    doublerApR1_.prepare(std::max<size_t>(4, static_cast<size_t>(sampleRate * 0.00061)), 0.62f, 0);
-    doublerApR2_.prepare(std::max<size_t>(4, static_cast<size_t>(sampleRate * 0.00097)), -0.58f, 0);
+    const size_t maxEchoSamples = std::max<size_t>(16, static_cast<size_t>(sampleRate * 2.0));
+    echoBufferL_.assign(maxEchoSamples, 0.0f);
+    echoBufferR_.assign(maxEchoSamples, 0.0f);
+    echoWriteIndex_ = 0;
     reset();
 }
 
@@ -54,28 +50,15 @@ void ClapEngine::reset() noexcept {
     pendingTrigger_ = false;
     voiceOrderCounter_ = 0;
     lastTriggeredVoice_ = 0;
-    slapback_.reset();
     reverb_.reset();
     distL_.reset();
     distR_.reset();
     eq_.reset();
     compressor_.reset();
     limiter_.reset();
-    std::fill(doublerBufferL_.begin(), doublerBufferL_.end(), 0.0f);
-    std::fill(doublerBufferR_.begin(), doublerBufferR_.end(), 0.0f);
-    doublerApL1_.reset();
-    doublerApL2_.reset();
-    doublerApR1_.reset();
-    doublerApR2_.reset();
-    doublerTargetSamplesL_ = sampleRate_ * 0.0016;
-    doublerTargetSamplesR_ = sampleRate_ * 0.0042;
-    doublerTapSamplesL_ = doublerTargetSamplesL_;
-    doublerTapSamplesR_ = doublerTargetSamplesR_;
-    doublerPrng_ = 0x51C0FFEEu;
-    doublerTapInitialized_ = false;
-    doublerWriteIndex_ = 0;
-    doublerLpL_ = 0.0f;
-    doublerLpR_ = 0.0f;
+    std::fill(echoBufferL_.begin(), echoBufferL_.end(), 0.0f);
+    std::fill(echoBufferR_.begin(), echoBufferR_.end(), 0.0f);
+    echoWriteIndex_ = 0;
     componentDelay_ = {};
     componentDelayPos_ = 0;
     reversePlayHead_ = -1;
@@ -101,28 +84,6 @@ void ClapEngine::triggerClap(
     triggerSerial_++;
     currentClapProgress_ = 0.0f;
     reverb_.triggerGate();
-
-    // Randomize stereo Haas taps inside 0.8-4.5 ms per MIDI trigger so mono sum never has a static comb notch.
-    const auto nextDoublerRand = [&]() noexcept {
-        uint32_t x = doublerPrng_;
-        x ^= x << 13;
-        x ^= x >> 17;
-        x ^= x << 5;
-        doublerPrng_ = x;
-        return static_cast<double>(x & 0x00FFFFFFu) / static_cast<double>(0x01000000u);
-    };
-    const double shortMs = 0.8 + 1.55 * nextDoublerRand();
-    const double longMs = 2.55 + 1.95 * nextDoublerRand();
-    const bool swapSides = (doublerPrng_ & 1u) != 0u;
-    const double leftMs = swapSides ? longMs : shortMs;
-    const double rightMs = swapSides ? shortMs : longMs;
-    doublerTargetSamplesL_ = sampleRate_ * (leftMs * 0.001);
-    doublerTargetSamplesR_ = sampleRate_ * (rightMs * 0.001);
-    if (!doublerTapInitialized_) {
-        doublerTapSamplesL_ = doublerTargetSamplesL_;
-        doublerTapSamplesR_ = doublerTargetSamplesR_;
-        doublerTapInitialized_ = true;
-    }
 
     if (settings.chokeGroup > 0) {
         for (auto& active : voices_)
@@ -254,22 +215,15 @@ void ClapEngine::process(
             reversePlayHead_ = -1;
             reverseDuration_ = 0;
             isReversing_ = false;
-            slapback_.reset();
+            std::fill(echoBufferL_.begin(), echoBufferL_.end(), 0.0f);
+            std::fill(echoBufferR_.begin(), echoBufferR_.end(), 0.0f);
+            echoWriteIndex_ = 0;
             reverb_.reset();
             distL_.reset();
             distR_.reset();
             eq_.reset();
             compressor_.reset();
             limiter_.reset();
-            std::fill(doublerBufferL_.begin(), doublerBufferL_.end(), 0.0f);
-            std::fill(doublerBufferR_.begin(), doublerBufferR_.end(), 0.0f);
-            doublerApL1_.reset();
-            doublerApL2_.reset();
-            doublerApR1_.reset();
-            doublerApR2_.reset();
-            doublerLpL_ = 0.0f;
-            doublerLpR_ = 0.0f;
-            doublerTapInitialized_ = false;
         } else if (cc.controller == 121) {
             ccVolume_ = 1.0f;
             ccBrightness_ = 1.0f;
@@ -364,41 +318,21 @@ void ClapEngine::process(
             isReversing_ = false;
         }
 
-        // 3. Shared effects processing
-        const float doubler = std::clamp(settings.effects.doublerAmount, 0.0f, 1.0f);
-        if (!doublerBufferL_.empty() && doubler > 0.001f) {
-            const size_t bufSize = doublerBufferL_.size();
-            const double maxTap = static_cast<double>(bufSize - 4);
-            const double glide = 1.0 - std::exp(-1.0 / std::max(1.0, 0.00025 * sampleRate_));
-            doublerTapSamplesL_ += glide * (std::clamp(doublerTargetSamplesL_, 2.0, maxTap) - doublerTapSamplesL_);
-            doublerTapSamplesR_ += glide * (std::clamp(doublerTargetSamplesR_, 2.0, maxTap) - doublerTapSamplesR_);
-
-            doublerBufferL_[doublerWriteIndex_] = sL;
-            doublerBufferR_[doublerWriteIndex_] = sR;
-
-            // Per-hit randomized Haas taps fed through 2-stage dispersive allpasses prevent static mono comb notches.
-            const float delayedL = readHermiteCircular(doublerBufferL_, doublerTapSamplesL_, doublerWriteIndex_);
-            const float delayedR = readHermiteCircular(doublerBufferR_, doublerTapSamplesR_, doublerWriteIndex_);
-            const float dispL = doublerApL2_.process(doublerApL1_.process(delayedL));
-            const float dispR = doublerApR2_.process(doublerApR1_.process(delayedR));
-            const float lp = 1.0f - std::exp(-2.0f * std::numbers::pi_v<float> * 2600.0f / static_cast<float>(sampleRate_));
-            doublerLpL_ += lp * (dispL - doublerLpL_);
-            doublerLpR_ += lp * (dispR - doublerLpR_);
-            sL += doublerLpR_ * doubler * 0.28f;
-            sR += doublerLpL_ * doubler * 0.28f;
-            doublerWriteIndex_ = (doublerWriteIndex_ + 1) % bufSize;
-        }
-
-        const bool delayedTrigger = slapback_.process(
-            sL,
-            sR,
-            settings.effects.slapbackDivision,
-            settings.effects.slapbackMix,
-            bpm,
-            triggerAtSample || mainHitAtSample,
-            settings.effects.slapbackFeedback);
-        if (delayedTrigger) {
-            reverb_.triggerGate();
+        // 3. Shared effects processing. Dotted-eighth echo, same as the hat and the snare.
+        const float echoMix = std::clamp(settings.effects.echoMix, 0.0f, 1.0f);
+        if (!echoBufferL_.empty() && echoMix > 0.001f) {
+            const size_t bufSize = echoBufferL_.size();
+            const double safeBpm = std::clamp(std::isfinite(bpm) && bpm > 0.0 ? bpm : 138.0, 40.0, 260.0);
+            const size_t delaySamples = std::clamp<size_t>(
+                static_cast<size_t>(0.375 * 60.0 / safeBpm * sampleRate_), 1, bufSize - 1);
+            const size_t readIdx = (echoWriteIndex_ + bufSize - delaySamples) % bufSize;
+            const float delayedL = echoBufferL_[readIdx];
+            const float delayedR = echoBufferR_[readIdx];
+            echoBufferL_[echoWriteIndex_] = std::tanh(sL + delayedR * 0.35f);
+            echoBufferR_[echoWriteIndex_] = std::tanh(sR + delayedL * 0.35f);
+            echoWriteIndex_ = (echoWriteIndex_ + 1) % bufSize;
+            sL += delayedL * echoMix * 0.65f;
+            sR += delayedR * echoMix * 0.65f;
         }
 
         const float reverbMix = std::clamp(settings.effects.reverbMix, 0.0f, 1.0f);

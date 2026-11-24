@@ -39,7 +39,7 @@ In v3.3, each flam contact takes 0.35 ms to rise, and successive contacts build 
 
 ## Play as a synthesizer
 
-Open **MIDI & envelope** and select **Hold notes**. The body and noise sustain while the key is down and release when the matching note and channel send note-off. Set attack and decay up to 10 seconds, sustain from 0% to 100%, and release up to 20 seconds. Switch to **One-shot** to use the individual layer decays again. The audition button automatically releases held sounds.
+Open **MIDI** and select **Hold notes**. The body and noise sustain while the key is down and release when the matching note and channel send note-off. Set attack and decay up to 10 seconds, sustain from 0% to 100%, and release up to 20 seconds. Switch to **One-shot** to use the individual layer decays again. The audition button automatically releases held sounds.
 
 Set the inclusive MIDI key and velocity ranges. Choke group 0 allows overlaps. Groups 1–16 stop older voices in the same group. Audition bypasses the key and velocity ranges. Solo or mute each layer independently. Body, noise, and transient have adjustable velocity response from 0% (constant) through 100% (linear) to 200% (squared). Pre-claps follow velocity.
 
@@ -49,7 +49,7 @@ Set the inclusive MIDI key and velocity ranges. Choke group 0 allows overlaps. G
 
 ## Add effects and route audio
 
-On **Effects**, adjust drive, doubler, compression, gated stereo reverb, one-repeat slapback, and reverse swell. Output EQ, stereo width, output gain, and limiting live on the **Clap** page under **Output**. Slapback follows host tempo and uses 138 BPM if the host supplies none. In hosts with multi-output support, route the body, noise, transient, and pre-clap to separate stereo buses. Each bus includes its layer controls and master gain, before shared effects and stereo width.
+On **Effects**, adjust drive, compression, gated stereo reverb, dotted-eighth echo, and reverse swell. Output EQ, stereo width, output gain, and limiting live on the **Clap** page under **Output**. Echo follows host tempo and uses 138 BPM if the host supplies none. **Lock in** renders the current hit and plays that recording until you turn it off. In hosts with multi-output support, route the body, noise, transient, and pre-clap to separate stereo buses. Each bus includes its layer controls and master gain, before shared effects and stereo width.
 
 ![Effects page showing drive, compressor, gated room, echo, reverse, and output controls](assets/openClapper-effects.png)
 

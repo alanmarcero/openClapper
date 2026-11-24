@@ -19,6 +19,7 @@ OpenClapperProcessor::OpenClapperProcessor()
         [this](const juce::ValueTree& tree) { applySoundTree(tree, ApplyKind::undo); });
     undo_.attach(*this);
     presetParameterIndex_ = parameters.getParameter(openclapper::params::kPreset)->getParameterIndex();
+    lockParameterIndex_ = parameters.getParameter(openclapper::params::kLockIn)->getParameterIndex();
     std::ranges::for_each(getParameters(), [this](juce::AudioProcessorParameter* parameter) { parameter->addListener(this); });
     undo_.suspend();
     selectPreset(0);
@@ -29,11 +30,24 @@ OpenClapperProcessor::OpenClapperProcessor()
 }
 
 OpenClapperProcessor::~OpenClapperProcessor() {
+    cancelPendingUpdate();
     std::ranges::for_each(getParameters(), [this](juce::AudioProcessorParameter* parameter) { parameter->removeListener(this); });
 }
 
 // Loads change parameters too. They hold loading_ above 0, so only edits set the flag.
-void OpenClapperProcessor::parameterValueChanged(int index, float) {
+void OpenClapperProcessor::parameterValueChanged(int index, float newValue) {
+    if (index == lockParameterIndex_) {
+        if (loading_.load() != 0) return;
+        if (newValue > 0.5f) {
+            clearLockRequested_.store(false);
+            lockRenderPending_.store(true);
+        } else {
+            lockRenderPending_.store(false);
+            clearLockRequested_.store(true);
+        }
+        triggerAsyncUpdate();
+        return;
+    }
     if (index != presetParameterIndex_ && loading_.load() == 0) presetEdited_ = true;
 }
 
@@ -66,9 +80,7 @@ double OpenClapperProcessor::getTailLengthSeconds() const {
         ? (value("amp_attack") + value("amp_decay") + value("amp_release")) / 1000.0 : 0.0;
     const double voiceTail = std::max(std::max(burstTailMs, mainTailMs) / 1000.0, adsrTail);
 
-    const bool usesSlapback = value(openclapper::params::kSlapbackDivision) > 0.0f
-        && value(openclapper::params::kSlapbackMix) > 0.0f;
-    const double delayTail = usesSlapback ? 4.0 * (1.0 + value(openclapper::params::kSlapbackFeedback) * 3.0) : 0.0;
+    const double delayTail = value(openclapper::params::kEchoMix) > 0.001f ? 1.2 : 0.0;
     const double reverseTail = value(openclapper::params::kReverseMode) > 0.0f
         && value(openclapper::params::kReverseMix) > 0.0f
         ? 2.0
@@ -138,6 +150,7 @@ void OpenClapperProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
     const auto settings = openclapper::params::readSettings(parameters);
     if (!std::isfinite(transport.bpm) || transport.bpm <= 0.0) transport.bpm = 138.0;
     displayBpm.store(static_cast<float>(transport.bpm), std::memory_order_relaxed);
+    if (playFrozen(buffer, midi, transport)) return;
     const double beatsPerSample = transport.bpm / (60.0 * getSampleRate());
     const auto eventTransport = [&](int offset) {
         auto position = transport;
@@ -334,12 +347,32 @@ void OpenClapperProcessor::applySoundTree(const juce::ValueTree& incoming, Apply
     ++loading_;
     auto state = incoming.createCopy();
     state.removeChild(state.getChildWithName("ABCompare"), nullptr);
+    juce::MemoryBlock wavBlock;
+    const auto wavText = state.getProperty("locked_wav").toString();
+    const bool hadWav = wavText.isNotEmpty() && wavBlock.fromBase64Encoding(wavText);
     state.removeProperty("locked_wav", nullptr);
     const int width = static_cast<int>(state.getProperty("editor_width", editorWidth_.load()));
     const int height = static_cast<int>(state.getProperty("editor_height", editorHeight_.load()));
     state.removeProperty("editor_width", nullptr);
     state.removeProperty("editor_height", nullptr);
     parameters.replaceState(state);
+    if (hadWav) {
+        auto* wavStream = new juce::MemoryInputStream(wavBlock, false);
+        juce::WavAudioFormat format;
+        if (auto reader = std::unique_ptr<juce::AudioFormatReader>(format.createReaderFor(wavStream, true))) {
+            juce::AudioBuffer<float> frozen(2, static_cast<int>(reader->lengthInSamples));
+            reader->read(&frozen, 0, frozen.getNumSamples(), 0, true, true);
+            storeFreeze(std::move(frozen), reader->sampleRate);
+            lockRenderPending_.store(false);
+            clearLockRequested_.store(false);
+        }
+    } else if (parameters.getRawParameterValue(openclapper::params::kLockIn)->load() > 0.5f) {
+        clearFreeze();
+        lockRenderPending_.store(true);
+    } else {
+        clearFreeze();
+        lockRenderPending_.store(false);
+    }
 
     const int bank = static_cast<int>(state.getProperty("clap_bank", 0));
     if (bank < 3 && !state.getChildWithProperty("id", openclapper::params::kImpactPunch).isValid()) {
@@ -381,11 +414,31 @@ void OpenClapperProcessor::applySoundTree(const juce::ValueTree& incoming, Apply
     }
     --loading_;
     undo_.resume();
+    serviceLockIn();
 }
 
 void OpenClapperProcessor::getStateInformation(juce::MemoryBlock& destData) {
+    serviceLockIn();
     if (ab_.hasSlots()) ab_.store(ab_.editingB(), captureSoundState());
     auto state = captureSoundState();
+    std::shared_ptr<const Freeze> frozen;
+    {
+        std::lock_guard<std::mutex> guard(freezeMutex_);
+        frozen = freeze_;
+    }
+    if (frozen != nullptr && frozen->audio.getNumSamples() > 0) {
+        juce::MemoryBlock wav;
+        std::unique_ptr<juce::OutputStream> stream(new juce::MemoryOutputStream(wav, false));
+        juce::WavAudioFormat format;
+        auto writer = format.createWriterFor(stream, juce::AudioFormatWriterOptions{}
+            .withSampleRate(frozen->sampleRate)
+            .withNumChannels(2)
+            .withBitsPerSample(24));
+        if (writer != nullptr && writer->writeFromAudioSampleBuffer(frozen->audio, 0, frozen->audio.getNumSamples())) {
+            writer.reset();
+            state.setProperty("locked_wav", wav.toBase64Encoding(), nullptr);
+        }
+    }
     if (editorWidth_.load() > 0) state.setProperty("editor_width", editorWidth_.load(), nullptr);
     if (editorHeight_.load() > 0) state.setProperty("editor_height", editorHeight_.load(), nullptr);
     ab_.write(state);
@@ -491,10 +544,45 @@ bool OpenClapperProcessor::deleteUserPreset(const juce::String& name) {
     return true;
 }
 
-juce::File OpenClapperProcessor::renderHitWav(const juce::File& destination) const {
-    if (destination == juce::File()) return {};
-    destination.getParentDirectory().createDirectory();
-    constexpr double sampleRate = 48000.0;
+void OpenClapperProcessor::handleAsyncUpdate() {
+    serviceLockIn();
+}
+
+void OpenClapperProcessor::serviceLockIn() {
+    if (clearLockRequested_.exchange(false)) clearFreeze();
+    const auto* lock = parameters.getRawParameterValue(openclapper::params::kLockIn);
+    if (lock == nullptr || lock->load() <= 0.5f) {
+        lockRenderPending_.store(false);
+        clearFreeze();
+        return;
+    }
+    if (!lockRenderPending_.exchange(false)) return;
+    double sampleRate = 48000.0;
+    storeFreeze(renderHitBuffer(sampleRate), sampleRate);
+}
+
+bool OpenClapperProcessor::isClapLockedIn() const noexcept {
+    std::lock_guard<std::mutex> guard(freezeMutex_);
+    return freeze_ != nullptr && freeze_->audio.getNumSamples() > 0;
+}
+
+void OpenClapperProcessor::storeFreeze(juce::AudioBuffer<float> buffer, double sampleRate) {
+    auto freeze = std::make_shared<Freeze>();
+    freeze->audio = std::move(buffer);
+    freeze->sampleRate = sampleRate;
+    std::lock_guard<std::mutex> guard(freezeMutex_);
+    freeze_ = std::move(freeze);
+    freezePlayhead_.store(-1.0);
+}
+
+void OpenClapperProcessor::clearFreeze() {
+    std::lock_guard<std::mutex> guard(freezeMutex_);
+    freeze_.reset();
+    freezePlayhead_.store(-1.0);
+}
+
+juce::AudioBuffer<float> OpenClapperProcessor::renderHitBuffer(double& sampleRate) const {
+    sampleRate = 48000.0;
     const int samples = std::clamp(
         static_cast<int>(std::ceil((getTailLengthSeconds() + 0.2) * sampleRate)),
         static_cast<int>(sampleRate * 0.4),
@@ -528,16 +616,103 @@ juce::File OpenClapperProcessor::renderHitWav(const juce::File& destination) con
         const float gain = static_cast<float>(fade - index) / static_cast<float>(fade);
         buffer.applyGain(samples - fade + index, 1, gain);
     }
+    return buffer;
+}
 
+bool OpenClapperProcessor::writeWavFile(const juce::File& destination, const juce::AudioBuffer<float>& buffer, double sampleRate) const {
+    if (destination == juce::File()) return false;
+    destination.getParentDirectory().createDirectory();
     juce::WavAudioFormat format;
     std::unique_ptr<juce::OutputStream> stream(destination.createOutputStream());
-    if (stream == nullptr) return {};
+    if (stream == nullptr) return false;
     auto writer = format.createWriterFor(stream, juce::AudioFormatWriterOptions{}
         .withSampleRate(sampleRate)
         .withNumChannels(2)
         .withBitsPerSample(24));
-    if (writer == nullptr || !writer->writeFromAudioSampleBuffer(buffer, 0, samples)) return {};
-    return destination;
+    return writer != nullptr && writer->writeFromAudioSampleBuffer(buffer, 0, buffer.getNumSamples());
+}
+
+bool OpenClapperProcessor::playFrozen(juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& midi,
+                                      const openclapper::core::Transport& transport) {
+    const auto* lock = parameters.getRawParameterValue(openclapper::params::kLockIn);
+    std::shared_ptr<const Freeze> frozen;
+    {
+        std::lock_guard<std::mutex> guard(freezeMutex_);
+        frozen = freeze_;
+    }
+    if (lock == nullptr || lock->load() <= 0.5f || frozen == nullptr || frozen->audio.getNumSamples() < 2) {
+        if (playingFreeze_) {
+            engine_.reset();
+            playingFreeze_ = false;
+        }
+        return false;
+    }
+    if (!playingFreeze_) {
+        engine_.reset();
+        playingFreeze_ = true;
+    }
+
+    const int frames = frozen->audio.getNumSamples();
+    const float* left = frozen->audio.getReadPointer(0);
+    const float* right = frozen->audio.getReadPointer(1);
+    const double hostRate = getSampleRate() > 0.0 ? getSampleRate() : frozen->sampleRate;
+    const double step = frozen->sampleRate / hostRate;
+    double position = freezePlayhead_.load();
+    int restart = auditionPending_.exchange(false) ? 0 : -1;
+    for (const auto meta : midi) {
+        if (meta.numBytes > 3 || restart >= 0) continue;
+        const auto message = meta.getMessage();
+        if (!message.isNoteOn()) continue;
+        restart = std::clamp(meta.samplePosition, 0, buffer.getNumSamples());
+        displayVelocity.store(message.getFloatVelocity(), std::memory_order_relaxed);
+        freezeTriggers_.fetch_add(1);
+    }
+
+    float peak = 0.0f;
+    for (int i = 0; i < buffer.getNumSamples(); ++i) {
+        if (i == restart) position = 0.0;
+        float sampleL = 0.0f;
+        float sampleR = 0.0f;
+        if (position >= 0.0 && position < static_cast<double>(frames - 1)) {
+            const int index = static_cast<int>(position);
+            const float fraction = static_cast<float>(position - static_cast<double>(index));
+            sampleL = left[index] + fraction * (left[index + 1] - left[index]);
+            sampleR = right[index] + fraction * (right[index + 1] - right[index]);
+            position += step;
+            if (position >= frames) position = -1.0;
+        } else if (position >= 0.0) {
+            position = -1.0;
+        }
+        buffer.setSample(0, i, sampleL);
+        if (buffer.getNumChannels() > 1) buffer.setSample(1, i, sampleR);
+        peak = std::max(peak, std::max(std::abs(sampleL), std::abs(sampleR)));
+    }
+    freezePlayhead_.store(position);
+
+    float shownPeak = displayPeak.load(std::memory_order_relaxed);
+    while (peak > shownPeak && !displayPeak.compare_exchange_weak(shownPeak, peak)) {}
+    displayLimiterGain.store(1.0f);
+    const float phase = transport.ppqPosition ? static_cast<float>(*transport.ppqPosition) : 0.0f;
+    displayBeatPhase.store(transport.isPlaying ? phase - std::floor(phase) : -1.0f, std::memory_order_relaxed);
+    displayClapProgress.store(position >= 0.0 ? static_cast<float>(position / frames) : 1.0f);
+    displayTriggerCount.store(freezeTriggers_.load());
+    return true;
+}
+
+juce::File OpenClapperProcessor::renderHitWav(const juce::File& destination) {
+    if (destination == juce::File()) return {};
+    serviceLockIn();
+    std::shared_ptr<const Freeze> frozen;
+    {
+        std::lock_guard<std::mutex> guard(freezeMutex_);
+        frozen = freeze_;
+    }
+    if (frozen != nullptr && frozen->audio.getNumSamples() > 0
+        && writeWavFile(destination, frozen->audio, frozen->sampleRate))
+        return destination;
+    double sampleRate = 48000.0;
+    const auto buffer = renderHitBuffer(sampleRate);
+    return writeWavFile(destination, buffer, sampleRate) ? destination : juce::File();
 }
 
 // Juce plugin entry point

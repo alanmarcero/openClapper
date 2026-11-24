@@ -439,11 +439,6 @@ void ClapSynth::trigger(const ClapSynthSettings& settings, int midiNote, float v
         computeBandpassCoeffs(handFormantHz, 0.58f, sampleRate_, coeffs.b0, coeffs.b1, coeffs.b2, coeffs.a1, coeffs.a2);
     });
 
-    const float pitchDetuneSemitones = (settings.pitchHumanizeCents > 0.0f)
-        ? nextRandomFloat(prngState_) * (std::clamp(settings.pitchHumanizeCents, 0.0f, 100.0f) / 100.0f)
-        : 0.0f;
-    pitchHumanizeRatio_ = std::exp2(pitchDetuneSemitones / 12.0f);
-
     const uint32_t vSeedL = (prngState_ ^ 0x243f6a88U) * 0x9e3779b1U;
     const uint32_t vSeedR = (prngState_ ^ 0x85a308d3U) * 0xc2b2ae3dU;
     velvetL_.prng = vSeedL != 0U ? vSeedL : 0x243f6a88U;
@@ -703,7 +698,7 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
             * std::exp(-std::max(0.0f, mainAge) / pitchDecaySamples);
         const float pitchRatio = std::exp2(pitchSemitones / 12.0f);
         const float nyquistGuard = static_cast<float>(sampleRate_) * 0.48f;
-        const float fundamental = std::clamp(midiNoteToHz(69) * keyTrackingRatio_ * pitchHumanizeRatio_ * pitchRatio,
+        const float fundamental = std::clamp(midiNoteToHz(69) * keyTrackingRatio_ * pitchRatio,
                                              20.0f, nyquistGuard);
         const float toneQ = std::clamp(settings.toneQ, 0.5f, 12.0f);
         const float detuneL = std::exp2(-8.5f / 1200.0f);

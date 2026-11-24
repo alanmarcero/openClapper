@@ -116,53 +116,6 @@ enum class ReverseSyncMode {
     QuarterBeat = 4
 };
 
-enum class SlapbackDivision {
-    Off = 0,
-    Sixteenth = 1,
-    DottedSixteenth = 2,
-    Eighth = 3,
-    DottedEighth = 4,
-    Quarter = 5
-};
-
-class SlapbackDelay {
-public:
-    void prepare(double sampleRate);
-    void reset() noexcept;
-    bool process(float& left, float& right, SlapbackDivision division, float mix, double bpm, bool trigger = false, float feedback = 0.0f) noexcept;
-
-private:
-    struct FeedbackBiquad {
-        double z1 = 0.0;
-        double z2 = 0.0;
-
-        void reset() noexcept { z1 = z2 = 0.0; }
-
-        [[nodiscard]] float process(float x, double b0, double b1, double b2, double a1, double a2) noexcept {
-            const double in = static_cast<double>(x);
-            const double out = b0 * in + z1;
-            z1 = b1 * in - a1 * out + z2;
-            z2 = b2 * in - a2 * out;
-            return static_cast<float>(out);
-        }
-    };
-
-    double sampleRate_ = 48000.0;
-    double smoothedDelaySamples_ = 0.0;
-    double glideCoeff_ = 0.001;
-    double hpfB0_ = 1.0, hpfB1_ = 0.0, hpfB2_ = 0.0, hpfA1_ = 0.0, hpfA2_ = 0.0;
-    double lpfB0_ = 1.0, lpfB1_ = 0.0, lpfB2_ = 0.0, lpfA1_ = 0.0, lpfA2_ = 0.0;
-    FeedbackBiquad hpfL_{}, hpfR_{}, lpfL_{}, lpfR_{};
-    double adaaPrevU_L_ = 0.0, adaaPrevF1_L_ = 0.0;
-    double adaaPrevU_R_ = 0.0, adaaPrevF1_R_ = 0.0;
-    size_t writeIndex_ = 0;
-    std::vector<float> leftBuffer_;
-    std::vector<float> rightBuffer_;
-    std::vector<float> triggerBuffer_;
-    bool delayTriggerActive_ = false;
-    bool delayInitialized_ = false;
-};
-
 // ============================================================================
 // Distortion / Impact Shaper
 // ============================================================================

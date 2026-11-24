@@ -68,12 +68,9 @@ inline constexpr const char* kReverbDamp = "reverb_damp";
 inline constexpr const char* kReverbGate = "reverb_gate";
 inline constexpr const char* kReverbMix = "reverb_mix";
 
-// Host-Synced Slapback
-inline constexpr const char* kSlapbackDivision = "slapback_division";
-inline constexpr const char* kSlapbackMix = "slapback_mix";
-inline constexpr const char* kSlapbackFeedback = "slapback_feedback";
-inline constexpr const char* kClapDoubler = "clap_doubler";
-inline constexpr const char* kPitchHumanize = "pitch_humanize";
+// Tempo-synced dotted-eighth echo, the same control as the hat and the snare.
+inline constexpr const char* kEchoMix = "echo_mix";
+inline constexpr const char* kLockIn = "lock_in";
 
 // Reverse & Sync
 inline constexpr const char* kReverseMode = "reverse_mode";

@@ -22,7 +22,6 @@ struct Dependency {
 constexpr const char* kRoomOff = "The room is off while its mix is 0%. Raise the room mix to hear this.";
 constexpr const char* kDriveOff = "Drive is off while its mix is 0%. Raise the drive mix to hear this.";
 constexpr const char* kCompressorOff = "The compressor is off while its mix is 0%. Raise its mix to hear this.";
-constexpr const char* kSlapbackOff = "The slapback is off. Pick a Slapback time to hear this.";
 constexpr const char* kReverseOff = "Reverse is off. Pick a Reverse timing to hear this.";
 constexpr const char* kOneShot = "One-shot ignores this envelope. Select Hold notes to use it.";
 constexpr const char* kRollsOff = "Rolls are off. Pick a Subdivision to hear this.";
@@ -31,7 +30,7 @@ constexpr const char* kOneBurst = "With 1 burst this does almost nothing. Add bu
 constexpr int kBody = 0, kNoise = 1, kTransient = 2, kPreClap = 3;
 
 // A control is active while its source parameter is above the threshold.
-constexpr std::array<Dependency, 24> kDependencies{{
+constexpr std::array<Dependency, 22> kDependencies{{
     { params::kReverbSize, params::kReverbMix, 0.0f, kRoomOff },
     { params::kReverbDecay, params::kReverbMix, 0.0f, kRoomOff },
     { params::kReverbDamp, params::kReverbMix, 0.0f, kRoomOff },
@@ -44,8 +43,6 @@ constexpr std::array<Dependency, 24> kDependencies{{
     { params::kCompAttack, params::kCompMix, 0.0f, kCompressorOff },
     { params::kCompRelease, params::kCompMix, 0.0f, kCompressorOff },
     { params::kCompMakeup, params::kCompMix, 0.0f, kCompressorOff },
-    { params::kSlapbackMix, params::kSlapbackDivision, 0.0f, kSlapbackOff },
-    { params::kSlapbackFeedback, params::kSlapbackDivision, 0.0f, kSlapbackOff },
     { params::kReverseMix, params::kReverseMode, 0.0f, kReverseOff },
     { "amp_attack", "amp_enabled", 0.5f, kOneShot },
     { "amp_decay", "amp_enabled", 0.5f, kOneShot },
@@ -314,7 +311,7 @@ ControlPage::ControlPage(Apvts& state, Page page) : page_(page) {
             group("Hand spacing", 1, {{kPreBursts,"Bursts"}, {kPreSpread,"Spacing"}, {kPreJitter,"Humanize"}, {kFlamSpread,"Pan spread"}}, false, kPreClap);
             group("Tuned body", 1, {{kToneLevel,"Body level"}, {kToneQ,"Resonance"}, {kToneDecay,"Body decay"}, {kImpactPunch,"Impact"}}, false, kBody);
             group("Noise tail", 1, {{kNoiseType,"Texture"}, {kNoiseHPF,"Low cut"}, {kNoiseDecay,"Noise decay"}, {kNoiseLevel,"Noise level"}}, false, kNoise);
-            group("Finish", 1, {{kClickLevel,"Transient level"}, {kReverbMix,"Room mix"}, {kReverbGate,"Room gate"}, {kClapDoubler,"Doubler"}}, false, kTransient);
+            group("Finish", 1, {{kClickLevel,"Transient level"}, {kReverbMix,"Room mix"}, {kReverbGate,"Room gate"}}, false, kTransient);
             group("Output", 5, {{kStereoWidth,"Stereo width"}, {kOutputGain,"Output gain"}, {kLimiterEnabled,"Limiter"}, {kLimiterCeiling,"Limiter ceiling"}, {kLimiterRelease,"Recovery"}}, true);
             break;
         case Page::layers:
@@ -327,16 +324,16 @@ ControlPage::ControlPage(Apvts& state, Page page) : page_(page) {
             group("Transient", 2, {{kClickType,"Shape"}, {kClickFreq,"Frequency"}, {kClickDecay,"Decay"}, {kClickLevel,"Level"}}, false, kTransient);
             break;
         case Page::effects:
-            group("Drive", 3, {{kDistType,"Type"}, {kDistDrive,"Drive"}, {kDistTone,"Tone"}, {kDistMix,"Mix"}, {kClapDoubler,"Doubler"}});
+            group("Drive", 3, {{kDistType,"Type"}, {kDistDrive,"Drive"}, {kDistTone,"Tone"}, {kDistMix,"Mix"}});
             group("Compressor", 3, {{kCompThresh,"Threshold"}, {kCompRatio,"Ratio"}, {kCompMakeup,"Makeup"},
                 {kCompAttack,"Attack"}, {kCompRelease,"Release"}, {kCompMix,"Mix"}});
             group("Gated room", 3, {{kReverbSize,"Size"}, {kReverbDecay,"Decay"}, {kReverbDamp,"Damping"}, {kReverbGate,"Gate time"}, {kReverbMix,"Mix"}});
-            group("Echo & reverse", 3, {{kSlapbackDivision,"Slapback time"}, {kSlapbackMix,"Slapback mix"}, {kSlapbackFeedback,"Feedback"}, {kReverseMode,"Reverse timing"}, {kReverseMix,"Reverse mix"}});
+            group("Echo & reverse", 3, {{kEchoMix,"Echo mix"}, {kReverseMode,"Reverse timing"}, {kReverseMix,"Reverse mix"}});
             break;
         case Page::midi:
             group("Note envelope", 3, {{"amp_enabled",""}, {"amp_attack","Attack"}, {"amp_decay","Decay"}, {"amp_sustain","Sustain"}, {"amp_release","Release"}});
             group("Trigger zone", 3, {{"key_low","Lowest note"}, {"key_high","Highest note"}, {"velocity_low","Min velocity"}, {"velocity_high","Max velocity"}, {"choke_group","Choke group"}});
-            group("Roll & fill", 3, {{"roll_division","Subdivision"}, {"roll_hits","Hit count"}, {kPitchHumanize,"Pitch humanize"}, {kKeyTracking,"Key tracking"}});
+            group("Roll & fill", 3, {{"roll_division","Subdivision"}, {"roll_hits","Hit count"}, {kKeyTracking,"Key tracking"}});
             std::ranges::for_each(std::views::iota(size_t{0}, kLayerNames.size()), [&](size_t layer) {
                 if (layer < kLayerVelocity.size()) {
                     group(kLayerNames[layer], 2, {{kLayerMute[layer],"Mute"}, {kLayerSolo[layer],"Solo"}, {kLayerVelocity[layer],"Velocity response"}});

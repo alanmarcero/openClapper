@@ -47,6 +47,9 @@ private:
 
     PresetStepButton previous_{ "Previous", 1.0f }, next_{ "Next", -1.0f };
     juce::TextButton audition_{ "Audition A4" };
+    juce::TextButton lock_{ "Lock in" };
+    openclapper::ui::LockBadge lockBadge_{ processor_.parameters, openclapper::params::kLockIn, "Lock in" };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> lockAttachment_;
     suite::SuiteBar suite_;
     suite::PresetBrowser browser_;
     std::array<juce::TextButton, 4> tabs_;

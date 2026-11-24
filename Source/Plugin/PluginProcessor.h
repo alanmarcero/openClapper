@@ -6,9 +6,13 @@
 #include "suite/UserPresets.h"
 #include <atomic>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <memory>
+#include <mutex>
 #include <set>
 
-class OpenClapperProcessor : public juce::AudioProcessor, private juce::AudioProcessorParameter::Listener {
+class OpenClapperProcessor : public juce::AudioProcessor,
+                            private juce::AudioProcessorParameter::Listener,
+                            private juce::AsyncUpdater {
 public:
     OpenClapperProcessor();
     ~OpenClapperProcessor() override;
@@ -71,7 +75,9 @@ public:
     [[nodiscard]] int editorHeight() const noexcept { return editorHeight_.load(); }
 
     /** Offline render of the current hit, using the same A4 audition as the editor. */
-    [[nodiscard]] juce::File renderHitWav(const juce::File& destination) const;
+    [[nodiscard]] juce::File renderHitWav(const juce::File& destination);
+    void serviceLockIn();
+    [[nodiscard]] bool isClapLockedIn() const noexcept;
 
     juce::AudioProcessorValueTreeState parameters;
 
@@ -95,8 +101,20 @@ private:
     void applySoundTree(const juce::ValueTree& incoming, ApplyKind kind);
     void applyParameterChildren(const juce::ValueTree& tree, const juce::StringArray& lockedIds);
     void setUserPresetName(juce::String name);
-    void parameterValueChanged(int index, float) override;
+    void parameterValueChanged(int index, float newValue) override;
     void parameterGestureChanged(int, bool) override {}
+    void handleAsyncUpdate() override;
+    [[nodiscard]] juce::AudioBuffer<float> renderHitBuffer(double& sampleRate) const;
+    [[nodiscard]] bool playFrozen(juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& midi,
+                                  const openclapper::core::Transport& transport);
+    void storeFreeze(juce::AudioBuffer<float> buffer, double sampleRate);
+    void clearFreeze();
+    [[nodiscard]] bool writeWavFile(const juce::File& destination, const juce::AudioBuffer<float>& buffer, double sampleRate) const;
+
+    struct Freeze {
+        juce::AudioBuffer<float> audio;
+        double sampleRate = 48000.0;
+    };
 
     openclapper::core::ClapEngine engine_;
     std::atomic<bool> auditionPending_{ false };
@@ -109,6 +127,14 @@ private:
     std::atomic<bool> presetEdited_{ false };
     std::atomic<int> loading_{ 0 };
     int presetParameterIndex_ = -1;
+    int lockParameterIndex_ = -1;
+    std::shared_ptr<const Freeze> freeze_;
+    mutable std::mutex freezeMutex_;
+    std::atomic<bool> lockRenderPending_{ false };
+    std::atomic<bool> clearLockRequested_{ false };
+    std::atomic<double> freezePlayhead_{ -1.0 };
+    std::atomic<uint32_t> freezeTriggers_{ 0 };
+    bool playingFreeze_ = false;
     suite::ParameterUndo undo_;
     suite::AbSlots ab_;
     suite::UserPresetStore userPresets_{ suite::UserPresetStore::defaultDirectory("openClapper") };

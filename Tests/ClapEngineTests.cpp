@@ -109,7 +109,6 @@ TEST_CASE("Streaming MIDI preserves delayed pre-clap effect timing", "[performan
     streamed.prepare(48000);
     buffered.prepare(48000);
     EngineSettings settings;
-    settings.effects.slapbackDivision = SlapbackDivision::Sixteenth;
     settings.effects.reverbGateMs = 20;
     settings.effects.reverbMix = 1;
     Transport transport;
@@ -179,63 +178,4 @@ TEST_CASE("A driven clap does not sit off centre or explode", "[core][engine][qu
     mean /= static_cast<double>(samples) * 2.0;
     REQUIRE(peak > 0.02f);
     REQUIRE(std::abs(mean) < 2.0e-4);
-}
-
-TEST_CASE("Micro-crowd doubler randomizes 0.8-4.5ms taps per MIDI hit with dispersive allpasses", "[core][engine][doubler]") {
-    ClapEngine engine;
-    engine.prepare(48000.0);
-
-    EngineSettings settings;
-    settings.synth.preClapCount = 0;
-    settings.synth.toneLevel = 0.0f;
-    settings.synth.noiseLevel = 0.0f;
-    settings.synth.impactPunch = 0.0f;
-    settings.synth.clickType = ClickType::Needle;
-    settings.synth.clickLevel = 1.0f;
-    settings.synth.clickDecayMs = 0.45f;
-    settings.effects.distMix = 0.0f;
-    settings.effects.reverbMix = 0.0f;
-    settings.effects.compressor.mix = 0.0f;
-    settings.effects.limiter.enabled = false;
-    settings.effects.doublerAmount = 1.0f;
-
-    Transport transport;
-    constexpr int stride = 2400;
-    constexpr int totalSamples = stride * 4;
-    const std::array<MidiTrigger, 4> triggers{{
-        { .sampleOffset = 0, .noteNumber = 69, .velocity = 1.0f },
-        { .sampleOffset = stride, .noteNumber = 69, .velocity = 1.0f },
-        { .sampleOffset = stride * 2, .noteNumber = 69, .velocity = 1.0f },
-        { .sampleOffset = stride * 3, .noteNumber = 69, .velocity = 1.0f }
-    }};
-
-    std::vector<float> left(totalSamples, 0.0f);
-    std::vector<float> right(totalSamples, 0.0f);
-    float* channels[2] = { left.data(), right.data() };
-    engine.process(settings, transport, triggers, channels, 2, totalSamples);
-
-    const int lat = ClapEngine::kLatencySamples;
-    float diff01 = 0.0f;
-    float diff12 = 0.0f;
-    float wetPeakL = 0.0f;
-    std::ranges::for_each(std::views::iota(38, 360), [&](int k) {
-        const size_t i0 = static_cast<size_t>(lat + k);
-        const size_t i1 = static_cast<size_t>(stride + lat + k);
-        const size_t i2 = static_cast<size_t>(stride * 2 + lat + k);
-        diff01 = std::max(diff01, std::max(std::abs(left[i0] - left[i1]), std::abs(right[i0] - right[i1])));
-        diff12 = std::max(diff12, std::max(std::abs(left[i1] - left[i2]), std::abs(right[i1] - right[i2])));
-        wetPeakL = std::max(wetPeakL, std::abs(left[i0]));
-    });
-    REQUIRE(diff01 > 3.0e-3f);
-    REQUIRE(diff12 > 3.0e-3f);
-    REQUIRE(wetPeakL > 1.0e-3f);
-
-    // 2-stage dispersive allpasses spread the delayed transient phase across many samples rather than one spike.
-    int dispersedSamplesL = 0;
-    std::ranges::for_each(std::views::iota(38, 360), [&](int k) {
-        if (std::abs(left[static_cast<size_t>(lat + k)]) > wetPeakL * 0.12f) {
-            ++dispersedSamplesL;
-        }
-    });
-    REQUIRE(dispersedSamplesL >= 18);
 }

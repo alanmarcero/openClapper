@@ -42,10 +42,7 @@ struct ClapEffectSettings {
     CompressorSettings compressor{};
     LimiterSettings limiter{};
 
-    SlapbackDivision slapbackDivision = SlapbackDivision::Off;
-    float slapbackMix = 0.3f;
-    float slapbackFeedback = 0.0f;
-    float doublerAmount = 0.0f;
+    float echoMix = 0.0f;
 
     float reverbSize = 0.65f;
     float reverbDecayMs = 450.0f;
@@ -139,7 +136,6 @@ private:
     std::array<Voice, 8> voices_{};
     uint64_t voiceOrderCounter_ = 0;
     std::size_t lastTriggeredVoice_ = 0;
-    SlapbackDelay slapback_;
     GatedStereoReverb reverb_;
     DistortionShaper distL_;
     DistortionShaper distR_;
@@ -150,21 +146,9 @@ private:
     // Reverse swell buffer
     std::vector<float> reverseBufferL_;
     std::vector<float> reverseBufferR_;
-    std::vector<float> doublerBufferL_;
-    std::vector<float> doublerBufferR_;
-    AllpassDiffuser doublerApL1_;
-    AllpassDiffuser doublerApL2_;
-    AllpassDiffuser doublerApR1_;
-    AllpassDiffuser doublerApR2_;
-    double doublerTargetSamplesL_ = 76.8;
-    double doublerTargetSamplesR_ = 201.6;
-    double doublerTapSamplesL_ = 76.8;
-    double doublerTapSamplesR_ = 201.6;
-    uint32_t doublerPrng_ = 0x51C0FFEEu;
-    bool doublerTapInitialized_ = false;
-    size_t doublerWriteIndex_ = 0;
-    float doublerLpL_ = 0.0f;
-    float doublerLpR_ = 0.0f;
+    std::vector<float> echoBufferL_;
+    std::vector<float> echoBufferR_;
+    size_t echoWriteIndex_ = 0;
     std::array<std::array<StereoFrame, 4>, kLatencySamples> componentDelay_{};
     size_t componentDelayPos_ = 0;
     int reversePlayHead_ = -1;

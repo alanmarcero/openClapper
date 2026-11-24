@@ -12,8 +12,8 @@ constexpr int kSuiteHeight = 44;
 constexpr int kNavHeight = 61;
 constexpr int kDesignWidth = suite::kFamilyDesignWidth;
 constexpr int kDesignHeight = 868;
-constexpr float kMinScale = 0.75f;
-constexpr float kMaxScale = 1.5f;
+constexpr float kMinScale = suite::kFamilyMinScalePercent / 100.0f;
+constexpr float kMaxScale = static_cast<float>(suite::kFamilyMaxScale);
 
 std::vector<juce::String> factoryNames() {
     std::vector<juce::String> names;
@@ -66,12 +66,23 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& instrument)
     previous_.onClick = [this] { stepPreset(-1); };
     next_.onClick = [this] { stepPreset(1); };
     audition_.onClick = [this] { processor_.triggerAudition(); };
+    lock_.setButtonText("Lock in");
+    lock_.setClickingTogglesState(true);
+    lock_.setTitle("Lock in");
+    lock_.setTooltip("Render this hit and play that recording until you unlock.");
+    lock_.setColour(juce::TextButton::buttonColourId, theme::surface);
+    lock_.setColour(juce::TextButton::buttonOnColourId, theme::violet);
+    lock_.setColour(juce::TextButton::textColourOnId, theme::paper);
+    lockAttachment_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+        processor_.parameters, params::kLockIn, lock_);
     audition_.setColour(juce::TextButton::buttonColourId, theme::apricot);
     audition_.setColour(juce::TextButton::textColourOffId, theme::plot);
     for (juce::Button* button : { static_cast<juce::Button*>(&previous_),
                                    static_cast<juce::Button*>(&next_),
                                    static_cast<juce::Button*>(&audition_) })
         content_.addAndMakeVisible(*button);
+    content_.addAndMakeVisible(lock_);
+    content_.addAndMakeVisible(lockBadge_);
     content_.addAndMakeVisible(hitLight_);
     content_.addAndMakeVisible(meter_);
 
@@ -111,7 +122,7 @@ OpenClapperEditor::OpenClapperEditor(OpenClapperProcessor& instrument)
     browser_.setVisible(false);
     content_.addChildComponent(browser_);
 
-    constexpr std::array names{ "Clap", "Layers", "Effects", "MIDI & envelope" };
+    constexpr std::array names{ "Clap", "Layers", "Effects", "MIDI" };
     for (size_t i = 0; i < tabs_.size(); ++i) {
         pages_[i] = std::make_unique<ui::ControlPage>(processor_.parameters, static_cast<ui::Page>(i));
         content_.addChildComponent(*pages_[i]);
@@ -214,6 +225,7 @@ void OpenClapperEditor::timerCallback() {
     // setText repaints the box whenever no menu item matches, which is every edited name.
     const auto name = processor_.presetDisplayName();
     if (presets_.getText() != name) presets_.setText(name, juce::dontSendNotification);
+    lock_.setButtonText(lock_.getToggleState() ? "Locked" : "Lock in");
     suite_.setAbSlotB(processor_.isAbSlotB());
     suite_.setUndoEnabled(processor_.canUndo(), processor_.canRedo());
     if (page_ == 0 && isShowing()) waveform_.refresh();
@@ -297,10 +309,15 @@ void OpenClapperEditor::resized() {
     header.removeFromRight(4);
     presets_.setBounds(header);
 
-    suite_.setBounds(area.removeFromTop(kSuiteHeight).reduced(0, 0));
+    auto suiteRow = area.removeFromTop(kSuiteHeight);
+    lock_.setBounds(suiteRow.removeFromRight(110).reduced(0, 4));
+    suiteRow.removeFromRight(4);
+    lockBadge_.setBounds(suiteRow.removeFromRight(22).withSizeKeepingCentre(18, 18));
+    suiteRow.removeFromRight(6);
+    suite_.setBounds(suiteRow);
 
     auto nav = area.removeFromTop(kNavHeight).reduced(0, 12);
-    constexpr std::array widths{82, 95, 95, 160};
+    constexpr std::array widths{82, 95, 95, 82};
     for (size_t i = 0; i < tabs_.size(); ++i) {
         tabs_[i].setBounds(nav.removeFromLeft(widths[i]));
         nav.removeFromLeft(6);

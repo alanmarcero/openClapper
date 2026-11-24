@@ -205,18 +205,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kReverbMix, 1 }, "Reverb Mix", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.35f, percent));
 
-    juce::StringArray slapbackDivisions{ "Off", "1/16", "Dotted 1/16", "1/8", "Dotted 1/8", "1/4" };
-    params.push_back(std::make_unique<juce::AudioParameterChoice>(
-        juce::ParameterID{ kSlapbackDivision, 1 }, "Slapback Division", slapbackDivisions, 0));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kSlapbackMix, 1 }, "Slapback Mix", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.3f, percent));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kSlapbackFeedback, 1 }, "Slapback Feedback", juce::NormalisableRange<float>(0.0f, 0.85f, 0.01f), 0.0f, percent));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kClapDoubler, 1 }, "Stereo Doubler", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f, percent));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kPitchHumanize, 1 }, "Pitch Humanize", juce::NormalisableRange<float>(0.0f, 100.0f, 1.0f), 0.0f,
-        Attributes().withStringFromValueFunction([](float cents, int) { return juce::String(juce::roundToInt(cents)) + " ct"; })));
+        juce::ParameterID{ kEchoMix, 1 }, "Echo Mix", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f, percent));
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{ kLockIn, 1 }, "Lock In", false));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kKeyTracking, 1 }, "Key Tracking", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f, percent));
 
@@ -376,20 +368,10 @@ openclapper::core::EngineSettings readSettings(const juce::AudioProcessorValueTr
     s.effects.limiter.releaseMs = *apvts.getRawParameterValue(kLimiterRelease);
     s.effects.limiter.enabled = *apvts.getRawParameterValue(kLimiterEnabled) > 0.5f;
 
-    s.effects.slapbackDivision = static_cast<openclapper::core::SlapbackDivision>(
-        static_cast<int>(*apvts.getRawParameterValue(kSlapbackDivision)));
-    s.effects.slapbackMix = *apvts.getRawParameterValue(kSlapbackMix);
-    if (const auto* pFeedback = apvts.getRawParameterValue(kSlapbackFeedback)) {
-        s.effects.slapbackFeedback = *pFeedback;
-    }
-    if (const auto* pDoubler = apvts.getRawParameterValue(kClapDoubler)) {
-        s.effects.doublerAmount = *pDoubler;
-    }
-    if (const auto* pPitchHum = apvts.getRawParameterValue(kPitchHumanize)) {
-        s.synth.pitchHumanizeCents = *pPitchHum;
+    if (const auto* echo = apvts.getRawParameterValue(kEchoMix))
+        s.effects.echoMix = *echo;
     if (const auto* tracking = apvts.getRawParameterValue(kKeyTracking))
         s.synth.keyTracking = *tracking;
-    }
 
     s.effects.reverbSize = *apvts.getRawParameterValue(kReverbSize);
     s.effects.reverbDecayMs = *apvts.getRawParameterValue(kReverbDecay);

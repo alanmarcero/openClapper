@@ -96,8 +96,8 @@ TEST_CASE("OpenClapper exposes automatable body sweep, body filters, and transie
     OpenClapperProcessor processor;
     for (const auto* id : { openclapper::params::kTonePitchEnv, openclapper::params::kTonePitchDecay,
                             openclapper::params::kToneHPF, openclapper::params::kToneLPF,
-                            openclapper::params::kClickDecay, openclapper::params::kSlapbackFeedback,
-                            openclapper::params::kClapDoubler, openclapper::params::kPitchHumanize }) {
+                            openclapper::params::kClickDecay, openclapper::params::kEchoMix,
+                            openclapper::params::kLockIn }) {
         auto* parameter = processor.parameters.getParameter(id);
         REQUIRE(parameter != nullptr);
         CHECK(parameter->isAutomatable());
@@ -110,7 +110,7 @@ TEST_CASE("Every float parameter reads back the text it shows", "[plugin][parame
     std::ranges::for_each(processor.getParameters(), [&](juce::AudioProcessorParameter* parameter) {
         if (auto* ranged = dynamic_cast<juce::AudioParameterFloat*>(parameter)) floats.push_back(ranged);
     });
-    REQUIRE(floats.size() == 61);
+    REQUIRE(floats.size() == 58);
     constexpr std::array positions{ 0.0f, 0.1f, 0.25f, 0.5f, 0.75f, 0.9f, 1.0f };
     std::vector<std::string> mismatches;
     std::ranges::for_each(floats, [&](juce::RangedAudioParameter* parameter) {
@@ -172,42 +172,52 @@ TEST_CASE("Parameters show units and accept typed units, kHz, seconds and Off", 
     CHECK(roomMix->getValueFromText("50%") == Catch::Approx(0.5));
 }
 
-TEST_CASE("Slapback feedback, stereo doubler, and pitch humanize shape output", "[plugin][dsp]") {
-    openclapper::core::SlapbackDelay delayNoFb, delayFb;
-    delayNoFb.prepare(48000.0);
-    delayFb.prepare(48000.0);
-    float l1 = 1.0f, r1 = 1.0f, l2 = 1.0f, r2 = 1.0f;
-    (void)delayNoFb.process(l1, r1, openclapper::core::SlapbackDivision::Sixteenth, 0.5f, 120.0, true, 0.0f);
-    (void)delayFb.process(l2, r2, openclapper::core::SlapbackDivision::Sixteenth, 0.5f, 120.0, true, 0.75f);
-    float lateEnergyNoFb = 0.0f, lateEnergyFb = 0.0f;
-    for (int i = 0; i < 16000; ++i) {
-        l1 = 0.0f; r1 = 0.0f; l2 = 0.0f; r2 = 0.0f;
-        (void)delayNoFb.process(l1, r1, openclapper::core::SlapbackDivision::Sixteenth, 0.5f, 120.0, false, 0.0f);
-        (void)delayFb.process(l2, r2, openclapper::core::SlapbackDivision::Sixteenth, 0.5f, 120.0, false, 0.75f);
-        if (i > 8000) {
-            lateEnergyNoFb += std::abs(l1);
-            lateEnergyFb += std::abs(l2);
-        }
+TEST_CASE("Echo mix and Lock in follow the shared drum-synth controls", "[plugin][dsp]") {
+    OpenClapperProcessor dry, wet;
+    dry.prepareToPlay(48000.0, 512);
+    wet.prepareToPlay(48000.0, 512);
+    auto* echo = wet.parameters.getParameter(openclapper::params::kEchoMix);
+    REQUIRE(echo != nullptr);
+    echo->setValueNotifyingHost(1.0f);
+    for (OpenClapperProcessor* processor : { &dry, &wet }) {
+        processor->parameters.getParameter(openclapper::params::kReverbMix)->setValueNotifyingHost(0.0f);
+        processor->parameters.getParameter(openclapper::params::kReverseMix)->setValueNotifyingHost(0.0f);
     }
-    REQUIRE(lateEnergyFb > lateEnergyNoFb + 0.05f);
+    juce::AudioBuffer<float> dryBuffer(2, 48000), wetBuffer(2, 48000);
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 69, 1.0f), 0);
+    dry.processBlock(dryBuffer, midi);
+    midi.clear();
+    midi.addEvent(juce::MidiMessage::noteOn(1, 69, 1.0f), 0);
+    wet.processBlock(wetBuffer, midi);
+    double lateDry = 0.0;
+    double lateWet = 0.0;
+    for (int i = 24000; i < 48000; ++i) {
+        lateDry += std::abs(dryBuffer.getSample(0, i));
+        lateWet += std::abs(wetBuffer.getSample(0, i));
+    }
+    REQUIRE(lateWet > lateDry + 0.05);
 
-    OpenClapperProcessor procDry, procDoubler;
-    procDry.prepareToPlay(48000.0, 4096);
-    procDoubler.prepareToPlay(48000.0, 4096);
-    auto* doublerParam = procDoubler.parameters.getParameter(openclapper::params::kClapDoubler);
-    REQUIRE(doublerParam != nullptr);
-    doublerParam->setValueNotifyingHost(1.0f);
-    juce::AudioBuffer<float> bufDry(2, 4096), bufDoubler(2, 4096);
-    juce::MidiBuffer midiDry, midiDoubler;
-    midiDry.addEvent(juce::MidiMessage::noteOn(1, 69, 1.0f), 0);
-    midiDoubler.addEvent(juce::MidiMessage::noteOn(1, 69, 1.0f), 0);
-    procDry.processBlock(bufDry, midiDry);
-    procDoubler.processBlock(bufDoubler, midiDoubler);
-    float diff = 0.0f;
-    for (int i = 0; i < 4096; ++i) {
-        diff += std::abs(bufDry.getSample(0, i) - bufDoubler.getSample(0, i));
-    }
-    REQUIRE(diff > 0.1f);
+    auto* lock = wet.parameters.getParameter(openclapper::params::kLockIn);
+    REQUIRE(lock != nullptr);
+    lock->setValueNotifyingHost(1.0f);
+    wet.serviceLockIn();
+    REQUIRE(wet.isClapLockedIn());
+    juce::AudioBuffer<float> first(2, 2048), second(2, 2048);
+    juce::MidiBuffer note;
+    note.addEvent(juce::MidiMessage::noteOn(1, 69, 1.0f), 0);
+    wet.processBlock(first, note);
+    wet.parameters.getParameter(openclapper::params::kToneDecay)->setValueNotifyingHost(0.0f);
+    note.clear();
+    note.addEvent(juce::MidiMessage::noteOn(1, 69, 1.0f), 0);
+    wet.processBlock(second, note);
+    float changed = 0.0f;
+    for (int i = 0; i < first.getNumSamples(); ++i)
+        changed += std::abs(first.getSample(0, i) - second.getSample(0, i));
+    CHECK(changed < 0.0001f);
+    lock->setValueNotifyingHost(0.0f);
+    wet.serviceLockIn();
+    REQUIRE_FALSE(wet.isClapLockedIn());
 }
 
 TEST_CASE("Host program list matches the 56 factory claps in editor order", "[plugin]") {
@@ -609,7 +619,7 @@ TEST_CASE("Native editor browses, auditions and edits clap layers and held notes
     click(*editor, "Effects");
     edit("reverb_gate", 100);
     snapshot(*editor, "openClapper-effects.png");
-    click(*editor, "MIDI & envelope");
+    click(*editor, "MIDI");
     click(*editor, "Hold notes");
     REQUIRE(processor.parameters.getRawParameterValue("amp_enabled")->load() == Catch::Approx(1.0f));
     edit("amp_attack", 5);
@@ -956,7 +966,7 @@ TEST_CASE("OpenClapper exposes 3-band EQ, main-page Output, and section/per-part
     auto* finishLockBtn = dynamic_cast<juce::TextButton*>(findById(findById, *editor, "section_lock_Finish"));
     REQUIRE(finishLockBtn != nullptr);
     finishLockBtn->onClick();
-    REQUIRE(processor.isSectionLocked({ openclapper::params::kClickLevel, openclapper::params::kReverbMix, openclapper::params::kClapDoubler }));
+    REQUIRE(processor.isSectionLocked({ openclapper::params::kClickLevel, openclapper::params::kReverbMix, openclapper::params::kReverbGate }));
 
     performanceValue(processor, openclapper::params::kClickLevel, 0.91f);
     performanceValue(processor, openclapper::params::kPreSpread, 4.0f);
@@ -983,10 +993,9 @@ TEST_CASE("Controls with no effect dim, stay editable and say what turns them on
     using namespace openclapper;
     OpenClapperProcessor processor;
     const auto reason = [&](const char* id) { return ui::inactiveReason(processor.parameters, id); };
-    // The first factory clap has the room at 0%, one burst, and slapback, reverse and rolls off.
+    // The first factory clap has the room at 0%, one burst, and reverse and rolls off.
     CHECK(reason(params::kReverbGate).contains("room mix"));
     CHECK(reason(params::kPreSpread).contains("Add bursts"));
-    CHECK(reason(params::kSlapbackFeedback).contains("Slapback time"));
     CHECK(reason(params::kReverseMix).contains("Reverse timing"));
     CHECK(reason("amp_release").contains("Hold notes"));
     CHECK(reason("roll_hits").contains("Subdivision"));
@@ -1067,7 +1076,7 @@ TEST_CASE("Cards that had five columns give each slider at least 120 px of trave
     };
     CHECK(shortTracks("Layers", "").empty());
     CHECK(shortTracks("Effects", "").empty());
-    CHECK(shortTracks("MIDI & envelope", "").empty());
+    CHECK(shortTracks("MIDI", "").empty());
 }
 
 TEST_CASE("A slider click does not jump and Shift-drag is ten times finer", "[plugin][gui]") {
@@ -1301,7 +1310,7 @@ TEST_CASE("No two controls overlap on any page and the EQ dials keep their size"
     CHECK(overlaps("Clap").empty());
     CHECK(overlaps("Layers").empty());
     CHECK(overlaps("Effects").empty());
-    CHECK(overlaps("MIDI & envelope").empty());
+    CHECK(overlaps("MIDI").empty());
 
     click(*editor, "Clap");
     auto* dial = findVisible<juce::Slider>(*editor, [](const juce::Slider& slider) { return slider.isRotary(); });
@@ -1323,7 +1332,7 @@ TEST_CASE("Every padlock has a spoken name for its control and toggles from the 
         });
     };
     collect(collect, *editor);
-    REQUIRE(badges.size() == 101);
+    REQUIRE(badges.size() == 97);
 
     // A padlock in a Control repeats the title of the control's slider, combo box or switch.
     std::vector<std::string> unnamed;
@@ -1382,7 +1391,7 @@ TEST_CASE("Every RangedAudioParameter can be locked, persists in state, and surv
         REQUIRE(ranged != nullptr);
         preset5Values.emplace_back(ranged->getParameterID(), ranged->getValue());
     }
-    REQUIRE(preset5Values.size() == 85);
+    REQUIRE(preset5Values.size() == 82);
 
     OpenClapperProcessor processor;
     std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());

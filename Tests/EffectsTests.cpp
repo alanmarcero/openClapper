@@ -90,68 +90,6 @@ TEST_CASE("Reverse sync timing targets are exact", "[core][effects]") {
     REQUIRE(targetHalfBeat == 3.5);
 }
 
-TEST_CASE("SlapbackDelay uses 4-point Hermite reads, smooth tempo glide, and 150Hz-6.5kHz bandpass ADAA feedback", "[core][effects][slapback]") {
-    constexpr double sr = 48000.0;
-
-    // Half-sample fractional delay at 9 kHz: linear interpolation loses >15% amplitude, Hermite retains >96%.
-    SlapbackDelay fracDelay;
-    fracDelay.prepare(sr);
-    const double halfSampleBpm = (0.25 * 60.0 * sr) / 4800.5;
-    double peakWet9k = 0.0;
-    std::ranges::for_each(std::views::iota(0, 9600), [&](int n) {
-        float l = 0.0f;
-        if (n < 4000) {
-            l = 0.25f * static_cast<float>(std::sin(2.0 * std::numbers::pi * 9000.0 * n / sr));
-        }
-        float r = l;
-        (void)fracDelay.process(l, r, SlapbackDivision::Sixteenth, 1.0f, halfSampleBpm, false, 0.0f);
-        if (n >= 5200 && n < 8400) {
-            peakWet9k = std::max(peakWet9k, static_cast<double>(std::abs(l)));
-        }
-    });
-    REQUIRE(peakWet9k > 0.232);
-
-    SlapbackDelay glideDelay;
-    glideDelay.prepare(sr);
-    float prevOut = 0.0f;
-    float maxStep = 0.0f;
-    std::ranges::for_each(std::views::iota(0, 16000), [&](int n) {
-        float l = 0.4f * static_cast<float>(std::sin(2.0 * std::numbers::pi * 320.0 * n / sr));
-        float r = l;
-        const double bpm = n < 10000 ? 120.0 : 142.0;
-        (void)glideDelay.process(l, r, SlapbackDivision::Sixteenth, 1.0f, bpm, false, 0.0f);
-        if (n > 8000) {
-            maxStep = std::max(maxStep, std::abs(l - prevOut));
-        }
-        prevOut = l;
-    });
-    REQUIRE(maxStep < 0.08f);
-
-    const auto measureThirdEchoEnergy = [&](double freqHz) {
-        SlapbackDelay d;
-        d.prepare(sr);
-        double energy = 0.0;
-        std::ranges::for_each(std::views::iota(0, 20000), [&](int n) {
-            float l = 0.0f;
-            if (n < 2000) {
-                l = 0.35f * static_cast<float>(std::sin(2.0 * std::numbers::pi * freqHz * n / sr));
-            }
-            float r = l;
-            (void)d.process(l, r, SlapbackDivision::Sixteenth, 1.0f, 150.0, false, 0.8f);
-            if (n >= 14400 && n < 16400) {
-                energy += static_cast<double>(l) * l;
-            }
-        });
-        return energy;
-    };
-    const double midEcho = measureThirdEchoEnergy(1000.0);
-    const double lowEcho = measureThirdEchoEnergy(60.0);
-    const double highEcho = measureThirdEchoEnergy(14000.0);
-    REQUIRE(midEcho > 1.0e-3);
-    REQUIRE(lowEcho < midEcho * 0.12);
-    REQUIRE(highEcho < midEcho * 0.12);
-}
-
 TEST_CASE("DistortionShaper uses 4x oversampled DC-blocked ADAA2 to suppress harmonic foldback", "[core][effects][distortion]") {
     constexpr double sr = 48000.0;
     constexpr int warmup = 4096;
