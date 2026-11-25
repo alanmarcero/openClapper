@@ -90,4 +90,4 @@ Factory claps land on the note. Hand spacing and noise attack stop at 5 ms, and 
 
 macOS includes AU, VST3, LV2, and Standalone. Windows and Linux include VST3, LV2, and Standalone. Older sessions restore their saved parameter values and appear as **Custom sound**. The DAW program list shows all 56 factory sounds in the same order as the editor. The original Preset Index automation still covers the first 44 positions, so older sessions keep their values.
 
-MIT License. See [LICENSE](LICENSE).
+AGPL-3.0. See [LICENSE](LICENSE).
