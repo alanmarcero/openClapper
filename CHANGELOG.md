@@ -1,5 +1,10 @@
 # Changelog
 
+## v3.12.4
+
+- Aligns the clap editor scale, echo, hit freeze, EQ naming, and shared drum-synth layout.
+- Aligns the JUCE 8 license and hardens CI.
+
 ## v3.12.3
 
 - **Note-Snapped EQ:** Snap all three EQ bands to chromatic notes (A-G with sharps) across two-octave ranges (`E1` to `E3`, `B4` to `B6`, `A#7` to `A#9`), matching OpenKicker's EQ design and behavior.
