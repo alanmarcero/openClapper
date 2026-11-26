@@ -1,5 +1,10 @@
 # Changelog
 
+## v3.12.5
+
+- Adds a Noise tone slider that gives the noise layer a pitched resonance, stored on every factory preset.
+- Right-click an EQ note to pick a note in that band.
+
 ## v3.12.4
 
 - Aligns the clap editor scale, echo, hit freeze, EQ naming, and shared drum-synth layout.
