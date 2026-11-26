@@ -152,7 +152,11 @@ void Control::resized() {
     area.removeFromRight(10);
     const int contentHeight = choiceAttachment_ ? 54 : 44;
     area = area.withSizeKeepingCentre(area.getWidth(), juce::jmin(contentHeight, area.getHeight()));
-    label_.setBounds(area.removeFromTop(18));
+    // A short row keeps the menu at least 36 px by giving the label the leftover.
+    const int labelHeight = !choiceAttachment_ || area.getHeight() >= 54
+        ? 18
+        : std::max(12, area.getHeight() - 36);
+    label_.setBounds(area.removeFromTop(labelHeight));
     lock_->setBounds(lock_->getBounds().withY(area.getCentreY() - 11));
     if (choiceAttachment_) {
         choice_->setBounds(area);
