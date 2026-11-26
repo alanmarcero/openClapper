@@ -110,7 +110,7 @@ TEST_CASE("Every float parameter reads back the text it shows", "[plugin][parame
     std::ranges::for_each(processor.getParameters(), [&](juce::AudioProcessorParameter* parameter) {
         if (auto* ranged = dynamic_cast<juce::AudioParameterFloat*>(parameter)) floats.push_back(ranged);
     });
-    REQUIRE(floats.size() == 58);
+    REQUIRE(floats.size() == 59);
     constexpr std::array positions{ 0.0f, 0.1f, 0.25f, 0.5f, 0.75f, 0.9f, 1.0f };
     std::vector<std::string> mismatches;
     std::ranges::for_each(floats, [&](juce::RangedAudioParameter* parameter) {
@@ -1332,7 +1332,7 @@ TEST_CASE("Every padlock has a spoken name for its control and toggles from the 
         });
     };
     collect(collect, *editor);
-    REQUIRE(badges.size() == 97);
+    REQUIRE(badges.size() == 98);
 
     // A padlock in a Control repeats the title of the control's slider, combo box or switch.
     std::vector<std::string> unnamed;
@@ -1391,7 +1391,7 @@ TEST_CASE("Every RangedAudioParameter can be locked, persists in state, and surv
         REQUIRE(ranged != nullptr);
         preset5Values.emplace_back(ranged->getParameterID(), ranged->getValue());
     }
-    REQUIRE(preset5Values.size() == 82);
+    REQUIRE(preset5Values.size() == 83);
 
     OpenClapperProcessor processor;
     std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
@@ -1463,4 +1463,8 @@ TEST_CASE("EQ bands snap to chromatic notes across two octaves", "[plugin][eq][n
     checkBand(params::kEqLowFreq, params::kEqLowMinMidi, params::kEqLowMaxMidi, "A0", "A1", "A2", "G#1");
     checkBand(params::kEqMidFreq, params::kEqMidMinMidi, params::kEqMidMaxMidi, "A3", "A4", "A5", "G#4");
     checkBand(params::kEqHighFreq, params::kEqHighMinMidi, params::kEqHighMaxMidi, "A6", "A7", "A8", "G#7");
+    const auto noteMenu = suite::eq::noteMenu(params::kEqLowMinMidi, params::kEqLowMaxMidi, 28, 1);
+    CHECK(noteMenu.getNumItems() == params::kEqLowMaxMidi - params::kEqLowMinMidi + 1);
+    CHECK(suite::eq::midiFromNoteItem(8, 1, params::kEqLowMinMidi, params::kEqLowMaxMidi) == 28);
+    CHECK_FALSE(suite::eq::midiFromNoteItem(0, 1, params::kEqLowMinMidi, params::kEqLowMaxMidi).has_value());
 }

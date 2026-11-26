@@ -65,6 +65,7 @@ struct ClapSynthSettings {
     float noiseCurve = -0.25f;    // -1..+1 shape curve (-1 exp, 0 lin, +1 sustained shoulder)
     float noiseHPF = 350.0f;      // 20..2500 Hz
     float noiseLPF = 9500.0f;     // 800..20000 Hz
+    float noiseResonance = 0.2f;  // 0..1 tonal resonance on the noise phase
     float noiseStereoWidth = 1.0f;// 0 (mono) .. 2 (ultra-wide)
     float noiseLevel = 0.85f;     // 0..1
 
@@ -328,12 +329,18 @@ private:
     BiquadState noiseHPF2_R_{};
     BiquadState noiseLPF2_L_{};
     BiquadState noiseLPF2_R_{};
+    BiquadState noiseResL_{};
+    BiquadState noiseResR_{};
 
     // Filter cache to avoid recalculating biquad trig every sample
     float lastHPF_ = -1.0f;
     float lastLPF_ = -1.0f;
+    float lastNoiseResFreq_ = -1.0f;
+    float lastNoiseResQ_ = -1.0f;
     float b0_h_ = 0.0f, b1_h_ = 0.0f, b2_h_ = 0.0f, a1_h_ = 0.0f, a2_h_ = 0.0f;
     float b0_l_ = 0.0f, b1_l_ = 0.0f, b2_l_ = 0.0f, a1_l_ = 0.0f, a2_l_ = 0.0f;
+    float b0_nr_ = 0.0f, b1_nr_ = 0.0f, b2_nr_ = 0.0f, a1_nr_ = 0.0f, a2_nr_ = 0.0f;
+    float b0_nrr_ = 0.0f, b1_nrr_ = 0.0f, b2_nrr_ = 0.0f, a1_nrr_ = 0.0f, a2_nrr_ = 0.0f;
 
     struct VelvetChannelState {
         int64_t sampleIndex = 0;

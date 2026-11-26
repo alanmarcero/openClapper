@@ -256,6 +256,7 @@ DualEqKnob::DualEqKnob(Apvts& state, const juce::String& freqId, const juce::Str
         repaint();
     };
     addAndMakeVisible(freqReadout_);
+    freqReadout_.addMouseListener(this, false);
 
     if (auto* freqParam = state.getParameter(freqId)) {
         freqHz_ = freqParam->convertFrom0to1(freqParam->getValue());
@@ -288,7 +289,7 @@ void DualEqKnob::updateFreqReadout() {
     const auto tip = title_.getText() + " steps chromatic notes from " + range
         + ". Now " + note + " (" + juce::String(freqHz_, 1) + " Hz)";
     setTooltip(tip);
-    freqReadout_.setTooltip(tip + " — double-click to type a note or Hz");
+    freqReadout_.setTooltip(tip + ". Double-click to type a note or Hz. Right-click to pick a note.");
 }
 
 juce::Rectangle<float> DualEqKnob::dialBounds() const {
@@ -407,7 +408,26 @@ void DualEqKnob::mouseExit(const juce::MouseEvent&) {
 }
 
 void DualEqKnob::mouseDown(const juce::MouseEvent& event) {
-    if (event.mods.isPopupMenu() || !hitsOuterRing(event.position)) return;
+    if (event.mods.isPopupMenu()) {
+        if (event.eventComponent != &freqReadout_ || freqAttachment_ == nullptr) return;
+        auto* param = state_.getParameter(freqId_);
+        if (param == nullptr) return;
+        const auto [minMidi, maxMidi] = params::eqBandMidiLimits(freqId_);
+        const int current = suite::eq::nearestMidi(freqHz_, minMidi, maxMidi);
+        auto menu = suite::eq::noteMenu(minMidi, maxMidi, current, 1);
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&freqReadout_),
+            [this, minMidi, maxMidi](int itemId) {
+                const auto midi = suite::eq::midiFromNoteItem(itemId, 1, minMidi, maxMidi);
+                if (!midi || freqAttachment_ == nullptr) return;
+                const float hz = suite::eq::noteToHz(*midi);
+                freqHz_ = hz;
+                freqAttachment_->setValueAsCompleteGesture(hz);
+                updateFreqReadout();
+                repaint();
+            });
+        return;
+    }
+    if (!hitsOuterRing(event.position)) return;
     auto* param = state_.getParameter(freqId_);
     if (param == nullptr || freqAttachment_ == nullptr) return;
     draggingFreq_ = true;

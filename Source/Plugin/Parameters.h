@@ -33,6 +33,7 @@ inline constexpr const char* kNoiseDecay = "noise_decay";
 inline constexpr const char* kNoiseCurve = "noise_curve";
 inline constexpr const char* kNoiseHPF = "noise_hpf";
 inline constexpr const char* kNoiseLPF = "noise_lpf";
+inline constexpr const char* kNoiseResonance = "noise_resonance";
 inline constexpr const char* kNoiseStereoWidth = "noise_stereo_width";
 inline constexpr const char* kNoiseLevel = "noise_level";
 

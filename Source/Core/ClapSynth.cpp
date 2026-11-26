@@ -374,6 +374,8 @@ void ClapSynth::reset() noexcept {
     lastToneLPF_ = -1.0f;
     lastHPF_ = -1.0f;
     lastLPF_ = -1.0f;
+    lastNoiseResFreq_ = -1.0f;
+    lastNoiseResQ_ = -1.0f;
     noiseHPF_L_.reset();
     noiseHPF_R_.reset();
     noiseLPF_L_.reset();
@@ -382,6 +384,8 @@ void ClapSynth::reset() noexcept {
     noiseHPF2_R_.reset();
     noiseLPF2_L_.reset();
     noiseLPF2_R_.reset();
+    noiseResL_.reset();
+    noiseResR_.reset();
     pinkLeft_.fill(0.0f);
     pinkRight_.fill(0.0f);
     velvetL_ = { 0, 0, 0, 0x243f6a88U };
@@ -687,6 +691,28 @@ StereoFrame ClapSynth::processSample(const ClapSynthSettings& settings, bool* ma
             filteredNoiseL *= snap;
             filteredNoiseR *= snap;
         }
+    }
+
+    if (mainAge >= 0.0f && settings.noiseResonance > 0.001f) {
+        const float resonance = std::clamp(settings.noiseResonance, 0.0f, 1.0f);
+        const float resQ = 2.5f + resonance * 19.5f;
+        const float nyquistGuard = sr * 0.45f;
+        const float resFreq = std::clamp(midiNoteToHz(69) * keyTrackingRatio_, 40.0f, nyquistGuard);
+        if (std::abs(resFreq - lastNoiseResFreq_) > 0.4f || std::abs(resQ - lastNoiseResQ_) > 0.02f) {
+            lastNoiseResFreq_ = resFreq;
+            lastNoiseResQ_ = resQ;
+            const float detuneL = std::exp2(-6.0f / 1200.0f);
+            const float detuneR = std::exp2(6.0f / 1200.0f);
+            computeBandpassCoeffs(std::clamp(resFreq * detuneL, 40.0f, nyquistGuard), resQ, sampleRate_,
+                                  b0_nr_, b1_nr_, b2_nr_, a1_nr_, a2_nr_);
+            computeBandpassCoeffs(std::clamp(resFreq * detuneR, 40.0f, nyquistGuard), resQ, sampleRate_,
+                                  b0_nrr_, b1_nrr_, b2_nrr_, a1_nrr_, a2_nrr_);
+        }
+        const float resL = processBiquad(filteredNoiseL, noiseResL_, b0_nr_, b1_nr_, b2_nr_, a1_nr_, a2_nr_);
+        const float resR = processBiquad(filteredNoiseR, noiseResR_, b0_nrr_, b1_nrr_, b2_nrr_, a1_nrr_, a2_nrr_);
+        const float resGain = resonance * (0.85f + 0.45f * std::sqrt(resQ));
+        filteredNoiseL += resL * resGain;
+        filteredNoiseR += resR * resGain;
     }
 
     float toneSampleL = 0.0f;

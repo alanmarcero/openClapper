@@ -131,6 +131,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout() {
         juce::ParameterID{ kNoiseLPF, 1 }, "Noise LPF", juce::NormalisableRange<float>(800.0f, 20000.0f, 1.0f, 0.35f), 9500.0f,
         hertz));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ kNoiseResonance, 1 }, "Noise Tone", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.2f, percent));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kNoiseStereoWidth, 1 }, "Noise Width", juce::NormalisableRange<float>(0.0f, 2.0f, 0.01f), 1.0f, percent));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ kNoiseLevel, 1 }, "Noise Level", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.85f, percent));
@@ -340,6 +342,9 @@ openclapper::core::EngineSettings readSettings(const juce::AudioProcessorValueTr
     s.synth.noiseCurve = *apvts.getRawParameterValue(kNoiseCurve);
     s.synth.noiseHPF = *apvts.getRawParameterValue(kNoiseHPF);
     s.synth.noiseLPF = *apvts.getRawParameterValue(kNoiseLPF);
+    if (const auto* pNoiseRes = apvts.getRawParameterValue(kNoiseResonance)) {
+        s.synth.noiseResonance = *pNoiseRes;
+    }
     s.synth.noiseStereoWidth = *apvts.getRawParameterValue(kNoiseStereoWidth);
     s.synth.noiseLevel = *apvts.getRawParameterValue(kNoiseLevel);
 

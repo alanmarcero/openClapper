@@ -64,12 +64,13 @@ constexpr unsigned kBodyBit = 1u << kBody, kNoiseBit = 1u << kNoise, kTransientB
                    kPreClapBit = 1u << kPreClap;
 
 // Texture, the noise filters, noise width and Impact shape more than one layer.
-constexpr std::array<LayerControl, 30> kLayerControls{{
+constexpr std::array<LayerControl, 31> kLayerControls{{
     { params::kToneQ, kBodyBit }, { params::kToneDecay, kBodyBit }, { params::kTonePitchEnv, kBodyBit },
     { params::kTonePitchDecay, kBodyBit }, { params::kToneHPF, kBodyBit }, { params::kToneLPF, kBodyBit },
     { params::kToneLevel, kBodyBit }, { "body_velocity", kBodyBit }, { params::kImpactPunch, kBodyBit | kNoiseBit },
     { params::kNoiseType, kBodyBit | kNoiseBit | kTransientBit }, { params::kNoiseAttack, kNoiseBit },
     { params::kNoiseHold, kNoiseBit }, { params::kNoiseDecay, kNoiseBit }, { params::kNoiseCurve, kNoiseBit },
+    { params::kNoiseResonance, kNoiseBit },
     { params::kNoiseLevel, kNoiseBit }, { "noise_velocity", kNoiseBit }, { params::kNoiseHPF, kNoiseBit | kPreClapBit },
     { params::kNoiseLPF, kNoiseBit | kPreClapBit }, { params::kNoiseStereoWidth, kNoiseBit | kPreClapBit },
     { params::kClickType, kTransientBit }, { params::kClickFreq, kTransientBit }, { params::kClickDecay, kTransientBit },
@@ -310,7 +311,7 @@ ControlPage::ControlPage(Apvts& state, Page page) : page_(page) {
         case Page::clap:
             group("Hand spacing", 1, {{kPreBursts,"Bursts"}, {kPreSpread,"Spacing"}, {kPreJitter,"Humanize"}, {kFlamSpread,"Pan spread"}}, false, kPreClap);
             group("Tuned body", 1, {{kToneLevel,"Body level"}, {kToneQ,"Resonance"}, {kToneDecay,"Body decay"}, {kImpactPunch,"Impact"}}, false, kBody);
-            group("Noise tail", 1, {{kNoiseType,"Texture"}, {kNoiseHPF,"Low cut"}, {kNoiseDecay,"Noise decay"}, {kNoiseLevel,"Noise level"}}, false, kNoise);
+            group("Noise tail", 1, {{kNoiseType,"Texture"}, {kNoiseHPF,"Low cut"}, {kNoiseDecay,"Noise decay"}, {kNoiseResonance,"Noise tone"}, {kNoiseLevel,"Noise level"}}, false, kNoise);
             group("Finish", 1, {{kClickLevel,"Transient level"}, {kReverbMix,"Room mix"}, {kReverbGate,"Room gate"}}, false, kTransient);
             group("Output", 5, {{kStereoWidth,"Stereo width"}, {kOutputGain,"Output gain"}, {kLimiterEnabled,"Limiter"}, {kLimiterCeiling,"Limiter ceiling"}, {kLimiterRelease,"Recovery"}}, true);
             break;
@@ -319,8 +320,8 @@ ControlPage::ControlPage(Apvts& state, Page page) : page_(page) {
                 {kPreDecay,"Burst decay"}, {kPreJitter,"Humanize"}, {kFlamSpread,"Pan spread"}}, false, kPreClap);
             group("Tuned body", 3, {{kToneQ,"Resonance"}, {kToneDecay,"Decay"}, {kToneLevel,"Level"}, {kImpactPunch,"Impact"},
                 {kTonePitchEnv,"Pitch sweep"}, {kTonePitchDecay,"Sweep time"}, {kToneHPF,"Low cut"}, {kToneLPF,"High cut"}}, false, kBody);
-            group("Noise", 3, {{kNoiseType,"Texture"}, {kNoiseAttack,"Attack"}, {kNoiseHold,"Hold"}, {kNoiseDecay,"Decay"}, {kNoiseCurve,"Curve"},
-                {kNoiseHPF,"Low cut"}, {kNoiseLPF,"High cut"}, {kNoiseStereoWidth,"Stereo width"}, {kNoiseLevel,"Level"}}, false, kNoise);
+            group("Noise", 4, {{kNoiseType,"Texture"}, {kNoiseAttack,"Attack"}, {kNoiseHold,"Hold"}, {kNoiseDecay,"Decay"}, {kNoiseCurve,"Curve"},
+                {kNoiseHPF,"Low cut"}, {kNoiseLPF,"High cut"}, {kNoiseStereoWidth,"Stereo width"}, {kNoiseLevel,"Level"}, {kNoiseResonance,"Noise tone"}}, false, kNoise);
             group("Transient", 2, {{kClickType,"Shape"}, {kClickFreq,"Frequency"}, {kClickDecay,"Decay"}, {kClickLevel,"Level"}}, false, kTransient);
             break;
         case Page::effects:

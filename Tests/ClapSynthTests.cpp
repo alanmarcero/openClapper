@@ -905,3 +905,42 @@ TEST_CASE("GatedStereoReverb eliminates comb pitch warble and tracks exact RT60 
     REQUIRE(dropDb < 24.0);
     REQUIRE(hfDamped < hfUndamped * 0.15);
 }
+
+TEST_CASE("ClapSynth noise resonance adds a pitched tone to the noise layer", "[core][synth]") {
+    constexpr double sr = 48000.0;
+    auto renderToneRatio = [&](float resonance, int midiNote) {
+        ClapSynth synth;
+        synth.prepare(sr);
+        ClapSynthSettings s;
+        s.preClapCount = 0;
+        s.toneLevel = 0.0f;
+        s.clickLevel = 0.0f;
+        s.noiseLevel = 0.9f;
+        s.noiseDecayMs = 300.0f;
+        s.noiseResonance = resonance;
+
+        std::vector<float> left, right;
+        synth.renderBlock(left, right, s, 1.0f, midiNote);
+
+        const double targetHz = midiNoteToHz(midiNote);
+        const double w = 2.0 * std::numbers::pi * targetHz / sr;
+        double cosSum = 0.0, sinSum = 0.0, totalEnergy = 0.0;
+        const size_t start = 480;
+        const size_t count = std::min<size_t>(left.size(), 9600) - start;
+        for (size_t i = start; i < start + count; ++i) {
+            const double x = left[i];
+            totalEnergy += x * x;
+            cosSum += x * std::cos(w * static_cast<double>(i));
+            sinSum += x * std::sin(w * static_cast<double>(i));
+        }
+        const double toneEnergy = 2.0 * (cosSum * cosSum + sinSum * sinSum) / static_cast<double>(count);
+        return toneEnergy / std::max(1.0e-12, totalEnergy);
+    };
+
+    const double dryRatio = renderToneRatio(0.0f, 69);
+    const double resonantRatio = renderToneRatio(0.85f, 69);
+    const double shiftedRatio = renderToneRatio(0.85f, 76);
+
+    REQUIRE(resonantRatio > dryRatio * 4.0);
+    REQUIRE(shiftedRatio > dryRatio * 4.0);
+}
