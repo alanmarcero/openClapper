@@ -1,5 +1,9 @@
 # Changelog
 
+## v3.12.6
+
+- Keeps the Noise tone slider on the Layers page so the texture menu and the other sliders stay full size.
+
 ## v3.12.5
 
 - Adds a Noise tone slider that gives the noise layer a pitched resonance, stored on every factory preset.
