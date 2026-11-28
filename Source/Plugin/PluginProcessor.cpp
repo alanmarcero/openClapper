@@ -349,7 +349,13 @@ void OpenClapperProcessor::applySoundTree(const juce::ValueTree& incoming, Apply
     state.removeChild(state.getChildWithName("ABCompare"), nullptr);
     juce::MemoryBlock wavBlock;
     const auto wavText = state.getProperty("locked_wav").toString();
-    const bool hadWav = wavText.isNotEmpty() && wavBlock.fromBase64Encoding(wavText);
+    constexpr int kMaxLockedWavBase64Chars = 32 * 1024 * 1024;
+    constexpr size_t kMaxLockedWavBytes = 24u * 1024u * 1024u;
+    constexpr juce::int64 kMaxLockedWavFrames = 384000 * 10;
+    const bool hadWav = wavText.isNotEmpty()
+        && wavText.length() <= kMaxLockedWavBase64Chars
+        && wavBlock.fromBase64Encoding(wavText)
+        && wavBlock.getSize() <= kMaxLockedWavBytes;
     state.removeProperty("locked_wav", nullptr);
     const int width = static_cast<int>(state.getProperty("editor_width", editorWidth_.load()));
     const int height = static_cast<int>(state.getProperty("editor_height", editorHeight_.load()));
@@ -359,12 +365,16 @@ void OpenClapperProcessor::applySoundTree(const juce::ValueTree& incoming, Apply
     if (hadWav) {
         auto* wavStream = new juce::MemoryInputStream(wavBlock, false);
         juce::WavAudioFormat format;
-        if (auto reader = std::unique_ptr<juce::AudioFormatReader>(format.createReaderFor(wavStream, true))) {
+        if (auto reader = std::unique_ptr<juce::AudioFormatReader>(format.createReaderFor(wavStream, true));
+            reader != nullptr && reader->numChannels > 0 && reader->numChannels <= 8
+            && reader->sampleRate >= 8000.0 && reader->sampleRate <= 384000.0
+            && reader->lengthInSamples > 0 && reader->lengthInSamples <= kMaxLockedWavFrames) {
             juce::AudioBuffer<float> frozen(2, static_cast<int>(reader->lengthInSamples));
-            reader->read(&frozen, 0, frozen.getNumSamples(), 0, true, true);
-            storeFreeze(std::move(frozen), reader->sampleRate);
-            lockRenderPending_.store(false);
-            clearLockRequested_.store(false);
+            if (reader->read(&frozen, 0, frozen.getNumSamples(), 0, true, true)) {
+                storeFreeze(std::move(frozen), reader->sampleRate);
+                lockRenderPending_.store(false);
+                clearLockRequested_.store(false);
+            }
         }
     } else if (parameters.getRawParameterValue(openclapper::params::kLockIn)->load() > 0.5f) {
         clearFreeze();
