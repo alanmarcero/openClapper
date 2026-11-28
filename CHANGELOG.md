@@ -1,5 +1,9 @@
 # Changelog
 
+## v3.12.7
+
+- Caps `locked_wav` Base64 size, byte size, channel count, sample rate, and frame count before decoding and allocating frozen hit buffers.
+
 ## v3.12.6
 
 - Keeps the Noise tone slider on the Layers page so the texture menu and the other sliders stay full size.
